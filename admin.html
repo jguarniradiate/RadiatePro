@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — RadiatePro</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #000; color: #f0f0f0; }
+    .navbar { background-color: #000 !important; border-bottom: 2px solid #E3FC02; }
+    .brand-link { color: #E3FC02 !important; text-decoration: none; }
+    .btn-accent { background-color: #E3FC02; color: #000; font-weight: 700; border: none; }
+    .btn-accent:hover { background-color: #cce500; color: #000; }
+    .table { --bs-table-bg: transparent; --bs-table-color: #f0f0f0;
+             --bs-table-border-color: #2a2a2a; --bs-table-striped-bg: #111;
+             --bs-table-hover-bg: #1a1a1a; }
+    thead th { color: #E3FC02; border-bottom-color: #E3FC02 !important; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+    .badge-admin { background-color: #E3FC02; color: #000; font-weight: 700; }
+    .badge-user  { background-color: #2a2a2a; color: #aaa; }
+    .badge-verified   { background-color: #198754; }
+    .badge-unverified { background-color: #6c757d; }
+    .page-title { color: #E3FC02; }
+    .stat-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; }
+    .stat-number { color: #E3FC02; font-size: 2rem; font-weight: 700; }
+    #loadingSpinner { color: #E3FC02; }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-dark px-4 py-3">
+    <a href="index.html" class="brand-link fw-bold fs-5">RadiatePro</a>
+    <div class="d-flex align-items-center gap-3">
+      <span class="badge badge-admin px-2 py-1">ADMIN</span>
+      <a href="dashboard.html" class="text-muted text-decoration-none small">Dashboard</a>
+      <button class="btn btn-sm btn-outline-secondary" onclick="logout()">Sign Out</button>
+    </div>
+  </nav>
+
+  <div class="container py-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="fw-bold page-title mb-0">User Management</h4>
+      <button class="btn btn-accent btn-sm" onclick="loadUsers()">&#8635; Refresh</button>
+    </div>
+
+    <!-- Stats row -->
+    <div class="row g-3 mb-4" id="statsRow">
+      <div class="col-6 col-md-3">
+        <div class="stat-card p-3 text-center">
+          <div class="stat-number" id="statTotal">—</div>
+          <div class="text-muted small">Total Users</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card p-3 text-center">
+          <div class="stat-number" id="statVerified">—</div>
+          <div class="text-muted small">Verified</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card p-3 text-center">
+          <div class="stat-number" id="statUnverified">—</div>
+          <div class="text-muted small">Unverified</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card p-3 text-center">
+          <div class="stat-number" id="statAdmins">—</div>
+          <div class="text-muted small">Admins</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loadingSpinner" class="text-center py-5">
+      <div class="spinner-border" role="status"><span class="visually-hidden">Loading…</span></div>
+    </div>
+
+    <!-- Error -->
+    <div id="errorMsg" class="alert alert-danger d-none"></div>
+
+    <!-- Table -->
+    <div id="tableWrapper" class="d-none">
+      <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Studio</th>
+              <th>Phone</th>
+              <th>Verified</th>
+              <th>Role</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
+
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    }
+
+    async function loadUsers() {
+      const token = localStorage.getItem('token');
+      if (!token) { window.location.href = 'login.html'; return; }
+
+      document.getElementById('loadingSpinner').classList.remove('d-none');
+      document.getElementById('tableWrapper').classList.add('d-none');
+      document.getElementById('errorMsg').classList.add('d-none');
+
+      try {
+        const res = await fetch(`${API}/admin/users`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+
+        if (res.status === 401) { window.location.href = 'login.html'; return; }
+        if (res.status === 403) {
+          document.getElementById('errorMsg').textContent = 'Access denied. Admin privileges required.';
+          document.getElementById('errorMsg').classList.remove('d-none');
+          document.getElementById('loadingSpinner').classList.add('d-none');
+          return;
+        }
+
+        let users = [];
+        try { users = await res.json(); } catch {}
+
+        // Stats
+        document.getElementById('statTotal').textContent     = users.length;
+        document.getElementById('statVerified').textContent  = users.filter(u => u.email_verified).length;
+        document.getElementById('statUnverified').textContent = users.filter(u => !u.email_verified).length;
+        document.getElementById('statAdmins').textContent    = users.filter(u => u.is_admin).length;
+
+        // Table
+        const tbody = document.getElementById('userTableBody');
+        tbody.innerHTML = users.map(u => `
+          <tr>
+            <td class="text-muted small">${u.id}</td>
+            <td>${esc(u.first_name || '')} ${esc(u.last_name || '')}</td>
+            <td>${esc(u.email)}</td>
+            <td>${esc(u.studio_name || '—')}</td>
+            <td>${esc(u.phone || '—')}</td>
+            <td>
+              <span class="badge ${u.email_verified ? 'badge-verified' : 'badge-unverified'}">
+                ${u.email_verified ? 'Verified' : 'Unverified'}
+              </span>
+            </td>
+            <td>
+              <span class="badge ${u.is_admin ? 'badge-admin' : 'badge-user'}">
+                ${u.is_admin ? 'Admin' : 'User'}
+              </span>
+            </td>
+          </tr>
+        `).join('');
+
+        document.getElementById('loadingSpinner').classList.add('d-none');
+        document.getElementById('tableWrapper').classList.remove('d-none');
+
+      } catch {
+        document.getElementById('errorMsg').textContent = 'Failed to load users. Please try again.';
+        document.getElementById('errorMsg').classList.remove('d-none');
+        document.getElementById('loadingSpinner').classList.add('d-none');
+      }
+    }
+
+    function esc(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Check token includes is_admin from /auth/me before rendering
+    (async () => {
+      const token = localStorage.getItem('token');
+      if (!token) { window.location.href = 'login.html'; return; }
+      loadUsers();
+    })();
+  </script>
+</body>
+</html>

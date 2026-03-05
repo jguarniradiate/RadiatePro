@@ -135,6 +135,35 @@
 
             <!-- Register Form (hidden by default) -->
             <form id="registerForm" class="d-none" novalidate>
+              <div class="row g-3 mb-3">
+                <div class="col-6">
+                  <label for="regFirstName" class="form-label fw-semibold">First Name</label>
+                  <input type="text" class="form-control" id="regFirstName"
+                    placeholder="Jane" required autocomplete="given-name">
+                  <div class="invalid-feedback">Required.</div>
+                </div>
+                <div class="col-6">
+                  <label for="regLastName" class="form-label fw-semibold">Last Name</label>
+                  <input type="text" class="form-control" id="regLastName"
+                    placeholder="Smith" required autocomplete="family-name">
+                  <div class="invalid-feedback">Required.</div>
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label for="regStudio" class="form-label fw-semibold">Studio Name</label>
+                <input type="text" class="form-control" id="regStudio"
+                  placeholder="Radiate Studios" required autocomplete="organization">
+                <div class="invalid-feedback">Studio name is required.</div>
+              </div>
+
+              <div class="mb-3">
+                <label for="regPhone" class="form-label fw-semibold">Phone Number</label>
+                <input type="tel" class="form-control" id="regPhone"
+                  placeholder="(555) 000-0000" required autocomplete="tel">
+                <div class="invalid-feedback">Phone number is required.</div>
+              </div>
+
               <div class="mb-3">
                 <label for="regEmail" class="form-label fw-semibold">Email address</label>
                 <input type="email" class="form-control" id="regEmail"
@@ -172,7 +201,8 @@
         </div>
 
         <p class="text-center footer-text mt-4 small">
-          &copy; 2026 RadiatePro
+          &copy; 2026 RadiatePro &nbsp;&middot;&nbsp;
+          <a href="admin.html" class="forgot-link text-decoration-none">Admin</a>
         </p>
 
       </div>
@@ -352,14 +382,18 @@
 
       if (!form.checkValidity()) { form.classList.add('was-validated'); return; }
 
-      const email = document.getElementById('regEmail').value.trim();
+      const email       = document.getElementById('regEmail').value.trim();
+      const first_name  = document.getElementById('regFirstName').value.trim();
+      const last_name   = document.getElementById('regLastName').value.trim();
+      const studio_name = document.getElementById('regStudio').value.trim();
+      const phone       = document.getElementById('regPhone').value.trim();
 
       setLoading('registerBtn', true);
       try {
         const res = await fetch(`${API}/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email, password, first_name, last_name, studio_name, phone }),
         });
 
         let data = {};

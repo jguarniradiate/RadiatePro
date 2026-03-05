@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -28,6 +29,11 @@ def run_migrations(eng):
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires_at TIMESTAMPTZ",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires_at TIMESTAMPTZ",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_name VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false",
     ]
     with eng.connect() as conn:
         for stmt in stmts:
@@ -36,6 +42,25 @@ def run_migrations(eng):
 
 
 run_migrations(engine)
+
+
+def promote_admins(eng):
+    """Grant is_admin=true to every email listed in the ADMIN_EMAILS env var."""
+    raw = os.getenv("ADMIN_EMAILS", "")
+    emails = [e.strip().lower() for e in raw.split(",") if e.strip()]
+    if not emails:
+        return
+    with eng.connect() as conn:
+        for email in emails:
+            conn.execute(
+                text("UPDATE users SET is_admin = true WHERE LOWER(email) = :email"),
+                {"email": email},
+            )
+        conn.commit()
+    logger.info("Admin promotion applied for: %s", emails)
+
+
+promote_admins(engine)
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
@@ -76,6 +101,10 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         email_verified=False,
         verification_token=token,
         verification_token_expires_at=expires,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        studio_name=user.studio_name,
+        phone=user.phone,
     )
     db.add(new_user)
     db.commit()
@@ -202,3 +231,32 @@ def me(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ── Admin helpers ─────────────────────────────────────────────────────────────
+
+def get_current_user(authorization: Optional[str], db: Session) -> models.User:
+    """Resolve a Bearer token to a User, raising 401/404 as needed."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = auth.decode_access_token(authorization.split(" ", 1)[1])
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user = db.query(models.User).filter(models.User.email == payload["sub"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+# ── Admin routes ──────────────────────────────────────────────────────────────
+
+@app.get("/admin/users", response_model=list[schemas.UserOut])
+def admin_list_users(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Return all users. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return db.query(models.User).order_by(models.User.id).all()
