@@ -247,7 +247,6 @@
           </div>
         </div>
         <div class="modal-footer flex-column align-items-stretch gap-2" style="padding:.75rem 1rem;">
-          <div id="regTotal" class="text-center d-none" style="font-size:.9rem;"></div>
           <div class="d-flex gap-2">
             <button class="btn btn-outline-danger btn-sm me-auto" id="unregBtn" onclick="unregisterFromEvent()" style="display:none;">
               Cancel Registration
@@ -407,11 +406,10 @@
       const pct = Math.min(100, Math.round(cnt / max * 100));
       const barColor = pct >= 100 ? '#ff5555' : pct >= 80 ? '#ff9900' : '#E3FC02';
       const isFull = pct >= 100;
-      const labelClass = isFull ? 'cap-label full-lbl' : 'cap-label';
-      const labelText  = isFull ? '&#9940; Event Full' : `${cnt} / ${max} students registered`;
+      const fullLabel = isFull ? `<div class="cap-label full-lbl" style="margin-bottom:.3rem;">&#9940; Event Full</div>` : '';
       return `
         <div style="margin-top:.6rem;">
-          <div class="${labelClass}"><span>${labelText}</span></div>
+          ${fullLabel}
           <div class="cap-bar-wrap">
             <div class="cap-bar" style="width:${pct}%;background:${barColor};"></div>
           </div>
@@ -435,25 +433,6 @@
       return '';
     }
 
-    function calcRunningTotal(event) {
-      if (!event) return null;
-      const now = new Date();
-      const earlyActive = event.early_price && event.early_price_deadline && new Date(event.early_price_deadline) > now;
-      const pricePerStudent = earlyActive ? parseFloat(event.early_price) : (event.regular_price ? parseFloat(event.regular_price) : null);
-      if (pricePerStudent == null) return null;
-      const count = [...document.querySelectorAll('.stu-switch:checked')].length;
-      return count * pricePerStudent;
-    }
-
-    function updateTotalDisplay(event) {
-      const total = calcRunningTotal(event);
-      const el = document.getElementById('regTotal');
-      if (!el) return;
-      if (total == null) { el.classList.add('d-none'); return; }
-      el.classList.remove('d-none');
-      el.innerHTML = `<span class="text-muted small">Estimated total: </span><strong style="color:#E3FC02;">$${total.toFixed(2)}</strong>`;
-    }
-
     function getSelectedStudentIds() {
       return [...document.querySelectorAll('.stu-switch:checked')].map(i => parseInt(i.dataset.studentId));
     }
@@ -466,7 +445,6 @@
       if (myStudents.length === 0) {
         wrap.classList.add('d-none');
         noMsg.classList.remove('d-none');
-        updateTotalDisplay(currentRegEvent);
         return;
       }
 
@@ -487,11 +465,7 @@
           <td>${esc(s.gender || '—')}</td>
         </tr>`).join('');
 
-      // Attach change listeners for running total
-      tbody.querySelectorAll('.stu-switch').forEach(sw => {
-        sw.addEventListener('change', () => updateTotalDisplay(currentRegEvent));
-      });
-      updateTotalDisplay(currentRegEvent);
+      tbody.querySelectorAll('.stu-switch').forEach(sw => { sw.addEventListener('change', () => {}); });
     }
 
     // ── Registration modal ─────────────────────────────────────────────────────
