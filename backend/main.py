@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -22,18 +23,28 @@ from database import engine, get_db
 logger = logging.getLogger(__name__)
 
 # ── Database setup ────────────────────────────────────────────────────────────
-
-models.Base.metadata.create_all(bind=engine)
+# create_all() is intentionally removed: it has no lock-timeout protection and
+# blocks on CREATE TABLE when the old instance holds connections.  All schema
+# work (including the initial users table) lives inside run_migrations(), which
+# runs each statement in autocommit mode with a 10-second lock_timeout so a
+# rolling deploy never hangs waiting for an ACCESS EXCLUSIVE lock.
 
 
 def run_migrations(eng):
-    """Idempotently add columns introduced after initial deployment.
+    """Idempotently create / alter all schema objects after initial deployment.
 
     Each statement runs in its own autocommit transaction so a lock
     timeout on one ALTER TABLE does not roll back the others or block
     the deploy indefinitely.
     """
     stmts = [
+        # ── base users table (idempotent; all later columns added below) ──
+        """CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            email VARCHAR UNIQUE NOT NULL,
+            hashed_password VARCHAR NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT now()
+        )""",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires_at TIMESTAMPTZ",
@@ -117,9 +128,6 @@ def run_migrations(eng):
         logger.error("run_migrations: DB connection failed at startup: %s", exc)
 
 
-run_migrations(engine)
-
-
 def promote_admins(eng):
     """Grant is_admin=true to every email listed in the ADMIN_EMAILS env var."""
     raw = os.getenv("ADMIN_EMAILS", "")
@@ -136,8 +144,6 @@ def promote_admins(eng):
     logger.info("Admin promotion applied for: %s", emails)
 
 
-promote_admins(engine)
-
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="RadiatePro API", version="1.0.0")
@@ -149,6 +155,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Background DB startup ─────────────────────────────────────────────────────
+# Migrations run in a daemon thread so uvicorn binds port 8080 and passes
+# DigitalOcean's health check before any DDL lock is attempted.  This prevents
+# the rolling-deploy hang where ALTER TABLE waits on locks held by the old
+# instance.  Each DDL statement already has its own 10-second lock_timeout
+# inside run_migrations().
+
+def _db_startup() -> None:
+    """Run schema migrations and admin promotion in a background thread."""
+    try:
+        run_migrations(engine)
+    except Exception as exc:
+        logger.error("run_migrations failed: %s", exc)
+    try:
+        promote_admins(engine)
+    except Exception as exc:
+        logger.error("promote_admins failed: %s", exc)
+
+
+@app.on_event("startup")
+async def _startup_event() -> None:
+    threading.Thread(target=_db_startup, daemon=True, name="db-startup").start()
+    logger.info("DB startup thread launched")
+
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
