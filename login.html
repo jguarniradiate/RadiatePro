@@ -55,6 +55,14 @@
           </a>
         </div>
 
+        <!-- Admin portal notice (shown only when ?next=admin.html) -->
+        <div id="adminNotice" class="d-none mb-3 text-center">
+          <div style="background: #E3FC02; color: #000; border-radius: 8px; padding: .6rem 1rem; font-size: .8rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;">
+            &#9679; Admin Portal Login &#9679;
+          </div>
+          <p class="text-muted small mt-2 mb-0">You must be an admin to access this area.</p>
+        </div>
+
         <!-- Card -->
         <div class="auth-card shadow">
           <div class="card-body p-4">
@@ -212,6 +220,11 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
+
+    // Show admin notice if redirected from admin portal
+    if (new URLSearchParams(window.location.search).get('next') === 'admin.html') {
+      document.getElementById('adminNotice').classList.remove('d-none');
+    }
 
     // ── Tab switching ─────────────────────────────────────────────────────────
     function showTab(tab) {
