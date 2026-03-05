@@ -320,7 +320,8 @@
         if (!res.ok) throw new Error(extractError(data, `Error ${res.status}`));
 
         localStorage.setItem('token', data.access_token);
-        window.location.href = 'dashboard.html';
+        const next = new URLSearchParams(window.location.search).get('next');
+        window.location.href = next || 'dashboard.html';
       } catch (err) {
         showAlert(err.message);
       } finally {

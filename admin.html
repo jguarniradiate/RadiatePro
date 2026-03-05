@@ -125,7 +125,7 @@
           headers: { 'Authorization': `Bearer ${token}` },
         });
 
-        if (res.status === 401) { window.location.href = 'login.html'; return; }
+        if (res.status === 401) { window.location.href = 'login.html?next=admin.html'; return; }
         if (res.status === 403) {
           document.getElementById('errorMsg').textContent = 'Access denied. Admin privileges required.';
           document.getElementById('errorMsg').classList.remove('d-none');
@@ -182,10 +182,10 @@
         .replace(/"/g, '&quot;');
     }
 
-    // Check token includes is_admin from /auth/me before rendering
+    // Redirect to login, then come back here after signing in
     (async () => {
       const token = localStorage.getItem('token');
-      if (!token) { window.location.href = 'login.html'; return; }
+      if (!token) { window.location.href = 'login.html?next=admin.html'; return; }
       loadUsers();
     })();
   </script>
