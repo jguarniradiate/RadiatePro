@@ -208,6 +208,28 @@ def reset_password(body: schemas.PasswordResetConfirm, db: Session = Depends(get
     return {"message": "Password reset successfully. You can now sign in."}
 
 
+@app.patch("/users/me", response_model=schemas.UserOut)
+def update_me(
+    body: schemas.UserUpdate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Allow a logged-in user to update their own profile."""
+    user = get_current_user(authorization, db)
+
+    if body.email and body.email != user.email:
+        existing = db.query(models.User).filter(models.User.email == body.email).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already in use.")
+
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(user, field, value)
+
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @app.get("/auth/me", response_model=schemas.UserOut)
 def me(
     authorization: Optional[str] = Header(None),
@@ -280,3 +302,32 @@ def admin_delete_user(
     db.delete(target)
     db.commit()
     return {"message": f"User {user_id} deleted."}
+
+
+@app.patch("/admin/users/{user_id}", response_model=schemas.UserOut)
+def admin_update_user(
+    user_id: int,
+    body: schemas.UserUpdate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Update a user's profile fields. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    target = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    # Check email uniqueness if changing email
+    if body.email and body.email != target.email:
+        existing = db.query(models.User).filter(models.User.email == body.email).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already in use.")
+
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(target, field, value)
+
+    db.commit()
+    db.refresh(target)
+    return target

@@ -10,7 +10,12 @@
     .navbar { background-color: #000 !important; border-bottom: 2px solid #E3FC02; }
     .brand-link { color: #E3FC02 !important; text-decoration: none; }
     .card-dark { background-color: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; }
-    .card-header-dark { background-color: #111; border-bottom: 1px solid #2a2a2a; border-radius: 12px 12px 0 0 !important; color: #E3FC02; font-weight: 700; padding: 1rem 1.25rem; }
+    .card-header-dark {
+      background-color: #111; border-bottom: 1px solid #2a2a2a;
+      border-radius: 12px 12px 0 0 !important; color: #E3FC02;
+      font-weight: 700; padding: 1rem 1.25rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
     .label-muted { color: #666; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .25rem; }
     .field-value { color: #f0f0f0; font-weight: 600; font-size: .95rem; }
     .avatar-circle {
@@ -21,8 +26,14 @@
     }
     .btn-accent { background-color: #E3FC02; color: #000; font-weight: 700; border: none; }
     .btn-accent:hover { background-color: #cce500; color: #000; }
+    .btn-accent-outline { border: 1px solid #E3FC02; color: #E3FC02; background: transparent; font-weight: 600; }
+    .btn-accent-outline:hover { background: #E3FC02; color: #000; }
     .welcome-name { color: #E3FC02; }
     .divider { border-color: #2a2a2a; }
+    .form-control { background: #111; border-color: #333; color: #f0f0f0; }
+    .form-control:focus { background: #111; border-color: #E3FC02; color: #f0f0f0; box-shadow: 0 0 0 .2rem rgba(227,252,2,.2); }
+    .form-control::placeholder { color: #555; }
+    .form-label { color: #ccc; }
   </style>
 </head>
 <body>
@@ -51,9 +62,13 @@
 
     <!-- Profile Card -->
     <div class="card-dark shadow">
-      <div class="card-header-dark">My Profile</div>
-      <div class="p-4">
+      <div class="card-header-dark">
+        <span>My Profile</span>
+        <button class="btn btn-accent-outline btn-sm" id="editToggleBtn" onclick="toggleEdit()">Edit Profile</button>
+      </div>
 
+      <!-- View Mode -->
+      <div id="viewMode" class="p-4">
         <div class="row g-4">
           <div class="col-sm-6">
             <p class="label-muted">First Name</p>
@@ -63,9 +78,7 @@
             <p class="label-muted">Last Name</p>
             <p class="field-value mb-0" id="fieldLastName">—</p>
           </div>
-          <div class="col-12">
-            <hr class="divider my-0">
-          </div>
+          <div class="col-12"><hr class="divider my-0"></div>
           <div class="col-sm-6">
             <p class="label-muted">Studio Name</p>
             <p class="field-value mb-0" id="fieldStudio">—</p>
@@ -74,9 +87,7 @@
             <p class="label-muted">Phone Number</p>
             <p class="field-value mb-0" id="fieldPhone">—</p>
           </div>
-          <div class="col-12">
-            <hr class="divider my-0">
-          </div>
+          <div class="col-12"><hr class="divider my-0"></div>
           <div class="col-sm-6">
             <p class="label-muted">Email</p>
             <p class="field-value mb-0" id="fieldEmail">—</p>
@@ -86,8 +97,42 @@
             <p class="field-value mb-0" id="fieldId">—</p>
           </div>
         </div>
-
       </div>
+
+      <!-- Edit Mode -->
+      <div id="editMode" class="p-4 d-none">
+        <div id="editAlert" class="alert alert-danger d-none mb-3"></div>
+        <div id="editSuccess" class="alert alert-success d-none mb-3">Profile updated successfully!</div>
+        <form id="editForm" novalidate>
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">First Name</label>
+              <input type="text" class="form-control" id="editFirstName" placeholder="First name">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label fw-semibold">Last Name</label>
+              <input type="text" class="form-control" id="editLastName" placeholder="Last name">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Studio Name</label>
+              <input type="text" class="form-control" id="editStudio" placeholder="Studio name">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Phone Number</label>
+              <input type="tel" class="form-control" id="editPhone" placeholder="Phone number">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Email</label>
+              <input type="email" class="form-control" id="editEmail" placeholder="Email address">
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-accent" id="saveBtn">Save Changes</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="toggleEdit()">Cancel</button>
+          </div>
+        </form>
+      </div>
+
     </div>
 
   </div>
@@ -95,6 +140,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
+    let currentUser = null;
 
     async function loadUser() {
       const token = localStorage.getItem('token');
@@ -111,27 +157,98 @@
           return;
         }
 
-        const u = await res.json();
-
-        const firstName = u.first_name || '';
-        const lastName  = u.last_name  || '';
-        const fullName  = [firstName, lastName].filter(Boolean).join(' ') || u.email;
-
-        document.getElementById('userEmail').textContent    = u.email;
-        document.getElementById('avatarInitial').textContent = (firstName || u.email).charAt(0).toUpperCase();
-        document.getElementById('welcomeName').textContent  = firstName || u.email;
-        document.getElementById('welcomeStudio').textContent = u.studio_name || '';
-
-        document.getElementById('fieldFirstName').textContent = firstName || '—';
-        document.getElementById('fieldLastName').textContent  = lastName  || '—';
-        document.getElementById('fieldStudio').textContent   = u.studio_name || '—';
-        document.getElementById('fieldPhone').textContent    = u.phone || '—';
-        document.getElementById('fieldEmail').textContent    = u.email;
-        document.getElementById('fieldId').textContent       = `#${u.id}`;
+        currentUser = await res.json();
+        renderProfile(currentUser);
       } catch {
         window.location.href = 'login.html';
       }
     }
+
+    function renderProfile(u) {
+      const firstName = u.first_name || '';
+      const lastName  = u.last_name  || '';
+
+      document.getElementById('userEmail').textContent     = u.email;
+      document.getElementById('avatarInitial').textContent = (firstName || u.email).charAt(0).toUpperCase();
+      document.getElementById('welcomeName').textContent   = firstName || u.email;
+      document.getElementById('welcomeStudio').textContent = u.studio_name || '';
+
+      document.getElementById('fieldFirstName').textContent = firstName || '—';
+      document.getElementById('fieldLastName').textContent  = lastName  || '—';
+      document.getElementById('fieldStudio').textContent    = u.studio_name || '—';
+      document.getElementById('fieldPhone').textContent     = u.phone || '—';
+      document.getElementById('fieldEmail').textContent     = u.email;
+      document.getElementById('fieldId').textContent        = `#${u.id}`;
+    }
+
+    function toggleEdit() {
+      const viewing = !document.getElementById('editMode').classList.contains('d-none');
+      document.getElementById('viewMode').classList.toggle('d-none', !viewing);
+      document.getElementById('editMode').classList.toggle('d-none', viewing);
+      document.getElementById('editToggleBtn').textContent = viewing ? 'Edit Profile' : 'Cancel';
+
+      if (!viewing && currentUser) {
+        // Pre-fill edit form
+        document.getElementById('editFirstName').value = currentUser.first_name || '';
+        document.getElementById('editLastName').value  = currentUser.last_name  || '';
+        document.getElementById('editStudio').value    = currentUser.studio_name || '';
+        document.getElementById('editPhone').value     = currentUser.phone || '';
+        document.getElementById('editEmail').value     = currentUser.email || '';
+        document.getElementById('editAlert').classList.add('d-none');
+        document.getElementById('editSuccess').classList.add('d-none');
+      }
+    }
+
+    document.getElementById('editForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const token = localStorage.getItem('token');
+      const alertEl   = document.getElementById('editAlert');
+      const successEl = document.getElementById('editSuccess');
+      const saveBtn   = document.getElementById('saveBtn');
+
+      alertEl.classList.add('d-none');
+      successEl.classList.add('d-none');
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+      const body = {
+        first_name:  document.getElementById('editFirstName').value.trim() || null,
+        last_name:   document.getElementById('editLastName').value.trim()  || null,
+        studio_name: document.getElementById('editStudio').value.trim()    || null,
+        phone:       document.getElementById('editPhone').value.trim()     || null,
+        email:       document.getElementById('editEmail').value.trim()     || null,
+      };
+
+      try {
+        const res = await fetch(`${API}/users/me`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(body),
+        });
+
+        let data = {};
+        try { data = await res.json(); } catch {}
+
+        if (res.ok) {
+          currentUser = data;
+          renderProfile(data);
+          successEl.classList.remove('d-none');
+          // Return to view mode after short delay
+          setTimeout(() => {
+            toggleEdit();
+          }, 1200);
+        } else {
+          alertEl.textContent = data.detail || `Error ${res.status}`;
+          alertEl.classList.remove('d-none');
+        }
+      } catch {
+        alertEl.textContent = 'Something went wrong. Please try again.';
+        alertEl.classList.remove('d-none');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Changes';
+      }
+    });
 
     function logout() {
       localStorage.removeItem('token');
