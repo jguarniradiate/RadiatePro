@@ -46,16 +46,20 @@
     .nav-tabs .nav-link { color: #888; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: .6rem 1.2rem; }
     .nav-tabs .nav-link:hover { color: #E3FC02; border-color: transparent; }
     .nav-tabs .nav-link.active { color: #E3FC02; background: transparent; border-bottom: 2px solid #E3FC02; }
+    /* Registration section */
+    .reg-section { background: #0a0a0a; border-top: 1px solid #2a2a2a; padding: 1rem; }
+    .reg-card { background: #141414; border: 1px solid #252525; border-radius: 8px; padding: .75rem; margin-bottom: .5rem; }
+    .stu-badge { background: #2a2a2a; color: #ccc; font-size: .78rem; display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; padding: 2px 7px; }
+    .stu-badge-remove { background: none; border: none; color: #777; padding: 0; line-height: 1; cursor: pointer; font-size: .9rem; }
+    .stu-badge-remove:hover { color: #ff6b6b; }
   </style>
 </head>
 <body>
 
-  <!-- Admin banner -->
   <div class="admin-banner">&#9679; Admin Portal &mdash; Restricted Access &#9679;</div>
 
-  <!-- Navbar -->
   <nav class="navbar navbar-dark px-4 py-3">
-    <a href="index.html" class="brand-link fw-bold fs-5">RadiatePro</a>
+    <a href="dashboard.html" class="brand-link fw-bold fs-5">RadiatePro</a>
     <div class="d-flex align-items-center gap-3">
       <span class="badge badge-admin px-2 py-1">ADMIN</span>
       <a href="dashboard.html" class="text-muted text-decoration-none small">Dashboard</a>
@@ -65,100 +69,57 @@
 
   <div class="container py-4">
 
-    <!-- Tabs -->
     <ul class="nav nav-tabs mb-4" id="adminTabs">
       <li class="nav-item">
-        <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#usersPane" type="button">
-          Users
-        </button>
+        <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#usersPane" type="button">Users</button>
       </li>
       <li class="nav-item">
-        <button class="nav-link" id="events-tab" data-bs-toggle="tab" data-bs-target="#eventsPane" type="button">
-          Events
-        </button>
+        <button class="nav-link" id="events-tab" data-bs-toggle="tab" data-bs-target="#eventsPane" type="button">Events</button>
       </li>
     </ul>
 
     <div class="tab-content">
 
-      <!-- ── Users Tab ──────────────────────────────────────────────────────── -->
+      <!-- ── Users Tab ── -->
       <div class="tab-pane fade show active" id="usersPane">
-
         <div class="d-flex justify-content-between align-items-center mb-4">
           <h4 class="fw-bold page-title mb-0">User Management</h4>
           <button class="btn btn-accent btn-sm" onclick="loadUsers()">&#8635; Refresh</button>
         </div>
-
-        <!-- Stats row -->
         <div class="row g-3 mb-4">
-          <div class="col-6 col-md-3">
-            <div class="stat-card p-3 text-center">
-              <div class="stat-number" id="statTotal">—</div>
-              <div class="text-muted small">Total Users</div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-card p-3 text-center">
-              <div class="stat-number" id="statVerified">—</div>
-              <div class="text-muted small">Verified</div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-card p-3 text-center">
-              <div class="stat-number" id="statUnverified">—</div>
-              <div class="text-muted small">Unverified</div>
-            </div>
-          </div>
-          <div class="col-6 col-md-3">
-            <div class="stat-card p-3 text-center">
-              <div class="stat-number" id="statAdmins">—</div>
-              <div class="text-muted small">Admins</div>
-            </div>
-          </div>
+          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="statTotal">—</div><div class="text-muted small">Total Users</div></div></div>
+          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="statVerified">—</div><div class="text-muted small">Verified</div></div></div>
+          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="statUnverified">—</div><div class="text-muted small">Unverified</div></div></div>
+          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="statAdmins">—</div><div class="text-muted small">Admins</div></div></div>
         </div>
-
-        <div id="loadingSpinner" class="text-center py-5">
-          <div class="spinner-border" role="status"><span class="visually-hidden">Loading…</span></div>
-        </div>
+        <div id="loadingSpinner" class="text-center py-5"><div class="spinner-border" role="status"></div></div>
         <div id="errorMsg" class="alert alert-danger d-none"></div>
-
         <div id="tableWrapper" class="d-none">
           <div class="table-responsive">
             <table class="table table-striped table-hover align-middle">
-              <thead>
-                <tr>
-                  <th>ID</th><th>Name</th><th>Email</th><th>Studio</th><th>Phone</th>
-                  <th>Registered</th><th>Verified</th><th>Role</th><th></th>
-                </tr>
-              </thead>
+              <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Studio</th><th>Phone</th><th>Registered</th><th>Verified</th><th>Role</th><th></th></tr></thead>
               <tbody id="userTableBody"></tbody>
             </table>
           </div>
         </div>
+      </div>
 
-      </div><!-- /usersPane -->
-
-      <!-- ── Events Tab ─────────────────────────────────────────────────────── -->
+      <!-- ── Events Tab ── -->
       <div class="tab-pane fade" id="eventsPane">
-
         <div class="d-flex justify-content-between align-items-center mb-4">
           <h4 class="fw-bold page-title mb-0">Events</h4>
           <button class="btn btn-accent btn-sm" onclick="openAddEvent()">+ New Event</button>
         </div>
-
-        <div id="eventsLoading" class="text-center py-3">
-          <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
-        </div>
+        <div id="eventsLoading" class="text-center py-3"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div></div>
         <div id="eventsEmpty" class="text-muted text-center py-3 d-none">No events yet.</div>
         <div id="eventsError" class="alert alert-danger d-none"></div>
         <div id="eventsList"></div>
+      </div>
 
-      </div><!-- /eventsPane -->
+    </div>
+  </div>
 
-    </div><!-- /tab-content -->
-  </div><!-- /container -->
-
-  <!-- ── Edit User Modal ────────────────────────────────────────────────────── -->
+  <!-- Edit User Modal -->
   <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -168,31 +129,14 @@
         </div>
         <div class="modal-body">
           <div id="editAlert" class="alert alert-danger d-none mb-3"></div>
-          <form id="editForm" novalidate>
-            <input type="hidden" id="editUserId">
-            <div class="row g-3">
-              <div class="col-6">
-                <label class="form-label fw-semibold">First Name</label>
-                <input type="text" class="form-control" id="editFirstName">
-              </div>
-              <div class="col-6">
-                <label class="form-label fw-semibold">Last Name</label>
-                <input type="text" class="form-control" id="editLastName">
-              </div>
-              <div class="col-12">
-                <label class="form-label fw-semibold">Studio Name</label>
-                <input type="text" class="form-control" id="editStudio">
-              </div>
-              <div class="col-12">
-                <label class="form-label fw-semibold">Phone</label>
-                <input type="tel" class="form-control" id="editPhone">
-              </div>
-              <div class="col-12">
-                <label class="form-label fw-semibold">Email</label>
-                <input type="email" class="form-control" id="editEmail">
-              </div>
-            </div>
-          </form>
+          <input type="hidden" id="editUserId">
+          <div class="row g-3">
+            <div class="col-6"><label class="form-label fw-semibold">First Name</label><input type="text" class="form-control" id="editFirstName"></div>
+            <div class="col-6"><label class="form-label fw-semibold">Last Name</label><input type="text" class="form-control" id="editLastName"></div>
+            <div class="col-12"><label class="form-label fw-semibold">Studio Name</label><input type="text" class="form-control" id="editStudio"></div>
+            <div class="col-12"><label class="form-label fw-semibold">Phone</label><input type="tel" class="form-control" id="editPhone"></div>
+            <div class="col-12"><label class="form-label fw-semibold">Email</label><input type="email" class="form-control" id="editEmail"></div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -202,7 +146,7 @@
     </div>
   </div>
 
-  <!-- ── Admin Edit Student Modal ───────────────────────────────────────────── -->
+  <!-- Admin Edit Student Modal -->
   <div class="modal fade" id="adminStudentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -214,14 +158,8 @@
           <div id="adminStudentAlert" class="alert alert-danger d-none mb-3"></div>
           <input type="hidden" id="asUserId">
           <input type="hidden" id="asStudentId">
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="asName">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Date of Birth</label>
-            <input type="date" class="form-control" id="asDob">
-          </div>
+          <div class="mb-3"><label class="form-label fw-semibold">Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="asName"></div>
+          <div class="mb-3"><label class="form-label fw-semibold">Date of Birth</label><input type="date" class="form-control" id="asDob"></div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Gender</label>
             <select class="form-select" id="asGender">
@@ -241,7 +179,28 @@
     </div>
   </div>
 
-  <!-- ── Event Modal ────────────────────────────────────────────────────────── -->
+  <!-- Add Student to Registration Modal -->
+  <div class="modal fade" id="addRegStudentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Add Student to Registration</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3" id="addRegForUser"></p>
+          <div id="addRegStudentLoading" class="text-center py-2"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div></div>
+          <div id="addRegStudentEmpty" class="text-muted small text-center d-none">All students are already registered for this event.</div>
+          <div id="addRegStudentList" class="d-flex flex-wrap gap-2"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Modal -->
   <div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -252,10 +211,7 @@
         <div class="modal-body">
           <div id="eventAlert" class="alert alert-danger d-none mb-3"></div>
           <input type="hidden" id="eventId">
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="eventTitle" placeholder="Event title">
-          </div>
+          <div class="mb-3"><label class="form-label fw-semibold">Title <span class="text-danger">*</span></label><input type="text" class="form-control" id="eventTitle" placeholder="Event title"></div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Event Type</label>
             <select class="form-select" id="eventType">
@@ -264,18 +220,9 @@
               <option value="competition">Competition</option>
             </select>
           </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Date &amp; Time <span class="text-danger">*</span></label>
-            <input type="datetime-local" class="form-control" id="eventDate">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Location</label>
-            <input type="text" class="form-control" id="eventLocation" placeholder="Venue or address">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Description</label>
-            <textarea class="form-control" id="eventDesc" rows="3" placeholder="Optional details…"></textarea>
-          </div>
+          <div class="mb-3"><label class="form-label fw-semibold">Date &amp; Time <span class="text-danger">*</span></label><input type="datetime-local" class="form-control" id="eventDate"></div>
+          <div class="mb-3"><label class="form-label fw-semibold">Location</label><input type="text" class="form-control" id="eventLocation" placeholder="Venue or address"></div>
+          <div class="mb-3"><label class="form-label fw-semibold">Description</label><textarea class="form-control" id="eventDesc" rows="3" placeholder="Optional details…"></textarea></div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -288,12 +235,10 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
-    let editModal, adminStudentModal, eventModal;
+    let editModal, adminStudentModal, addRegStudentModal, eventModal;
+    let _regCtx = {}; // { eventId, regId }
 
-    function logout() {
-      localStorage.removeItem('token');
-      window.location.href = 'login.html';
-    }
+    function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
 
     function fmtDate(iso) {
       if (!iso) return '—';
@@ -303,9 +248,7 @@
     }
 
     function esc(str) {
-      return String(str || '')
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
     // ── Users ─────────────────────────────────────────────────────────────────
@@ -313,14 +256,11 @@
     async function loadUsers() {
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html?next=admin.html'; return; }
-
       document.getElementById('loadingSpinner').classList.remove('d-none');
       document.getElementById('tableWrapper').classList.add('d-none');
       document.getElementById('errorMsg').classList.add('d-none');
-
       try {
         const res = await fetch(`${API}/admin/users`, { headers: { 'Authorization': `Bearer ${token}` } });
-
         if (res.status === 401) { window.location.href = 'login.html?next=admin.html'; return; }
         if (res.status === 403) {
           document.getElementById('errorMsg').textContent = 'Access denied. Admin privileges required.';
@@ -328,22 +268,19 @@
           document.getElementById('loadingSpinner').classList.add('d-none');
           return;
         }
-
-        let users = [];
-        try { users = await res.json(); } catch {}
+        let users = []; try { users = await res.json(); } catch {}
 
         document.getElementById('statTotal').textContent      = users.length;
         document.getElementById('statVerified').textContent   = users.filter(u => u.email_verified).length;
         document.getElementById('statUnverified').textContent = users.filter(u => !u.email_verified).length;
         document.getElementById('statAdmins').textContent     = users.filter(u => u.is_admin).length;
 
-        const tbody = document.getElementById('userTableBody');
-        tbody.innerHTML = users.map(u => `
+        document.getElementById('userTableBody').innerHTML = users.map(u => `
           <tr id="row-${u.id}">
             <td class="text-muted small">${u.id}</td>
             <td>
-              <button class="btn btn-link p-0 text-start fw-semibold text-decoration-none"
-                style="color:#f0f0f0;" onclick="toggleStudents(${u.id},'${esc(u.first_name||'')} ${esc(u.last_name||'')}','${esc(u.studio_name||'')}')">
+              <button class="btn btn-link p-0 fw-semibold text-decoration-none" style="color:#f0f0f0;"
+                onclick="toggleStudents(${u.id},'${esc((u.first_name||'')+' '+(u.last_name||''))}','${esc(u.studio_name||'')}')">
                 ${esc(u.first_name||'')} ${esc(u.last_name||'')}
                 <span class="text-muted ms-1" style="font-size:.7rem;" id="arrow-${u.id}">▶</span>
               </button>
@@ -362,18 +299,14 @@
           </tr>
           <tr id="students-row-${u.id}" class="d-none">
             <td colspan="9" style="background:#0d0d0d;padding:0;">
-              <div class="p-3" id="students-content-${u.id}">
-                <div class="text-muted small text-center py-2">Loading students…</div>
-              </div>
+              <div class="p-3" id="students-content-${u.id}"></div>
             </td>
           </tr>
         `).join('');
-
         document.getElementById('loadingSpinner').classList.add('d-none');
         document.getElementById('tableWrapper').classList.remove('d-none');
-
       } catch {
-        document.getElementById('errorMsg').textContent = 'Failed to load users. Please try again.';
+        document.getElementById('errorMsg').textContent = 'Failed to load users.';
         document.getElementById('errorMsg').classList.remove('d-none');
         document.getElementById('loadingSpinner').classList.add('d-none');
       }
@@ -382,30 +315,20 @@
     async function toggleStudents(userId, name, studio) {
       const row   = document.getElementById(`students-row-${userId}`);
       const arrow = document.getElementById(`arrow-${userId}`);
-      const open  = !row.classList.contains('d-none');
-
-      if (open) { row.classList.add('d-none'); arrow.textContent = '▶'; return; }
-
-      row.classList.remove('d-none');
-      arrow.textContent = '▼';
-
+      if (!row.classList.contains('d-none')) { row.classList.add('d-none'); arrow.textContent = '▶'; return; }
+      row.classList.remove('d-none'); arrow.textContent = '▼';
       const token = localStorage.getItem('token');
       const content = document.getElementById(`students-content-${userId}`);
       content.innerHTML = '<div class="text-muted small text-center py-2">Loading…</div>';
-
       try {
-        const res = await fetch(`${API}/admin/users/${userId}/students`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
+        const res = await fetch(`${API}/admin/users/${userId}/students`, { headers: { 'Authorization': `Bearer ${token}` } });
         const students = await res.json();
-
         if (!students.length) {
-          content.innerHTML = `<p class="text-muted small mb-0">No students registered for <strong>${esc(name||studio)}</strong>.</p>`;
+          content.innerHTML = `<p class="text-muted small mb-0">No students for <strong>${esc(name||studio)}</strong>.</p>`;
           return;
         }
-
         content.innerHTML = `
-          <p class="text-muted small mb-2 fw-semibold" style="color:#E3FC02;">Students — ${esc(studio||name)}</p>
+          <p class="small fw-semibold mb-2" style="color:#E3FC02;">Students — ${esc(studio||name)}</p>
           <table class="table table-sm mb-0" style="--bs-table-bg:transparent;--bs-table-color:#ccc;--bs-table-border-color:#2a2a2a;font-size:.85rem;">
             <thead><tr style="color:#888;"><th>Name</th><th>Date of Birth</th><th>Gender</th><th></th></tr></thead>
             <tbody id="admin-students-${userId}">
@@ -423,12 +346,8 @@
                 </tr>`).join('')}
             </tbody>
           </table>`;
-      } catch {
-        content.innerHTML = '<div class="text-danger small">Failed to load students.</div>';
-      }
+      } catch { content.innerHTML = '<div class="text-danger small">Failed to load students.</div>'; }
     }
-
-    // ── Admin student edit ─────────────────────────────────────────────────────
 
     function openAdminEditStudent(userId, studentId, name, dob, gender) {
       document.getElementById('asUserId').value    = userId;
@@ -447,70 +366,38 @@
       const alertEl   = document.getElementById('adminStudentAlert');
       const saveBtn   = document.getElementById('adminStudentSaveBtn');
       const name      = document.getElementById('asName').value.trim();
-
-      if (!name) {
-        alertEl.textContent = 'Name is required.';
-        alertEl.classList.remove('d-none'); return;
-      }
-
+      if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
       alertEl.classList.add('d-none');
-      saveBtn.disabled = true;
-      saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
-
-      const body = {
-        name,
-        date_of_birth: document.getElementById('asDob').value || null,
-        gender:        document.getElementById('asGender').value || null,
-      };
-
+      saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
       try {
         const res = await fetch(`${API}/admin/users/${userId}/students/${studentId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ name, date_of_birth: document.getElementById('asDob').value||null, gender: document.getElementById('asGender').value||null }),
         });
-
-        let data = {};
-        try { data = await res.json(); } catch {}
-
+        let data = {}; try { data = await res.json(); } catch {}
         if (res.ok) {
           adminStudentModal.hide();
-          // refresh the student row
           const row = document.getElementById(`asr-${studentId}`);
           if (row) {
-            const dob = data.date_of_birth
-              ? new Date(data.date_of_birth+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
-              : '—';
             row.cells[0].textContent = data.name;
-            row.cells[1].textContent = dob;
+            row.cells[1].textContent = data.date_of_birth ? new Date(data.date_of_birth+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
             row.cells[2].textContent = data.gender || '—';
           }
-        } else {
-          alertEl.textContent = data.detail || `Error ${res.status}`;
-          alertEl.classList.remove('d-none');
-        }
-      } catch {
-        alertEl.textContent = 'Something went wrong. Please try again.';
-        alertEl.classList.remove('d-none');
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save';
-      }
+        } else { alertEl.textContent = data.detail || `Error ${res.status}`; alertEl.classList.remove('d-none'); }
+      } catch { alertEl.textContent = 'Something went wrong.'; alertEl.classList.remove('d-none'); }
+      finally { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
     }
 
     async function adminDeleteStudent(userId, studentId, name) {
       if (!confirm(`Remove student "${name}"?`)) return;
       const token = localStorage.getItem('token');
       try {
-        const res = await fetch(`${API}/admin/users/${userId}/students/${studentId}`, {
-          method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
-        });
+        const res = await fetch(`${API}/admin/users/${userId}/students/${studentId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) document.getElementById(`asr-${studentId}`).remove();
         else alert('Failed to remove student.');
       } catch { alert('Failed to remove student.'); }
     }
-
-    // ── User edit / delete ─────────────────────────────────────────────────────
 
     function openEdit(id, firstName, lastName, studio, phone, email) {
       document.getElementById('editUserId').value    = id;
@@ -525,63 +412,39 @@
     }
 
     async function saveUser() {
-      const token   = localStorage.getItem('token');
-      const userId  = document.getElementById('editUserId').value;
+      const token = localStorage.getItem('token');
+      const userId = document.getElementById('editUserId').value;
       const alertEl = document.getElementById('editAlert');
       const saveBtn = document.getElementById('editSaveBtn');
-
-      alertEl.classList.add('d-none');
-      saveBtn.disabled = true;
+      alertEl.classList.add('d-none'); saveBtn.disabled = true;
       saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
-
-      const body = {
-        first_name:  document.getElementById('editFirstName').value.trim() || null,
-        last_name:   document.getElementById('editLastName').value.trim()  || null,
-        studio_name: document.getElementById('editStudio').value.trim()    || null,
-        phone:       document.getElementById('editPhone').value.trim()     || null,
-        email:       document.getElementById('editEmail').value.trim()     || null,
-      };
-
       try {
         const res = await fetch(`${API}/admin/users/${userId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify(body),
+          body: JSON.stringify({
+            first_name: document.getElementById('editFirstName').value.trim()||null,
+            last_name:  document.getElementById('editLastName').value.trim()||null,
+            studio_name:document.getElementById('editStudio').value.trim()||null,
+            phone:      document.getElementById('editPhone').value.trim()||null,
+            email:      document.getElementById('editEmail').value.trim()||null,
+          }),
         });
-
-        let data = {};
-        try { data = await res.json(); } catch {}
-
+        let data = {}; try { data = await res.json(); } catch {}
         if (res.ok) { editModal.hide(); loadUsers(); }
-        else {
-          alertEl.textContent = data.detail || `Error ${res.status}`;
-          alertEl.classList.remove('d-none');
-        }
-      } catch {
-        alertEl.textContent = 'Something went wrong. Please try again.';
-        alertEl.classList.remove('d-none');
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Changes';
-      }
+        else { alertEl.textContent = data.detail||`Error ${res.status}`; alertEl.classList.remove('d-none'); }
+      } catch { alertEl.textContent = 'Something went wrong.'; alertEl.classList.remove('d-none'); }
+      finally { saveBtn.disabled = false; saveBtn.textContent = 'Save Changes'; }
     }
 
     async function deleteUser(id, email) {
       if (!confirm(`Delete user "${email}"? This cannot be undone.`)) return;
       const token = localStorage.getItem('token');
       try {
-        const res = await fetch(`${API}/admin/users/${id}`, {
-          method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (res.ok) {
-          document.getElementById(`row-${id}`).remove();
-          const total = document.getElementById('statTotal');
-          total.textContent = parseInt(total.textContent) - 1;
-        } else {
-          let data = {}; try { data = await res.json(); } catch {}
-          alert(data.detail || `Error ${res.status}`);
-        }
-      } catch { alert('Failed to delete user. Please try again.'); }
+        const res = await fetch(`${API}/admin/users/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) { document.getElementById(`row-${id}`).remove(); document.getElementById('statTotal').textContent = parseInt(document.getElementById('statTotal').textContent) - 1; }
+        else { let d={}; try{d=await res.json();}catch{}  alert(d.detail||`Error ${res.status}`); }
+      } catch { alert('Failed to delete user.'); }
     }
 
     // ── Events ─────────────────────────────────────────────────────────────────
@@ -589,45 +452,53 @@
     function fmtDt(iso) {
       if (!iso) return '—';
       const d = new Date(iso);
-      return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
-        + ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+      return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
     }
 
     function toLocalInput(iso) {
       if (!iso) return '';
-      const d = new Date(iso);
-      const pad = n => String(n).padStart(2,'0');
+      const d = new Date(iso), pad = n => String(n).padStart(2,'0');
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
     function typeBadge(type) {
       if (!type) return '';
-      const cls = type === 'competition' ? 'badge-competition' : 'badge-convention';
+      const cls = type==='competition' ? 'badge-competition' : 'badge-convention';
       return `<span class="badge ${cls} me-2">${type.charAt(0).toUpperCase()+type.slice(1)}</span>`;
     }
 
     async function loadEvents() {
       try {
         const res = await fetch(`${API}/events`);
-        let events = [];
-        try { events = await res.json(); } catch {}
+        let events = []; try { events = await res.json(); } catch {}
         document.getElementById('eventsLoading').classList.add('d-none');
-
         if (!events.length) { document.getElementById('eventsEmpty').classList.remove('d-none'); return; }
 
         document.getElementById('eventsList').innerHTML = events.map(e => `
-          <div class="d-flex align-items-start justify-content-between p-3 mb-2"
-               style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;" id="erow-${e.id}">
-            <div>
-              <div class="fw-bold">${typeBadge(e.event_type)}${esc(e.title)}</div>
-              <div class="text-muted small">&#128337; ${fmtDt(e.event_date)}${e.location ? ' &nbsp;&#128205; '+esc(e.location) : ''}</div>
-              ${e.description ? `<div class="text-muted small mt-1">${esc(e.description)}</div>` : ''}
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;margin-bottom:.5rem;" id="erow-${e.id}">
+            <div class="d-flex align-items-start justify-content-between p-3">
+              <div>
+                <div class="fw-bold">${typeBadge(e.event_type)}${esc(e.title)}</div>
+                <div class="text-muted small">&#128337; ${fmtDt(e.event_date)}${e.location ? ' &nbsp;&#128205; '+esc(e.location) : ''}</div>
+                ${e.description ? `<div class="text-muted small mt-1">${esc(e.description)}</div>` : ''}
+              </div>
+              <div class="d-flex gap-2 ms-3 flex-shrink-0">
+                <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                  onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}','${esc(e.event_type||'')}')">Edit</button>
+                <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                  onclick="deleteEvent(${e.id},'${esc(e.title)}')">Delete</button>
+              </div>
             </div>
-            <div class="d-flex gap-2 ms-3 flex-shrink-0">
-              <button class="btn btn-sm btn-outline-secondary py-0 px-2"
-                onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}','${esc(e.event_type||'')}')">Edit</button>
-              <button class="btn btn-sm btn-outline-danger py-0 px-2"
-                onclick="deleteEvent(${e.id},'${esc(e.title)}')">Delete</button>
+            <div style="border-top:1px solid #1f1f1f;padding:.4rem 1rem .5rem;">
+              <button class="btn btn-link p-0 text-decoration-none" style="color:#777;font-size:.82rem;"
+                onclick="toggleEventRegistrations(${e.id})">
+                <span id="ereg-arrow-${e.id}" style="font-size:.7rem;margin-right:.35rem;">▶</span>Registrations
+              </button>
+            </div>
+            <div id="ereg-${e.id}" class="d-none">
+              <div id="ereg-content-${e.id}" class="reg-section">
+                <div class="text-muted small text-center py-2">Loading…</div>
+              </div>
             </div>
           </div>`).join('');
       } catch {
@@ -637,14 +508,152 @@
       }
     }
 
+    async function toggleEventRegistrations(eventId) {
+      const panel = document.getElementById(`ereg-${eventId}`);
+      const arrow = document.getElementById(`ereg-arrow-${eventId}`);
+      if (!panel.classList.contains('d-none')) { panel.classList.add('d-none'); arrow.textContent = '▶'; return; }
+      panel.classList.remove('d-none'); arrow.textContent = '▼';
+
+      const token = localStorage.getItem('token');
+      const content = document.getElementById(`ereg-content-${eventId}`);
+
+      try {
+        const res = await fetch(`${API}/admin/events/${eventId}/registrations`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const regs = await res.json();
+
+        if (!regs.length) {
+          content.innerHTML = '<p class="text-muted small mb-0">No registrations yet.</p>';
+          return;
+        }
+
+        content.innerHTML = `
+          <p class="small fw-bold mb-3" style="color:#E3FC02;">Registrations (${regs.length})</p>
+          ${regs.map(reg => renderRegCard(eventId, reg)).join('')}`;
+      } catch {
+        content.innerHTML = '<div class="text-danger small">Failed to load registrations.</div>';
+      }
+    }
+
+    function renderRegCard(eventId, reg) {
+      const stuBadges = reg.students.map(s => `
+        <span class="stu-badge" id="rst-${reg.id}-${s.id}">
+          ${esc(s.name)}
+          <button class="stu-badge-remove" title="Remove student"
+            onclick="adminRemoveRegStudent(${eventId},${reg.id},${s.id},'${esc(s.name)}')">×</button>
+        </span>`).join('');
+
+      return `
+        <div class="reg-card" id="areg-${reg.id}">
+          <div class="d-flex align-items-start justify-content-between mb-2">
+            <div>
+              <div class="fw-semibold" style="font-size:.9rem;">${esc(reg.user_name)}</div>
+              ${reg.studio_name ? `<div class="text-muted" style="font-size:.78rem;">${esc(reg.studio_name)}</div>` : ''}
+            </div>
+            <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.78rem;"
+              onclick="adminRemoveRegistration(${eventId},${reg.id},'${esc(reg.user_name)}')">Remove All</button>
+          </div>
+          <div class="d-flex flex-wrap gap-1 align-items-center" id="reg-students-${reg.id}">
+            <span class="text-muted" style="font-size:.76rem;margin-right:.25rem;">Students:</span>
+            ${reg.students.length ? stuBadges : '<span class="text-muted" style="font-size:.78rem;">None selected</span>'}
+            <button class="btn py-0 px-2" style="font-size:.74rem;border:1px dashed #555;color:#888;border-radius:4px;"
+              onclick="openAddRegStudent(${eventId},${reg.id},${reg.user_id},'${esc(reg.user_name)}',[${reg.students.map(s=>s.id).join(',')}])">
+              + Add Student
+            </button>
+          </div>
+        </div>`;
+    }
+
+    async function adminRemoveRegistration(eventId, regId, userName) {
+      if (!confirm(`Remove ${userName}'s entire registration?`)) return;
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+          document.getElementById(`areg-${regId}`).remove();
+          // Update count in heading
+          const content = document.getElementById(`ereg-content-${eventId}`);
+          const heading = content.querySelector('p');
+          if (heading) {
+            const remaining = content.querySelectorAll('.reg-card').length;
+            if (remaining === 0) content.innerHTML = '<p class="text-muted small mb-0">No registrations yet.</p>';
+            else heading.textContent = `Registrations (${remaining})`;
+          }
+        } else alert('Failed to remove registration.');
+      } catch { alert('Something went wrong.'); }
+    }
+
+    async function adminRemoveRegStudent(eventId, regId, studentId, studentName) {
+      if (!confirm(`Remove "${studentName}" from this registration?`)) return;
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/students/${studentId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) document.getElementById(`rst-${regId}-${studentId}`).remove();
+        else alert('Failed to remove student.');
+      } catch { alert('Something went wrong.'); }
+    }
+
+    async function openAddRegStudent(eventId, regId, userId, userName, existingIds) {
+      _regCtx = { eventId, regId };
+      document.getElementById('addRegForUser').textContent = `Adding students for: ${userName}`;
+      document.getElementById('addRegStudentList').innerHTML = '';
+      document.getElementById('addRegStudentEmpty').classList.add('d-none');
+      document.getElementById('addRegStudentLoading').classList.remove('d-none');
+      addRegStudentModal.show();
+
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/users/${userId}/students`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const allStudents = await res.json();
+        document.getElementById('addRegStudentLoading').classList.add('d-none');
+        const available = allStudents.filter(s => !existingIds.includes(s.id));
+        if (!available.length) { document.getElementById('addRegStudentEmpty').classList.remove('d-none'); return; }
+        document.getElementById('addRegStudentList').innerHTML = available.map(s =>
+          `<button class="btn btn-outline-secondary btn-sm" id="ars-${s.id}" onclick="adminAddRegStudent(${s.id},'${esc(s.name)}')">${esc(s.name)}</button>`
+        ).join('');
+      } catch {
+        document.getElementById('addRegStudentLoading').classList.add('d-none');
+        document.getElementById('addRegStudentList').innerHTML = '<div class="text-danger small">Failed to load students.</div>';
+      }
+    }
+
+    async function adminAddRegStudent(studentId, studentName) {
+      const { eventId, regId } = _regCtx;
+      const token = localStorage.getItem('token');
+      const btn = document.getElementById(`ars-${studentId}`);
+      if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+      try {
+        const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/students/${studentId}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+          if (btn) btn.remove();
+          // Inject badge into the registration card
+          const container = document.getElementById(`reg-students-${regId}`);
+          if (container) {
+            const addBtn = container.querySelector('button:last-child');
+            // Remove "None selected" text if present
+            container.querySelectorAll('span.text-muted').forEach(el => { if(el.textContent.trim()==='None selected') el.remove(); });
+            const badge = document.createElement('span');
+            badge.id = `rst-${regId}-${studentId}`;
+            badge.className = 'stu-badge';
+            badge.innerHTML = `${esc(studentName)} <button class="stu-badge-remove" title="Remove student" onclick="adminRemoveRegStudent(${eventId},${regId},${studentId},'${esc(studentName)}')">×</button>`;
+            container.insertBefore(badge, addBtn);
+          }
+          // Close modal if no more available
+          if (!document.getElementById('addRegStudentList').children.length) addRegStudentModal.hide();
+        } else {
+          const d = await res.json().catch(()=>({}));
+          alert(d.detail || 'Failed to add student.');
+          if (btn) { btn.disabled = false; btn.textContent = studentName; }
+        }
+      } catch {
+        alert('Something went wrong.');
+        if (btn) { btn.disabled = false; btn.textContent = studentName; }
+      }
+    }
+
     function openAddEvent() {
+      ['eventId','eventTitle','eventDate','eventLocation','eventDesc'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('eventType').value = '';
       document.getElementById('eventModalTitle').textContent = 'New Event';
-      document.getElementById('eventId').value       = '';
-      document.getElementById('eventTitle').value    = '';
-      document.getElementById('eventType').value     = '';
-      document.getElementById('eventDate').value     = '';
-      document.getElementById('eventLocation').value = '';
-      document.getElementById('eventDesc').value     = '';
       document.getElementById('eventAlert').classList.add('d-none');
       eventModal.show();
     }
@@ -668,79 +677,49 @@
       const saveBtn = document.getElementById('eventSaveBtn');
       const title   = document.getElementById('eventTitle').value.trim();
       const date    = document.getElementById('eventDate').value;
-
-      if (!title || !date) {
-        alertEl.textContent = 'Title and date are required.';
-        alertEl.classList.remove('d-none'); return;
-      }
-      alertEl.classList.add('d-none');
-      saveBtn.disabled = true;
+      if (!title || !date) { alertEl.textContent = 'Title and date are required.'; alertEl.classList.remove('d-none'); return; }
+      alertEl.classList.add('d-none'); saveBtn.disabled = true;
       saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
-
-      const body = {
-        title,
-        event_type:  document.getElementById('eventType').value     || null,
-        event_date:  new Date(date).toISOString(),
-        location:    document.getElementById('eventLocation').value.trim() || null,
-        description: document.getElementById('eventDesc').value.trim()    || null,
-      };
-
-      const url    = eventId ? `${API}/admin/events/${eventId}` : `${API}/admin/events`;
-      const method = eventId ? 'PATCH' : 'POST';
-
       try {
-        const res = await fetch(url, {
-          method,
+        const res = await fetch(eventId ? `${API}/admin/events/${eventId}` : `${API}/admin/events`, {
+          method: eventId ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ title, event_type: document.getElementById('eventType').value||null, event_date: new Date(date).toISOString(), location: document.getElementById('eventLocation').value.trim()||null, description: document.getElementById('eventDesc').value.trim()||null }),
         });
         let data = {}; try { data = await res.json(); } catch {}
-
         if (res.ok) {
           eventModal.hide();
           document.getElementById('eventsList').innerHTML = '';
           document.getElementById('eventsEmpty').classList.add('d-none');
           document.getElementById('eventsLoading').classList.remove('d-none');
           loadEvents();
-        } else {
-          alertEl.textContent = data.detail || `Error ${res.status}`;
-          alertEl.classList.remove('d-none');
-        }
-      } catch {
-        alertEl.textContent = 'Something went wrong. Please try again.';
-        alertEl.classList.remove('d-none');
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Event';
-      }
+        } else { alertEl.textContent = data.detail||`Error ${res.status}`; alertEl.classList.remove('d-none'); }
+      } catch { alertEl.textContent = 'Something went wrong.'; alertEl.classList.remove('d-none'); }
+      finally { saveBtn.disabled = false; saveBtn.textContent = 'Save Event'; }
     }
 
     async function deleteEvent(id, title) {
       if (!confirm(`Delete event "${title}"?`)) return;
       const token = localStorage.getItem('token');
       try {
-        const res = await fetch(`${API}/admin/events/${id}`, {
-          method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
-        });
+        const res = await fetch(`${API}/admin/events/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) document.getElementById(`erow-${id}`).remove();
       } catch { alert('Failed to delete event.'); }
     }
 
     // ── Init ───────────────────────────────────────────────────────────────────
-
     (async () => {
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html?next=admin.html'; return; }
       editModal         = new bootstrap.Modal(document.getElementById('editModal'));
       adminStudentModal = new bootstrap.Modal(document.getElementById('adminStudentModal'));
+      addRegStudentModal= new bootstrap.Modal(document.getElementById('addRegStudentModal'));
       eventModal        = new bootstrap.Modal(document.getElementById('eventModal'));
 
-      // Load Events tab content when it's shown for the first time
       let eventsLoaded = false;
       document.getElementById('events-tab').addEventListener('shown.bs.tab', () => {
         if (!eventsLoaded) { eventsLoaded = true; loadEvents(); }
       });
-
       loadUsers();
     })();
   </script>

@@ -574,7 +574,7 @@ def admin_list_registrations(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """List all registrations for an event. Admin only."""
+    """List all registrations for an event, with per-student details. Admin only."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -583,17 +583,97 @@ def admin_list_registrations(
     ).all()
     result = []
     for reg in regs:
-        student_ids = [ers.student_id for ers in reg.attending_students]
+        students = [{"id": ers.student_id, "name": ers.student.name} for ers in reg.attending_students]
         name = f"{reg.user.first_name or ''} {reg.user.last_name or ''}".strip() or reg.user.email
         result.append({
             "id": reg.id,
             "user_id": reg.user_id,
             "user_name": name,
             "studio_name": reg.user.studio_name,
-            "student_count": len(student_ids),
+            "students": students,
             "created_at": reg.created_at.isoformat() if reg.created_at else None,
         })
     return result
+
+
+@app.delete("/admin/events/{event_id}/registrations/{reg_id}", response_model=schemas.MessageOut)
+def admin_remove_registration(
+    event_id: int,
+    reg_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Remove a user's entire event registration. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.id == reg_id,
+        models.EventRegistration.event_id == event_id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found.")
+    db.delete(reg)
+    db.commit()
+    return {"message": "Registration removed."}
+
+
+@app.delete("/admin/events/{event_id}/registrations/{reg_id}/students/{student_id}", response_model=schemas.MessageOut)
+def admin_remove_reg_student(
+    event_id: int,
+    reg_id: int,
+    student_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Remove one student from an event registration. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    ers = db.query(models.EventRegistrationStudent).filter(
+        models.EventRegistrationStudent.registration_id == reg_id,
+        models.EventRegistrationStudent.student_id == student_id,
+    ).first()
+    if not ers:
+        raise HTTPException(status_code=404, detail="Student not in registration.")
+    db.delete(ers)
+    db.commit()
+    return {"message": "Student removed from registration."}
+
+
+@app.post("/admin/events/{event_id}/registrations/{reg_id}/students/{student_id}", response_model=schemas.MessageOut)
+def admin_add_reg_student(
+    event_id: int,
+    reg_id: int,
+    student_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Add a student to an event registration. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.id == reg_id,
+        models.EventRegistration.event_id == event_id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found.")
+    student = db.query(models.Student).filter(
+        models.Student.id == student_id,
+        models.Student.user_id == reg.user_id,
+    ).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found for this user.")
+    existing = db.query(models.EventRegistrationStudent).filter(
+        models.EventRegistrationStudent.registration_id == reg_id,
+        models.EventRegistrationStudent.student_id == student_id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Student already in registration.")
+    db.add(models.EventRegistrationStudent(registration_id=reg_id, student_id=student_id))
+    db.commit()
+    return {"message": "Student added to registration."}
 
 
 @app.delete("/admin/events/{event_id}", response_model=schemas.MessageOut)

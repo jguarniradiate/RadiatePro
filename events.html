@@ -33,20 +33,27 @@
     .modal-header { border-bottom-color: #2a2a2a; }
     .modal-footer { border-top-color: #2a2a2a; }
     .modal-title { color: #E3FC02; }
-    .form-check-label { color: #ccc; }
-    .form-check-input:checked { background-color: #E3FC02; border-color: #E3FC02; }
     .btn-close { filter: invert(1); }
     .reg-badge {
       background: #198754; color: #fff; font-size: .72rem; font-weight: 600;
       padding: .25rem .6rem; border-radius: 20px; white-space: nowrap;
     }
+    /* Student toggle buttons */
+    .stu-toggle {
+      border: 1px solid #444; background: #111; color: #aaa;
+      border-radius: 20px; padding: .3rem .85rem; font-size: .85rem;
+      cursor: pointer; transition: all .15s; user-select: none;
+    }
+    .stu-toggle:hover { border-color: #E3FC02; color: #E3FC02; }
+    .stu-toggle.selected {
+      background: #E3FC02; border-color: #E3FC02; color: #000; font-weight: 700;
+    }
   </style>
 </head>
 <body>
 
-  <!-- Navbar -->
   <nav class="navbar navbar-dark px-4 py-3">
-    <a href="index.html" class="brand-link fw-bold fs-5">RadiatePro</a>
+    <a href="dashboard.html" class="brand-link fw-bold fs-5">RadiatePro</a>
     <div class="ms-auto d-flex align-items-center gap-3">
       <a href="dashboard.html" class="text-muted text-decoration-none small">Dashboard</a>
       <button class="btn btn-outline-secondary btn-sm" onclick="logout()">Sign Out</button>
@@ -54,17 +61,13 @@
   </nav>
 
   <div class="container py-5" style="max-width: 780px;">
-
     <h4 class="fw-bold page-title mb-4">Events</h4>
-
     <div id="spinner" class="text-center py-5">
       <div class="spinner-border" role="status"><span class="visually-hidden">Loading…</span></div>
     </div>
-
     <div id="emptyMsg" class="text-muted text-center py-5 d-none">No events at this time.</div>
     <div id="errorMsg" class="alert alert-danger d-none"></div>
     <div id="eventsList"></div>
-
   </div>
 
   <!-- Registration Modal -->
@@ -78,8 +81,8 @@
         <div class="modal-body">
           <div id="regAlert" class="alert alert-danger d-none mb-3"></div>
           <input type="hidden" id="regEventId">
-          <p class="small text-muted mb-3">Select which students will be attending:</p>
-          <div id="studentCheckboxes"></div>
+          <p class="small text-muted mb-3">Tap a student to toggle their attendance:</p>
+          <div id="studentToggles" class="d-flex flex-wrap gap-2"></div>
           <p id="noStudentsMsg" class="text-muted small d-none">
             You haven't added any students yet.
             <a href="dashboard.html" class="text-decoration-none" style="color:#E3FC02;">Add in Dashboard →</a>
@@ -103,14 +106,10 @@
     let myRegistrations = {}; // event_id (string) → {registration_id, student_ids}
     let regModal;
 
-    function logout() {
-      localStorage.removeItem('token');
-      window.location.href = 'login.html';
-    }
+    function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
 
     function esc(str) {
-      return String(str || '')
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
     function fmtDate(iso) {
@@ -129,11 +128,7 @@
 
     function renderEvents(events) {
       document.getElementById('spinner').classList.add('d-none');
-
-      if (!events.length) {
-        document.getElementById('emptyMsg').classList.remove('d-none');
-        return;
-      }
+      if (!events.length) { document.getElementById('emptyMsg').classList.remove('d-none'); return; }
 
       const now = new Date();
       const upcoming = events.filter(e => new Date(e.event_date) >= now);
@@ -144,8 +139,8 @@
         return `
           <h6 class="text-muted text-uppercase small mb-3 mt-4" style="letter-spacing:.08em;">${label}</h6>
           ${list.map(e => {
-            const dt   = fmtDate(e.event_date);
-            const reg  = myRegistrations[String(e.id)];
+            const dt  = fmtDate(e.event_date);
+            const reg = myRegistrations[String(e.id)];
             const isPast = new Date(e.event_date) < now;
             return `
               <div class="event-card p-4 mb-3 d-flex gap-3 align-items-start ${reg ? 'registered' : ''}" id="ecard-${e.id}">
@@ -160,8 +155,9 @@
                   ${!isPast ? `
                   <div class="d-flex align-items-center gap-2 mt-2">
                     ${reg ? `<span class="reg-badge">&#10003; Registered</span>` : ''}
-                    <button id="reg-btn-${e.id}" class="btn btn-sm ${reg ? 'btn-outline-secondary' : 'btn-accent'} py-1 px-3"
-                      onclick="openRegModal(${e.id}, '${esc(e.title)}')">
+                    <button id="reg-btn-${e.id}"
+                      class="btn btn-sm ${reg ? 'btn-outline-secondary' : 'btn-accent'} py-1 px-3"
+                      onclick="openRegModal(${e.id},'${esc(e.title)}')">
                       ${reg ? 'Edit Registration' : 'Register'}
                     </button>
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
@@ -174,42 +170,54 @@
         renderGroup('Upcoming', upcoming) + renderGroup('Past Events', past);
     }
 
+    // ── Toggle-button helpers ──────────────────────────────────────────────────
+
+    function toggleStudentBtn(btn) {
+      btn.classList.toggle('selected');
+    }
+
+    function getSelectedStudentIds() {
+      return [...document.querySelectorAll('.stu-toggle.selected')].map(b => parseInt(b.dataset.studentId));
+    }
+
+    // ── Registration modal ─────────────────────────────────────────────────────
+
     function openRegModal(eventId, eventTitle) {
       document.getElementById('regEventId').value = eventId;
       document.getElementById('regModalTitle').textContent = eventTitle;
       document.getElementById('regAlert').classList.add('d-none');
 
       const reg = myRegistrations[String(eventId)];
-      const checkedIds = reg ? reg.student_ids : [];
+      const selectedIds = reg ? reg.student_ids : [];
 
-      const container = document.getElementById('studentCheckboxes');
+      const container = document.getElementById('studentToggles');
       if (myStudents.length === 0) {
         container.innerHTML = '';
         document.getElementById('noStudentsMsg').classList.remove('d-none');
       } else {
         document.getElementById('noStudentsMsg').classList.add('d-none');
         container.innerHTML = myStudents.map(s => `
-          <div class="form-check mb-2">
-            <input class="form-check-input" type="checkbox" value="${s.id}" id="stu-${s.id}" ${checkedIds.includes(s.id) ? 'checked' : ''}>
-            <label class="form-check-label" for="stu-${s.id}">${esc(s.name)}${s.date_of_birth ? ` <span class="text-muted small">(${s.date_of_birth})</span>` : ''}</label>
-          </div>`).join('');
+          <button type="button"
+            class="stu-toggle ${selectedIds.includes(s.id) ? 'selected' : ''}"
+            data-student-id="${s.id}"
+            onclick="toggleStudentBtn(this)">
+            ${esc(s.name)}
+          </button>`).join('');
       }
 
       const unregBtn = document.getElementById('unregBtn');
       const saveBtn  = document.getElementById('regSaveBtn');
       unregBtn.style.display = reg ? 'inline-block' : 'none';
       saveBtn.textContent    = reg ? 'Update Registration' : 'Register';
-
       regModal.show();
     }
 
     async function saveRegistration() {
-      const token    = localStorage.getItem('token');
-      const eventId  = document.getElementById('regEventId').value;
-      const alertEl  = document.getElementById('regAlert');
-      const saveBtn  = document.getElementById('regSaveBtn');
-      const studentIds = [...document.querySelectorAll('#studentCheckboxes input:checked')]
-                          .map(cb => parseInt(cb.value));
+      const token      = localStorage.getItem('token');
+      const eventId    = document.getElementById('regEventId').value;
+      const alertEl    = document.getElementById('regAlert');
+      const saveBtn    = document.getElementById('regSaveBtn');
+      const studentIds = getSelectedStudentIds();
 
       alertEl.classList.add('d-none');
       saveBtn.disabled = true;
@@ -221,7 +229,6 @@
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ student_ids: studentIds }),
         });
-
         if (res.ok) {
           const data = await res.json();
           myRegistrations[String(eventId)] = { registration_id: data.id, student_ids: data.student_ids };
@@ -245,33 +252,21 @@
       const token   = localStorage.getItem('token');
       const eventId = document.getElementById('regEventId').value;
       if (!confirm('Cancel your registration for this event?')) return;
-
       try {
-        const res = await fetch(`${API}/events/${eventId}/register`, {
-          method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (res.ok) {
-          delete myRegistrations[String(eventId)];
-          updateEventCard(eventId, false);
-          regModal.hide();
-        } else {
-          alert('Failed to cancel registration.');
-        }
+        const res = await fetch(`${API}/events/${eventId}/register`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) { delete myRegistrations[String(eventId)]; updateEventCard(eventId, false); regModal.hide(); }
+        else alert('Failed to cancel registration.');
       } catch { alert('Something went wrong.'); }
     }
 
     function updateEventCard(eventId, isRegistered) {
-      const card   = document.getElementById(`ecard-${eventId}`);
-      const btn    = document.getElementById(`reg-btn-${eventId}`);
-      if (card) {
-        if (isRegistered) card.classList.add('registered');
-        else card.classList.remove('registered');
-      }
+      const card = document.getElementById(`ecard-${eventId}`);
+      const btn  = document.getElementById(`reg-btn-${eventId}`);
+      if (card) { if (isRegistered) card.classList.add('registered'); else card.classList.remove('registered'); }
       if (btn) {
         if (isRegistered) {
           btn.className = 'btn btn-sm btn-outline-secondary py-1 px-3';
           btn.textContent = 'Edit Registration';
-          // insert badge if not already there
           const parent = btn.parentElement;
           if (!parent.querySelector('.reg-badge')) {
             const badge = document.createElement('span');
@@ -291,20 +286,16 @@
     (async () => {
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html'; return; }
-
       regModal = new bootstrap.Modal(document.getElementById('regModal'));
-
       try {
         const [studRes, evtRes, regRes] = await Promise.all([
-          fetch(`${API}/students`,              { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(`${API}/students`,               { headers: { 'Authorization': `Bearer ${token}` } }),
           fetch(`${API}/events`),
-          fetch(`${API}/events/my-registrations`, { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(`${API}/events/my-registrations`,{ headers: { 'Authorization': `Bearer ${token}` } }),
         ]);
-
         myStudents      = studRes.ok ? await studRes.json() : [];
         const events    = evtRes.ok  ? await evtRes.json()  : [];
         myRegistrations = regRes.ok  ? await regRes.json()  : {};
-
         renderEvents(events);
       } catch {
         document.getElementById('spinner').classList.add('d-none');
