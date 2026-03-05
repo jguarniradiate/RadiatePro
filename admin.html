@@ -842,16 +842,48 @@
           return;
         }
 
+        // Payment summary for the header
+        const paidRegs = regs.filter(r => r.payment_status === 'paid');
+        const freeRegs = regs.filter(r => r.payment_status === 'free');
+        const pendingRegs = regs.filter(r => r.payment_status === 'pending');
+        const unpaidRegs = regs.filter(r => !r.payment_status);
+        const totalRevenue = paidRegs.reduce((s, r) => s + (r.amount_paid || 0), 0);
+
+        let paymentSummary = '';
+        const pills = [];
+        if (paidRegs.length) pills.push(`<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${paidRegs.length} Paid &nbsp;·&nbsp; $${totalRevenue.toFixed(2)}</span>`);
+        if (freeRegs.length) pills.push(`<span style="background:rgba(34,197,94,.08);color:#4ade80;border:1px solid #4ade80;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">${freeRegs.length} Free</span>`);
+        if (pendingRegs.length) pills.push(`<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9203; ${pendingRegs.length} Awaiting</span>`);
+        if (unpaidRegs.length) pills.push(`<span style="background:#1a1a1a;color:#666;border:1px solid #333;font-size:.68rem;padding:.1rem .4rem;border-radius:20px;">${unpaidRegs.length} Not Finalized</span>`);
+        if (pills.length) paymentSummary = `<div class="d-flex flex-wrap gap-1 mt-1">${pills.join('')}</div>`;
+
         content.innerHTML = `
-          <div class="d-flex align-items-center justify-content-between mb-3">
-            <p class="small fw-bold mb-0" style="color:#E3FC02;" id="ereg-heading-${eventId}">Registrations (${regs.length})</p>
-            <button class="btn btn-accent btn-sm py-0 px-2" style="font-size:.76rem;"
+          <div class="d-flex align-items-start justify-content-between mb-3">
+            <div>
+              <p class="small fw-bold mb-0" style="color:#E3FC02;" id="ereg-heading-${eventId}">Registrations (${regs.length})</p>
+              ${paymentSummary}
+            </div>
+            <button class="btn btn-accent btn-sm py-0 px-2 ms-2 flex-shrink-0" style="font-size:.76rem;"
               onclick="openAdminCreateReg(${eventId})">+ Add Registration</button>
           </div>
           ${regs.map(reg => renderRegCard(eventId, reg)).join('')}`;
       } catch {
         content.innerHTML = '<div class="text-danger small">Failed to load registrations.</div>';
       }
+    }
+
+    function paymentBadge(reg) {
+      if (reg.payment_status === 'paid') {
+        const amt = reg.amount_paid != null ? ` &nbsp;$${Number(reg.amount_paid).toFixed(2)}` : '';
+        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid${amt}</span>`;
+      }
+      if (reg.payment_status === 'free') {
+        return `<span style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">Free</span>`;
+      }
+      if (reg.payment_status === 'pending') {
+        return `<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">&#9203; Awaiting Payment</span>`;
+      }
+      return `<span style="background:#1a1a1a;color:#666;border:1px solid #333;font-size:.7rem;padding:.15rem .45rem;border-radius:20px;">Not Finalized</span>`;
     }
 
     function renderRegCard(eventId, reg) {
@@ -862,14 +894,21 @@
             onclick="adminRemoveRegStudent(${eventId},${reg.id},${s.id},'${esc(s.name)}')">×</button>
         </span>`).join('');
 
+      const paidOnHtml = reg.finalized_at
+        ? `<span style="font-size:.72rem;color:#666;margin-left:.5rem;">on ${new Date(reg.finalized_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>`
+        : '';
+
       return `
         <div class="reg-card" id="areg-${reg.id}">
           <div class="d-flex align-items-start justify-content-between mb-2">
-            <div>
-              <div class="fw-semibold" style="font-size:.9rem;">${esc(reg.user_name)}</div>
+            <div style="flex:1;min-width:0;">
+              <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+                <span class="fw-semibold" style="font-size:.9rem;">${esc(reg.user_name)}</span>
+                ${paymentBadge(reg)}${paidOnHtml}
+              </div>
               <div style="font-size:.78rem;color:#999;">${reg.studio_name ? esc(reg.studio_name) : '<span class="badge badge-independent" style="font-size:.7rem;">Independent</span>'}</div>
             </div>
-            <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.78rem;"
+            <button class="btn btn-sm btn-outline-danger py-0 px-2 ms-2 flex-shrink-0" style="font-size:.78rem;"
               onclick="adminRemoveRegistration(${eventId},${reg.id},'${esc(reg.user_name)}')">Remove All</button>
           </div>
           <div class="d-flex flex-wrap gap-1 align-items-center" id="reg-students-${reg.id}">

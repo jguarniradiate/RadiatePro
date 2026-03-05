@@ -1010,6 +1010,10 @@ def admin_list_registrations(
             "studio_name": reg.user.studio_name,
             "students": students,
             "created_at": reg.created_at.isoformat() if reg.created_at else None,
+            "is_finalized": reg.is_finalized,
+            "payment_status": reg.payment_status,
+            "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else None,
+            "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
         })
     return result
 
