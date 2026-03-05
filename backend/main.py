@@ -34,6 +34,22 @@ def run_migrations(eng):
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS studio_name VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false",
+        """CREATE TABLE IF NOT EXISTS students (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name VARCHAR NOT NULL,
+            date_of_birth DATE,
+            gender VARCHAR,
+            created_at TIMESTAMPTZ DEFAULT now()
+        )""",
+        """CREATE TABLE IF NOT EXISTS events (
+            id SERIAL PRIMARY KEY,
+            title VARCHAR NOT NULL,
+            description VARCHAR,
+            event_date TIMESTAMPTZ NOT NULL,
+            location VARCHAR,
+            created_at TIMESTAMPTZ DEFAULT now()
+        )""",
     ]
     with eng.connect() as conn:
         for stmt in stmts:
@@ -331,3 +347,175 @@ def admin_update_user(
     db.commit()
     db.refresh(target)
     return target
+
+
+# ── Student routes ────────────────────────────────────────────────────────────
+
+@app.get("/students", response_model=list[schemas.StudentOut])
+def list_students(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Return all students belonging to the current user."""
+    user = get_current_user(authorization, db)
+    return db.query(models.Student).filter(models.Student.user_id == user.id).order_by(models.Student.name).all()
+
+
+@app.post("/students", response_model=schemas.StudentOut, status_code=201)
+def create_student(
+    body: schemas.StudentCreate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Add a student to the current user's account."""
+    user = get_current_user(authorization, db)
+    student = models.Student(user_id=user.id, **body.model_dump())
+    db.add(student)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+@app.patch("/students/{student_id}", response_model=schemas.StudentOut)
+def update_student(
+    student_id: int,
+    body: schemas.StudentUpdate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Update a student. Must belong to the current user."""
+    user = get_current_user(authorization, db)
+    student = db.query(models.Student).filter(
+        models.Student.id == student_id,
+        models.Student.user_id == user.id,
+    ).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(student, field, value)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+@app.delete("/students/{student_id}", response_model=schemas.MessageOut)
+def delete_student(
+    student_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Delete a student. Must belong to the current user."""
+    user = get_current_user(authorization, db)
+    student = db.query(models.Student).filter(
+        models.Student.id == student_id,
+        models.Student.user_id == user.id,
+    ).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    db.delete(student)
+    db.commit()
+    return {"message": "Student deleted."}
+
+
+# ── Event routes (public read, admin write) ───────────────────────────────────
+
+@app.get("/events", response_model=list[schemas.EventOut])
+def list_events(db: Session = Depends(get_db)):
+    """Return all events ordered by date ascending."""
+    return db.query(models.Event).order_by(models.Event.event_date).all()
+
+
+@app.post("/admin/events", response_model=schemas.EventOut, status_code=201)
+def create_event(
+    body: schemas.EventCreate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Create a new event. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    event = models.Event(**body.model_dump())
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@app.patch("/admin/events/{event_id}", response_model=schemas.EventOut)
+def update_event(
+    event_id: int,
+    body: schemas.EventUpdate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Update an event. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(event, field, value)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@app.delete("/admin/events/{event_id}", response_model=schemas.MessageOut)
+def delete_event(
+    event_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Delete an event. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+    db.delete(event)
+    db.commit()
+    return {"message": "Event deleted."}
+
+
+# ── Admin student view ────────────────────────────────────────────────────────
+
+@app.get("/admin/users/{user_id}/students", response_model=list[schemas.StudentOut])
+def admin_list_students(
+    user_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Return all students for a given user. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    return db.query(models.Student).filter(models.Student.user_id == user_id).order_by(models.Student.name).all()
+
+
+@app.delete("/admin/users/{user_id}/students/{student_id}", response_model=schemas.MessageOut)
+def admin_delete_student(
+    user_id: int,
+    student_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Delete a student belonging to a specific user. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    student = db.query(models.Student).filter(
+        models.Student.id == student_id,
+        models.Student.user_id == user_id,
+    ).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    db.delete(student)
+    db.commit()
+    return {"message": "Student deleted."}

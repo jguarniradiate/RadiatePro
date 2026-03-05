@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Events — RadiatePro</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #0a0a0a; color: #f0f0f0; }
+    .navbar { background-color: #000 !important; border-bottom: 2px solid #E3FC02; }
+    .brand-link { color: #E3FC02 !important; text-decoration: none; }
+    .event-card {
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px;
+      transition: border-color .2s;
+    }
+    .event-card:hover { border-color: #E3FC02; }
+    .event-date-badge {
+      background: #E3FC02; color: #000;
+      border-radius: 8px; padding: .4rem .75rem;
+      font-weight: 700; font-size: .85rem; white-space: nowrap;
+    }
+    .event-title { color: #f0f0f0; font-weight: 700; font-size: 1.1rem; }
+    .event-meta { color: #888; font-size: .85rem; }
+    .page-title { color: #E3FC02; }
+    #spinner { color: #E3FC02; }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-dark px-4 py-3">
+    <a href="index.html" class="brand-link fw-bold fs-5">RadiatePro</a>
+    <div class="ms-auto d-flex align-items-center gap-3">
+      <a href="dashboard.html" class="text-muted text-decoration-none small">Dashboard</a>
+      <button class="btn btn-outline-secondary btn-sm" onclick="logout()">Sign Out</button>
+    </div>
+  </nav>
+
+  <div class="container py-5" style="max-width: 760px;">
+
+    <h4 class="fw-bold page-title mb-4">Upcoming Events</h4>
+
+    <div id="spinner" class="text-center py-5">
+      <div class="spinner-border" role="status"><span class="visually-hidden">Loading…</span></div>
+    </div>
+
+    <div id="emptyMsg" class="text-muted text-center py-5 d-none">No upcoming events at this time.</div>
+    <div id="errorMsg" class="alert alert-danger d-none"></div>
+    <div id="eventsList"></div>
+
+  </div>
+
+  <script>
+    const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
+
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    }
+
+    function fmtDate(iso) {
+      const d = new Date(iso);
+      return {
+        short: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        time:  d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      };
+    }
+
+    function esc(str) {
+      return String(str || '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    (async () => {
+      const token = localStorage.getItem('token');
+      if (!token) { window.location.href = 'login.html'; return; }
+
+      try {
+        const res = await fetch(`${API}/events`);
+        let events = [];
+        try { events = await res.json(); } catch {}
+
+        document.getElementById('spinner').classList.add('d-none');
+
+        if (!events.length) {
+          document.getElementById('emptyMsg').classList.remove('d-none');
+          return;
+        }
+
+        const now = new Date();
+        const upcoming = events.filter(e => new Date(e.event_date) >= now);
+        const past     = events.filter(e => new Date(e.event_date) <  now);
+
+        function renderGroup(title, list) {
+          if (!list.length) return '';
+          return `
+            <h6 class="text-muted text-uppercase small mb-3 mt-4" style="letter-spacing:.08em;">${title}</h6>
+            ${list.map(e => {
+              const dt = fmtDate(e.event_date);
+              return `
+                <div class="event-card p-4 mb-3 d-flex gap-3 align-items-start">
+                  <div class="event-date-badge text-center" style="min-width:90px;">${dt.short}</div>
+                  <div class="flex-grow-1">
+                    <div class="event-title mb-1">${esc(e.title)}</div>
+                    ${e.description ? `<p class="event-meta mb-2">${esc(e.description)}</p>` : ''}
+                    <div class="event-meta d-flex gap-3">
+                      <span>&#128337; ${dt.time}</span>
+                      ${e.location ? `<span>&#128205; ${esc(e.location)}</span>` : ''}
+                    </div>
+                  </div>
+                </div>`;
+            }).join('')}`;
+        }
+
+        document.getElementById('eventsList').innerHTML =
+          renderGroup('Upcoming', upcoming) + renderGroup('Past Events', past);
+
+      } catch {
+        document.getElementById('spinner').classList.add('d-none');
+        document.getElementById('errorMsg').textContent = 'Failed to load events. Please try again.';
+        document.getElementById('errorMsg').classList.remove('d-none');
+      }
+    })();
+  </script>
+</body>
+</html>

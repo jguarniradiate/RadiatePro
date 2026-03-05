@@ -124,6 +124,54 @@
 
   </div>
 
+  <!-- Events section -->
+  <div class="container pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="fw-bold page-title mb-0">Events</h4>
+      <button class="btn btn-accent btn-sm" onclick="openAddEvent()">+ New Event</button>
+    </div>
+    <div id="eventsLoading" class="text-center py-3"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div></div>
+    <div id="eventsEmpty" class="text-muted text-center py-3 d-none">No events yet.</div>
+    <div id="eventsError" class="alert alert-danger d-none"></div>
+    <div id="eventsList"></div>
+  </div>
+
+  <!-- Event Modal -->
+  <div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="eventModalTitle" style="color:#E3FC02;">New Event</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="eventAlert" class="alert alert-danger d-none mb-3"></div>
+          <input type="hidden" id="eventId">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="eventTitle" placeholder="Event title">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Date &amp; Time <span class="text-danger">*</span></label>
+            <input type="datetime-local" class="form-control" id="eventDate">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Location</label>
+            <input type="text" class="form-control" id="eventLocation" placeholder="Venue or address">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Description</label>
+            <textarea class="form-control" id="eventDesc" rows="3" placeholder="Optional details…"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-accent" id="eventSaveBtn" onclick="saveEvent()">Save Event</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Edit User Modal -->
   <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -218,7 +266,13 @@
         tbody.innerHTML = users.map(u => `
           <tr id="row-${u.id}">
             <td class="text-muted small">${u.id}</td>
-            <td>${esc(u.first_name || '')} ${esc(u.last_name || '')}</td>
+            <td>
+              <button class="btn btn-link p-0 text-start fw-semibold text-decoration-none"
+                style="color:#f0f0f0;" onclick="toggleStudents(${u.id},'${esc(u.first_name||'')} ${esc(u.last_name||'')}','${esc(u.studio_name||'')}')">
+                ${esc(u.first_name || '')} ${esc(u.last_name || '')}
+                <span class="text-muted ms-1" style="font-size:.7rem;" id="arrow-${u.id}">▶</span>
+              </button>
+            </td>
             <td>${esc(u.email)}</td>
             <td>${esc(u.studio_name || '—')}</td>
             <td>${esc(u.phone || '—')}</td>
@@ -241,6 +295,13 @@
               ${u.is_admin ? '' : `<button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id}, '${esc(u.email)}')">Delete</button>`}
             </td>
           </tr>
+          <tr id="students-row-${u.id}" class="d-none">
+            <td colspan="9" style="background:#0d0d0d;padding:0;">
+              <div class="p-3" id="students-content-${u.id}">
+                <div class="text-muted small text-center py-2">Loading students…</div>
+              </div>
+            </td>
+          </tr>
         `).join('');
 
         document.getElementById('loadingSpinner').classList.add('d-none');
@@ -250,6 +311,71 @@
         document.getElementById('errorMsg').textContent = 'Failed to load users. Please try again.';
         document.getElementById('errorMsg').classList.remove('d-none');
         document.getElementById('loadingSpinner').classList.add('d-none');
+      }
+    }
+
+    async function adminDeleteStudent(userId, studentId, name) {
+      if (!confirm(`Remove student "${name}"?`)) return;
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/users/${userId}/students/${studentId}`, {
+          method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (res.ok) document.getElementById(`asr-${studentId}`).remove();
+        else alert('Failed to remove student.');
+      } catch { alert('Failed to remove student.'); }
+    }
+
+    async function toggleStudents(userId, name, studio) {
+      const row   = document.getElementById(`students-row-${userId}`);
+      const arrow = document.getElementById(`arrow-${userId}`);
+      const open  = !row.classList.contains('d-none');
+
+      if (open) {
+        row.classList.add('d-none');
+        arrow.textContent = '▶';
+        return;
+      }
+
+      row.classList.remove('d-none');
+      arrow.textContent = '▼';
+
+      const token = localStorage.getItem('token');
+      const content = document.getElementById(`students-content-${userId}`);
+      content.innerHTML = '<div class="text-muted small text-center py-2">Loading…</div>';
+
+      try {
+        const res = await fetch(`${API}/admin/users/${userId}/students`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const students = await res.json();
+
+        if (!students.length) {
+          content.innerHTML = `<p class="text-muted small mb-0">No students registered for <strong>${esc(name || studio)}</strong>.</p>`;
+          return;
+        }
+
+        content.innerHTML = `
+          <p class="text-muted small mb-2 fw-semibold" style="color:#E3FC02;">
+            Students — ${esc(studio || name)}
+          </p>
+          <table class="table table-sm mb-0" style="--bs-table-bg:transparent;--bs-table-color:#ccc;--bs-table-border-color:#2a2a2a;font-size:.85rem;">
+            <thead><tr style="color:#888;">
+              <th>Name</th><th>Date of Birth</th><th>Gender</th><th></th>
+            </tr></thead>
+            <tbody id="admin-students-${userId}">
+              ${students.map(s => `
+                <tr id="asr-${s.id}">
+                  <td>${esc(s.name)}</td>
+                  <td>${s.date_of_birth ? new Date(s.date_of_birth+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+                  <td>${esc(s.gender || '—')}</td>
+                  <td><button class="btn btn-sm btn-outline-danger py-0 px-2"
+                    onclick="adminDeleteStudent(${userId},${s.id},'${esc(s.name)}')">Remove</button></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>`;
+      } catch {
+        content.innerHTML = '<div class="text-danger small">Failed to load students.</div>';
       }
     }
 
@@ -340,11 +466,148 @@
         .replace(/'/g, '&#39;');
     }
 
+    // ── Events ────────────────────────────────────────────────────────────────
+    let eventModal;
+
+    function fmtDt(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+        + ' ' + d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    }
+
+    function toLocalInput(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      const pad = n => String(n).padStart(2,'0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    async function loadEvents() {
+      try {
+        const res = await fetch(`${API}/events`);
+        let events = [];
+        try { events = await res.json(); } catch {}
+        document.getElementById('eventsLoading').classList.add('d-none');
+
+        if (!events.length) { document.getElementById('eventsEmpty').classList.remove('d-none'); return; }
+
+        document.getElementById('eventsList').innerHTML = events.map(e => `
+          <div class="d-flex align-items-start justify-content-between p-3 mb-2"
+               style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;" id="erow-${e.id}">
+            <div>
+              <div class="fw-bold">${esc(e.title)}</div>
+              <div class="text-muted small">&#128337; ${fmtDt(e.event_date)}${e.location ? ' &nbsp;&#128205; '+esc(e.location) : ''}</div>
+              ${e.description ? `<div class="text-muted small mt-1">${esc(e.description)}</div>` : ''}
+            </div>
+            <div class="d-flex gap-2 ms-3 flex-shrink-0">
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}')">Edit</button>
+              <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                onclick="deleteEvent(${e.id},'${esc(e.title)}')">Delete</button>
+            </div>
+          </div>`).join('');
+      } catch {
+        document.getElementById('eventsLoading').classList.add('d-none');
+        document.getElementById('eventsError').textContent = 'Failed to load events.';
+        document.getElementById('eventsError').classList.remove('d-none');
+      }
+    }
+
+    function openAddEvent() {
+      document.getElementById('eventModalTitle').textContent = 'New Event';
+      document.getElementById('eventId').value       = '';
+      document.getElementById('eventTitle').value    = '';
+      document.getElementById('eventDate').value     = '';
+      document.getElementById('eventLocation').value = '';
+      document.getElementById('eventDesc').value     = '';
+      document.getElementById('eventAlert').classList.add('d-none');
+      eventModal.show();
+    }
+
+    function openEditEvent(id, title, date, location, desc) {
+      document.getElementById('eventModalTitle').textContent = 'Edit Event';
+      document.getElementById('eventId').value       = id;
+      document.getElementById('eventTitle').value    = title;
+      document.getElementById('eventDate').value     = date;
+      document.getElementById('eventLocation').value = location;
+      document.getElementById('eventDesc').value     = desc;
+      document.getElementById('eventAlert').classList.add('d-none');
+      eventModal.show();
+    }
+
+    async function saveEvent() {
+      const token   = localStorage.getItem('token');
+      const eventId = document.getElementById('eventId').value;
+      const alertEl = document.getElementById('eventAlert');
+      const saveBtn = document.getElementById('eventSaveBtn');
+      const title   = document.getElementById('eventTitle').value.trim();
+      const date    = document.getElementById('eventDate').value;
+
+      if (!title || !date) {
+        alertEl.textContent = 'Title and date are required.';
+        alertEl.classList.remove('d-none'); return;
+      }
+      alertEl.classList.add('d-none');
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+      const body = {
+        title,
+        event_date:  new Date(date).toISOString(),
+        location:    document.getElementById('eventLocation').value.trim() || null,
+        description: document.getElementById('eventDesc').value.trim()    || null,
+      };
+
+      const url    = eventId ? `${API}/admin/events/${eventId}` : `${API}/admin/events`;
+      const method = eventId ? 'PATCH' : 'POST';
+
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(body),
+        });
+        let data = {};
+        try { data = await res.json(); } catch {}
+
+        if (res.ok) {
+          eventModal.hide();
+          document.getElementById('eventsList').innerHTML = '';
+          document.getElementById('eventsEmpty').classList.add('d-none');
+          document.getElementById('eventsLoading').classList.remove('d-none');
+          loadEvents();
+        } else {
+          alertEl.textContent = data.detail || `Error ${res.status}`;
+          alertEl.classList.remove('d-none');
+        }
+      } catch {
+        alertEl.textContent = 'Something went wrong. Please try again.';
+        alertEl.classList.remove('d-none');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Event';
+      }
+    }
+
+    async function deleteEvent(id, title) {
+      if (!confirm(`Delete event "${title}"?`)) return;
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/events/${id}`, {
+          method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (res.ok) document.getElementById(`erow-${id}`).remove();
+      } catch { alert('Failed to delete event.'); }
+    }
+
     (async () => {
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html?next=admin.html'; return; }
-      editModal = new bootstrap.Modal(document.getElementById('editModal'));
+      editModal  = new bootstrap.Modal(document.getElementById('editModal'));
+      eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
       loadUsers();
+      loadEvents();
     })();
   </script>
 </body>

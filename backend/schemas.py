@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from pydantic import BaseModel, EmailStr
 
 
@@ -60,3 +60,54 @@ class PasswordResetRequest(BaseModel):
 class PasswordResetConfirm(BaseModel):
     token: str
     new_password: str
+
+
+# ── Student schemas ───────────────────────────────────────────────────────────
+
+class StudentCreate(BaseModel):
+    name: str
+    date_of_birth: date | None = None
+    gender: str | None = None
+
+
+class StudentUpdate(BaseModel):
+    name: str | None = None
+    date_of_birth: date | None = None
+    gender: str | None = None
+
+
+class StudentOut(BaseModel):
+    id: int
+    name: str
+    date_of_birth: date | None = None
+    gender: str | None = None
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── Event schemas ─────────────────────────────────────────────────────────────
+
+class EventCreate(BaseModel):
+    title: str
+    description: str | None = None
+    event_date: datetime
+    location: str | None = None
+
+
+class EventUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    event_date: datetime | None = None
+    location: str | None = None
+
+
+class EventOut(BaseModel):
+    id: int
+    title: str
+    description: str | None = None
+    event_date: datetime
+    location: str | None = None
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
