@@ -234,7 +234,8 @@
           body: JSON.stringify({ email, password }),
         });
 
-        const data = await res.json();
+        let data = {};
+        try { data = await res.json(); } catch {}
         if (!res.ok) throw new Error(extractError(data, 'Login failed'));
 
         localStorage.setItem('token', data.access_token);
@@ -275,7 +276,8 @@
           body: JSON.stringify({ email, password }),
         });
 
-        const data = await res.json();
+        let data = {};
+        try { data = await res.json(); } catch {}
         if (!res.ok) throw new Error(extractError(data, 'Registration failed'));
 
         showAlert('Account created! You can now sign in.', 'success');
