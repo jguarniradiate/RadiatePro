@@ -160,9 +160,13 @@
         </div>
         <div class="row g-3 mb-4">
           <div class="col-6 col-md-4">
-            <div class="stat-mini">
-              <div class="stat-num" id="homeStudentCount">—</div>
-              <div class="text-muted small mt-1">Students</div>
+            <div class="stat-mini d-flex flex-column" style="gap:.6rem;">
+              <div>
+                <div class="stat-num" id="homeStudentCount">—</div>
+                <div class="text-muted small mt-1">Students</div>
+              </div>
+              <button class="btn btn-accent btn-sm" style="font-size:.78rem;padding:.3rem .7rem;align-self:flex-start;"
+                onclick="showSection('students');openAddStudent();">+ Add Student</button>
             </div>
           </div>
           <div class="col-6 col-md-4">
@@ -207,6 +211,7 @@
             <div class="d-flex align-items-center py-2">
               <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">Email</span>
               <span class="field-value" id="fieldEmail">—</span>
+              <span id="fieldVerified" class="ms-2"></span>
             </div>
           </div>
         </div>
@@ -393,6 +398,9 @@
       document.getElementById('fieldStudio').textContent    = u.studio_name || '—';
       document.getElementById('fieldPhone').textContent     = u.phone || '—';
       document.getElementById('fieldEmail').textContent     = u.email;
+      document.getElementById('fieldVerified').innerHTML    = u.email_verified
+        ? '<span class="badge" style="background:#198754;font-size:.7rem;font-weight:600;">&#10003; Verified</span>'
+        : '<span class="badge" style="background:#6c757d;font-size:.7rem;font-weight:600;">Unverified</span>';
     }
 
     function toggleEdit() {

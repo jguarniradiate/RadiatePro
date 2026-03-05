@@ -95,23 +95,15 @@
     .modal-footer { border-top-color: #2a2a2a; }
     .modal-title { color: #E3FC02; }
     .btn-close { filter: invert(1); }
-    /* Student toggle buttons */
-    .stu-toggle {
-      border: 1px solid #333; background: #111; color: #aaa;
-      border-radius: 20px; padding: .3rem .85rem .3rem .55rem; font-size: .85rem;
-      cursor: pointer; transition: all .15s; user-select: none;
-      display: inline-flex; align-items: center; gap: .5rem;
-    }
-    .stu-toggle::before {
-      content: '';
-      width: 13px; height: 13px; border-radius: 50%;
-      border: 2px solid #555; background: transparent;
-      flex-shrink: 0; transition: background .15s, border-color .15s;
-    }
-    .stu-toggle:hover { border-color: #666; color: #ddd; }
-    .stu-toggle:hover::before { border-color: #999; }
-    .stu-toggle.selected { border-color: #444; color: #f0f0f0; background: #1a1a1a; }
-    .stu-toggle.selected::before { background: #E3FC02; border-color: #E3FC02; }
+    /* Student registration table */
+    .stu-table { --bs-table-bg: transparent; --bs-table-color: #ccc; --bs-table-border-color: #2a2a2a; font-size: .875rem; }
+    .stu-table thead th { color: #888; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; border-bottom-color: #2a2a2a; }
+    .stu-table tbody tr { cursor: pointer; transition: background .12s; }
+    .stu-table tbody tr:hover { background: #1e1e1e; }
+    /* Toggle switch accent */
+    .form-check-input.stu-switch { background-color: #333; border-color: #555; cursor: pointer; }
+    .form-check-input.stu-switch:checked { background-color: #E3FC02; border-color: #E3FC02; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23000'/%3e%3c/svg%3e"); }
+    .form-check-input.stu-switch:focus { box-shadow: 0 0 0 .2rem rgba(227,252,2,.25); border-color: #E3FC02; }
 
     /* ── Responsive ── */
     @media (max-width: 767px) {
@@ -191,13 +183,27 @@
           <h5 class="modal-title" id="regModalTitle">Register for Event</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body" style="padding-bottom:.5rem;">
           <div id="regAlert" class="alert alert-danger d-none mb-3"></div>
           <input type="hidden" id="regEventId">
-          <p class="small text-muted mb-3">Tap a student to toggle their attendance:</p>
-          <div id="studentToggles" class="d-flex flex-wrap gap-2"></div>
-          <p id="noStudentsMsg" class="text-muted small d-none">
-            You haven't added any students yet. Add one below:
+
+          <!-- Student table -->
+          <div id="studentTableWrap" class="d-none">
+            <table class="table table-sm stu-table mb-0">
+              <thead>
+                <tr>
+                  <th style="width:56px;">Attending</th>
+                  <th>Name</th>
+                  <th>Date of Birth</th>
+                  <th>Gender</th>
+                </tr>
+              </thead>
+              <tbody id="studentTableBody"></tbody>
+            </table>
+          </div>
+
+          <p id="noStudentsMsg" class="text-muted small mb-0 d-none">
+            No students added yet. Add one below to register.
           </p>
 
           <!-- Quick add student -->
@@ -351,35 +357,60 @@
         });
         let data = {}; try { data = await res.json(); } catch {}
         if (res.ok) {
-          // Add to local list and render a new toggle button (pre-selected)
+          // Add to local list and re-render the table with new student pre-selected
           myStudents.push(data);
-          const container = document.getElementById('studentToggles');
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'stu-toggle selected';
-          btn.dataset.studentId = data.id;
-          btn.onclick = function() { toggleStudentBtn(this); };
-          btn.textContent = data.name;
-          container.appendChild(btn);
+          const currentSelected = getSelectedStudentIds();
+          currentSelected.push(data.id);
+          renderStudentTable(currentSelected);
           // Clear form and hide
           document.getElementById('qsName').value = '';
           document.getElementById('qsDob').value  = '';
           document.getElementById('qsGender').value = '';
           document.getElementById('quickAddStudentForm').classList.add('d-none');
-          document.getElementById('noStudentsMsg').classList.add('d-none');
         } else { alertEl.textContent = data.detail || `Error ${res.status}`; alertEl.classList.remove('d-none'); }
       } catch { alertEl.textContent = 'Something went wrong.'; alertEl.classList.remove('d-none'); }
       finally { saveBtn.disabled = false; saveBtn.textContent = 'Add'; }
     }
 
-    // ── Toggle-button helpers ──────────────────────────────────────────────────
+    // ── Helpers ────────────────────────────────────────────────────────────────
 
-    function toggleStudentBtn(btn) {
-      btn.classList.toggle('selected');
+    function fmtDob(iso) {
+      if (!iso) return '—';
+      const [y, m, d] = iso.split('-');
+      return `${m}/${d}/${y}`;
     }
 
     function getSelectedStudentIds() {
-      return [...document.querySelectorAll('.stu-toggle.selected')].map(b => parseInt(b.dataset.studentId));
+      return [...document.querySelectorAll('.stu-switch:checked')].map(i => parseInt(i.dataset.studentId));
+    }
+
+    function renderStudentTable(selectedIds) {
+      const tbody = document.getElementById('studentTableBody');
+      const wrap  = document.getElementById('studentTableWrap');
+      const noMsg = document.getElementById('noStudentsMsg');
+
+      if (myStudents.length === 0) {
+        wrap.classList.add('d-none');
+        noMsg.classList.remove('d-none');
+        return;
+      }
+
+      noMsg.classList.add('d-none');
+      wrap.classList.remove('d-none');
+      tbody.innerHTML = myStudents.map(s => `
+        <tr onclick="document.getElementById('sw-${s.id}').click()">
+          <td>
+            <div class="form-check form-switch mb-0 ms-1">
+              <input class="form-check-input stu-switch" type="checkbox" role="switch"
+                id="sw-${s.id}" data-student-id="${s.id}"
+                ${selectedIds.includes(s.id) ? 'checked' : ''}
+                onclick="event.stopPropagation()">
+            </div>
+          </td>
+          <td class="fw-semibold" style="color:#f0f0f0;">${esc(s.name)}</td>
+          <td>${fmtDob(s.date_of_birth)}</td>
+          <td>${esc(s.gender || '—')}</td>
+        </tr>`).join('');
     }
 
     // ── Registration modal ─────────────────────────────────────────────────────
@@ -388,24 +419,12 @@
       document.getElementById('regEventId').value = eventId;
       document.getElementById('regModalTitle').textContent = eventTitle;
       document.getElementById('regAlert').classList.add('d-none');
+      document.getElementById('quickAddStudentForm').classList.add('d-none');
 
       const reg = myRegistrations[String(eventId)];
       const selectedIds = reg ? reg.student_ids : [];
 
-      const container = document.getElementById('studentToggles');
-      if (myStudents.length === 0) {
-        container.innerHTML = '';
-        document.getElementById('noStudentsMsg').classList.remove('d-none');
-      } else {
-        document.getElementById('noStudentsMsg').classList.add('d-none');
-        container.innerHTML = myStudents.map(s => `
-          <button type="button"
-            class="stu-toggle ${selectedIds.includes(s.id) ? 'selected' : ''}"
-            data-student-id="${s.id}"
-            onclick="toggleStudentBtn(this)">
-            ${esc(s.name)}
-          </button>`).join('');
-      }
+      renderStudentTable(selectedIds);
 
       const unregBtn = document.getElementById('unregBtn');
       const saveBtn  = document.getElementById('regSaveBtn');
