@@ -260,3 +260,23 @@ def admin_list_users(
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
     return db.query(models.User).order_by(models.User.id).all()
+
+
+@app.delete("/admin/users/{user_id}", response_model=schemas.MessageOut)
+def admin_delete_user(
+    user_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Delete a user by ID. Admin only. Cannot delete yourself."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    if current.id == user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+    target = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    db.delete(target)
+    db.commit()
+    return {"message": f"User {user_id} deleted."}

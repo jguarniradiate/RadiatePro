@@ -23,9 +23,22 @@
     .stat-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; }
     .stat-number { color: #E3FC02; font-size: 2rem; font-weight: 700; }
     #loadingSpinner { color: #E3FC02; }
+    .admin-banner {
+      background: linear-gradient(90deg, #E3FC02 0%, #c8e000 100%);
+      color: #000;
+      font-weight: 700;
+      font-size: .8rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      text-align: center;
+      padding: .45rem 1rem;
+    }
   </style>
 </head>
 <body>
+
+  <!-- Admin banner -->
+  <div class="admin-banner">&#9679; Admin Portal &mdash; Restricted Access &#9679;</div>
 
   <!-- Navbar -->
   <nav class="navbar navbar-dark px-4 py-3">
@@ -94,6 +107,7 @@
               <th>Phone</th>
               <th>Verified</th>
               <th>Role</th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="userTableBody"></tbody>
@@ -145,7 +159,7 @@
         // Table
         const tbody = document.getElementById('userTableBody');
         tbody.innerHTML = users.map(u => `
-          <tr>
+          <tr id="row-${u.id}">
             <td class="text-muted small">${u.id}</td>
             <td>${esc(u.first_name || '')} ${esc(u.last_name || '')}</td>
             <td>${esc(u.email)}</td>
@@ -161,6 +175,9 @@
                 ${u.is_admin ? 'Admin' : 'User'}
               </span>
             </td>
+            <td>
+              ${u.is_admin ? '' : `<button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id}, '${esc(u.email)}')">Delete</button>`}
+            </td>
           </tr>
         `).join('');
 
@@ -171,6 +188,31 @@
         document.getElementById('errorMsg').textContent = 'Failed to load users. Please try again.';
         document.getElementById('errorMsg').classList.remove('d-none');
         document.getElementById('loadingSpinner').classList.add('d-none');
+      }
+    }
+
+    async function deleteUser(id, email) {
+      if (!confirm(`Delete user "${email}"? This cannot be undone.`)) return;
+
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/users/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+
+        if (res.ok) {
+          document.getElementById(`row-${id}`).remove();
+          // Update total count
+          const total = document.getElementById('statTotal');
+          total.textContent = parseInt(total.textContent) - 1;
+        } else {
+          let data = {};
+          try { data = await res.json(); } catch {}
+          alert(data.detail || `Error ${res.status}`);
+        }
+      } catch {
+        alert('Failed to delete user. Please try again.');
       }
     }
 

@@ -5,91 +5,92 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — RadiatePro</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { background-color: #0a0a0a; color: #f0f0f0; }
+    .navbar { background-color: #000 !important; border-bottom: 2px solid #E3FC02; }
+    .brand-link { color: #E3FC02 !important; text-decoration: none; }
+    .card-dark { background-color: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; }
+    .card-header-dark { background-color: #111; border-bottom: 1px solid #2a2a2a; border-radius: 12px 12px 0 0 !important; color: #E3FC02; font-weight: 700; padding: 1rem 1.25rem; }
+    .label-muted { color: #666; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .25rem; }
+    .field-value { color: #f0f0f0; font-weight: 600; font-size: .95rem; }
+    .avatar-circle {
+      width: 56px; height: 56px; border-radius: 50%;
+      background-color: #E3FC02; color: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; font-weight: 700; flex-shrink: 0;
+    }
+    .btn-accent { background-color: #E3FC02; color: #000; font-weight: 700; border: none; }
+    .btn-accent:hover { background-color: #cce500; color: #000; }
+    .welcome-name { color: #E3FC02; }
+    .divider { border-color: #2a2a2a; }
+  </style>
 </head>
 <body>
 
   <!-- Navbar -->
-  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-    <div class="container">
-      <a class="navbar-brand fw-bold" href="index.html">RadiatePro</a>
-      <div class="ms-auto d-flex align-items-center gap-3">
-        <span class="text-secondary small" id="userEmail"></span>
-        <button class="btn btn-outline-light btn-sm" onclick="logout()">Sign Out</button>
-      </div>
+  <nav class="navbar navbar-dark px-4 py-3">
+    <a href="index.html" class="brand-link fw-bold fs-5">RadiatePro</a>
+    <div class="ms-auto d-flex align-items-center gap-3">
+      <span class="text-secondary small" id="userEmail"></span>
+      <button class="btn btn-outline-secondary btn-sm" onclick="logout()">Sign Out</button>
     </div>
   </nav>
 
-  <!-- Dashboard Content -->
-  <div class="container py-5">
+  <div class="container py-5" style="max-width: 760px;">
 
     <!-- Welcome banner -->
-    <div class="card border-0 shadow-sm mb-4">
-      <div class="card-body p-4 d-flex align-items-center gap-3">
-        <div class="avatar-circle bg-primary text-white d-flex align-items-center justify-content-center rounded-circle fs-4 fw-bold flex-shrink-0">
-          <span id="avatarInitial">?</span>
-        </div>
-        <div>
-          <h4 class="mb-0 fw-bold">Welcome back!</h4>
-          <p class="mb-0 text-muted" id="welcomeEmail">Loading…</p>
-        </div>
+    <div class="card-dark shadow mb-4 p-4 d-flex align-items-center gap-3">
+      <div class="avatar-circle">
+        <span id="avatarInitial">?</span>
+      </div>
+      <div>
+        <h4 class="mb-0 fw-bold">Welcome back, <span class="welcome-name" id="welcomeName">…</span></h4>
+        <p class="mb-0 text-muted small" id="welcomeStudio">Loading…</p>
       </div>
     </div>
 
-    <!-- Stats row -->
-    <div class="row g-4 mb-4">
-      <div class="col-sm-6 col-lg-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-          <div class="fs-1">&#128200;</div>
-          <h5 class="fw-bold mt-2">Projects</h5>
-          <p class="text-muted mb-0">0 active</p>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-          <div class="fs-1">&#9989;</div>
-          <h5 class="fw-bold mt-2">Tasks</h5>
-          <p class="text-muted mb-0">0 completed</p>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-          <div class="fs-1">&#128276;</div>
-          <h5 class="fw-bold mt-2">Notifications</h5>
-          <p class="text-muted mb-0">0 new</p>
-        </div>
-      </div>
-      <div class="col-sm-6 col-lg-3">
-        <div class="card border-0 shadow-sm text-center p-3">
-          <div class="fs-1">&#128100;</div>
-          <h5 class="fw-bold mt-2">Account</h5>
-          <p class="text-muted mb-0">Active</p>
-        </div>
-      </div>
-    </div>
+    <!-- Profile Card -->
+    <div class="card-dark shadow">
+      <div class="card-header-dark">My Profile</div>
+      <div class="p-4">
 
-    <!-- Account Info Card -->
-    <div class="card border-0 shadow-sm">
-      <div class="card-header bg-white fw-bold border-bottom py-3">Account Details</div>
-      <div class="card-body p-4">
-        <div class="row g-3">
+        <div class="row g-4">
           <div class="col-sm-6">
-            <label class="form-label text-muted small">User ID</label>
-            <p class="mb-0 fw-semibold" id="userId">—</p>
+            <p class="label-muted">First Name</p>
+            <p class="field-value mb-0" id="fieldFirstName">—</p>
           </div>
           <div class="col-sm-6">
-            <label class="form-label text-muted small">Email</label>
-            <p class="mb-0 fw-semibold" id="userEmailDetail">—</p>
+            <p class="label-muted">Last Name</p>
+            <p class="field-value mb-0" id="fieldLastName">—</p>
+          </div>
+          <div class="col-12">
+            <hr class="divider my-0">
+          </div>
+          <div class="col-sm-6">
+            <p class="label-muted">Studio Name</p>
+            <p class="field-value mb-0" id="fieldStudio">—</p>
+          </div>
+          <div class="col-sm-6">
+            <p class="label-muted">Phone Number</p>
+            <p class="field-value mb-0" id="fieldPhone">—</p>
+          </div>
+          <div class="col-12">
+            <hr class="divider my-0">
+          </div>
+          <div class="col-sm-6">
+            <p class="label-muted">Email</p>
+            <p class="field-value mb-0" id="fieldEmail">—</p>
+          </div>
+          <div class="col-sm-6">
+            <p class="label-muted">Account ID</p>
+            <p class="field-value mb-0" id="fieldId">—</p>
           </div>
         </div>
+
       </div>
     </div>
 
   </div>
-
-  <style>
-    .avatar-circle { width: 52px; height: 52px; }
-  </style>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
@@ -97,10 +98,7 @@
 
     async function loadUser() {
       const token = localStorage.getItem('token');
-      if (!token) {
-        window.location.href = 'login.html';
-        return;
-      }
+      if (!token) { window.location.href = 'login.html'; return; }
 
       try {
         const res = await fetch(`${API}/auth/me`, {
@@ -113,14 +111,23 @@
           return;
         }
 
-        const user = await res.json();
-        const initial = user.email.charAt(0).toUpperCase();
+        const u = await res.json();
 
-        document.getElementById('userEmail').textContent        = user.email;
-        document.getElementById('welcomeEmail').textContent     = user.email;
-        document.getElementById('avatarInitial').textContent    = initial;
-        document.getElementById('userId').textContent           = `#${user.id}`;
-        document.getElementById('userEmailDetail').textContent  = user.email;
+        const firstName = u.first_name || '';
+        const lastName  = u.last_name  || '';
+        const fullName  = [firstName, lastName].filter(Boolean).join(' ') || u.email;
+
+        document.getElementById('userEmail').textContent    = u.email;
+        document.getElementById('avatarInitial').textContent = (firstName || u.email).charAt(0).toUpperCase();
+        document.getElementById('welcomeName').textContent  = firstName || u.email;
+        document.getElementById('welcomeStudio').textContent = u.studio_name || '';
+
+        document.getElementById('fieldFirstName').textContent = firstName || '—';
+        document.getElementById('fieldLastName').textContent  = lastName  || '—';
+        document.getElementById('fieldStudio').textContent   = u.studio_name || '—';
+        document.getElementById('fieldPhone').textContent    = u.phone || '—';
+        document.getElementById('fieldEmail').textContent    = u.email;
+        document.getElementById('fieldId').textContent       = `#${u.id}`;
       } catch {
         window.location.href = 'login.html';
       }
