@@ -414,8 +414,6 @@
 
       // Lazy-load students
       if (name === 'students' && !studentsLoaded) { studentsLoaded = true; loadStudents(); }
-      // Lazy-load transactions
-      if (name === 'transactions' && !transactionsLoaded) { transactionsLoaded = true; loadTransactions(); }
     }
 
     // ── User ──────────────────────────────────────────────────────────────────
@@ -456,6 +454,9 @@
         }
 
         if (currentUser.is_admin) { window.location.href = 'admin.html'; return; }
+
+        // Always pre-load transactions so they're ready when the user opens the section
+        loadTransactions();
 
       } catch {
         window.location.href = 'login.html';
@@ -689,8 +690,6 @@
 
     // ── Transactions ──────────────────────────────────────────────────────────
 
-    let transactionsLoaded = false;
-
     async function loadTransactions() {
       const token = localStorage.getItem('token');
       document.getElementById('txLoading').classList.remove('d-none');
@@ -725,13 +724,13 @@
             : `<span style="font-weight:600;">$${Number(t.amount_paid).toFixed(2)}</span>`;
           const statusBadge = t.payment_status === 'free'
             ? '<span class="tx-status-free">Free</span>'
-            : '<span class="tx-status-paid">&#10003; Paid</span>';
+            : '<span class="tx-status-paid">Paid</span>';
           return `<tr>
             <td class="fw-semibold">${esc(t.event_title)}</td>
             <td style="white-space:nowrap;">${evDate}</td>
             <td>${t.student_count}</td>
-            <td>${amtStr}</td>
-            <td>${statusBadge}</td>
+            <td style="white-space:nowrap;">${amtStr}</td>
+            <td style="white-space:nowrap;">${statusBadge}</td>
             <td style="color:#888;font-size:.85rem;white-space:nowrap;">${paidOn}</td>
           </tr>`;
         }).join('');

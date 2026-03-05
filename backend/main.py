@@ -736,6 +736,21 @@ def create_checkout(
         reg.amount_paid = 0
         reg.finalized_at = datetime.now(timezone.utc)
         db.commit()
+        db.refresh(reg)
+        # Send confirmation email
+        try:
+            student_names = [ers.student.name for ers in reg.attending_students]
+            ev_date_str = event.event_date.strftime("%B %d, %Y") if event.event_date else ""
+            email_service.send_registration_confirmation(
+                to_email=user.email,
+                studio_name=user.studio_name,
+                event_title=event.title,
+                event_date=ev_date_str,
+                student_names=student_names,
+                amount_paid=0,
+            )
+        except Exception:
+            logger.exception("Failed to send registration confirmation to %s", user.email)
         return schemas.CheckoutSessionOut(checkout_url="", session_id="free")
 
     # Paid event — create Stripe Checkout Session
@@ -797,10 +812,26 @@ def verify_payment(
         from decimal import Decimal as D
         reg.is_finalized = True
         reg.payment_status = "paid"
-        reg.amount_paid = D(str(session.amount_total)) / 100
+        amount = D(str(session.amount_total)) / 100
+        reg.amount_paid = amount
         reg.finalized_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(reg)
+        # Send confirmation email
+        try:
+            event = db.query(models.Event).filter(models.Event.id == event_id).first()
+            student_names = [ers.student.name for ers in reg.attending_students]
+            ev_date_str = event.event_date.strftime("%B %d, %Y") if event and event.event_date else ""
+            email_service.send_registration_confirmation(
+                to_email=user.email,
+                studio_name=user.studio_name,
+                event_title=event.title if event else "Event",
+                event_date=ev_date_str,
+                student_names=student_names,
+                amount_paid=float(amount),
+            )
+        except Exception:
+            logger.exception("Failed to send registration confirmation to %s", user.email)
 
     return _build_reg_out(reg)
 
@@ -921,11 +952,29 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         pass
             amount_total = session.get("amount_total") or 0
             prev_paid = reg.amount_paid or D("0")
+            new_amount = prev_paid + D(str(amount_total)) / 100
             reg.is_finalized = True
             reg.payment_status = "paid"
-            reg.amount_paid = prev_paid + D(str(amount_total)) / 100
+            reg.amount_paid = new_amount
             reg.finalized_at = datetime.now(timezone.utc)
             db.commit()
+            db.refresh(reg)
+            # Send confirmation email (webhook path)
+            try:
+                evt = reg.event
+                user = reg.user
+                student_names = [ers.student.name for ers in reg.attending_students]
+                ev_date_str = evt.event_date.strftime("%B %d, %Y") if evt and evt.event_date else ""
+                email_service.send_registration_confirmation(
+                    to_email=user.email,
+                    studio_name=user.studio_name,
+                    event_title=evt.title if evt else "Event",
+                    event_date=ev_date_str,
+                    student_names=student_names,
+                    amount_paid=float(new_amount),
+                )
+            except Exception:
+                logger.exception("Failed to send registration confirmation in webhook for reg %s", reg_id)
 
     return {"ok": True}
 
