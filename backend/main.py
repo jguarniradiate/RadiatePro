@@ -50,6 +50,20 @@ def run_migrations(eng):
             location VARCHAR,
             created_at TIMESTAMPTZ DEFAULT now()
         )""",
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS event_type VARCHAR",
+        """CREATE TABLE IF NOT EXISTS event_registrations (
+            id SERIAL PRIMARY KEY,
+            event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ DEFAULT now(),
+            UNIQUE(event_id, user_id)
+        )""",
+        """CREATE TABLE IF NOT EXISTS event_registration_students (
+            id SERIAL PRIMARY KEY,
+            registration_id INTEGER NOT NULL REFERENCES event_registrations(id) ON DELETE CASCADE,
+            student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+            UNIQUE(registration_id, student_id)
+        )""",
     ]
     with eng.connect() as conn:
         for stmt in stmts:
@@ -463,6 +477,125 @@ def update_event(
     return event
 
 
+@app.get("/events/my-registrations")
+def get_my_registrations(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Return a map of event_id → {registration_id, student_ids} for the current user."""
+    user = get_current_user(authorization, db)
+    regs = db.query(models.EventRegistration).filter(
+        models.EventRegistration.user_id == user.id
+    ).all()
+    result = {}
+    for reg in regs:
+        student_ids = [ers.student_id for ers in reg.attending_students]
+        result[str(reg.event_id)] = {"registration_id": reg.id, "student_ids": student_ids}
+    return result
+
+
+@app.post("/events/{event_id}/register", response_model=schemas.EventRegistrationOut, status_code=201)
+def register_for_event(
+    event_id: int,
+    body: schemas.EventRegistrationCreate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Register current user for an event, with optional attending students."""
+    user = get_current_user(authorization, db)
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+
+    existing = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.user_id == user.id,
+    ).first()
+
+    if existing:
+        # Update attending students
+        db.query(models.EventRegistrationStudent).filter(
+            models.EventRegistrationStudent.registration_id == existing.id
+        ).delete()
+        for sid in body.student_ids:
+            s = db.query(models.Student).filter(
+                models.Student.id == sid, models.Student.user_id == user.id
+            ).first()
+            if s:
+                db.add(models.EventRegistrationStudent(registration_id=existing.id, student_id=sid))
+        db.commit()
+        db.refresh(existing)
+        return schemas.EventRegistrationOut(
+            id=existing.id, event_id=existing.event_id, user_id=existing.user_id,
+            student_ids=[ers.student_id for ers in existing.attending_students],
+            created_at=existing.created_at,
+        )
+
+    reg = models.EventRegistration(event_id=event_id, user_id=user.id)
+    db.add(reg)
+    db.flush()
+    for sid in body.student_ids:
+        s = db.query(models.Student).filter(
+            models.Student.id == sid, models.Student.user_id == user.id
+        ).first()
+        if s:
+            db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+    db.commit()
+    db.refresh(reg)
+    return schemas.EventRegistrationOut(
+        id=reg.id, event_id=reg.event_id, user_id=reg.user_id,
+        student_ids=[ers.student_id for ers in reg.attending_students],
+        created_at=reg.created_at,
+    )
+
+
+@app.delete("/events/{event_id}/register", response_model=schemas.MessageOut)
+def unregister_from_event(
+    event_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Unregister current user from an event."""
+    user = get_current_user(authorization, db)
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.user_id == user.id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Not registered for this event.")
+    db.delete(reg)
+    db.commit()
+    return {"message": "Unregistered from event."}
+
+
+@app.get("/admin/events/{event_id}/registrations")
+def admin_list_registrations(
+    event_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """List all registrations for an event. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    regs = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id
+    ).all()
+    result = []
+    for reg in regs:
+        student_ids = [ers.student_id for ers in reg.attending_students]
+        name = f"{reg.user.first_name or ''} {reg.user.last_name or ''}".strip() or reg.user.email
+        result.append({
+            "id": reg.id,
+            "user_id": reg.user_id,
+            "user_name": name,
+            "studio_name": reg.user.studio_name,
+            "student_count": len(student_ids),
+            "created_at": reg.created_at.isoformat() if reg.created_at else None,
+        })
+    return result
+
+
 @app.delete("/admin/events/{event_id}", response_model=schemas.MessageOut)
 def delete_event(
     event_id: int,
@@ -497,6 +630,31 @@ def admin_list_students(
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
     return db.query(models.Student).filter(models.Student.user_id == user_id).order_by(models.Student.name).all()
+
+
+@app.patch("/admin/users/{user_id}/students/{student_id}", response_model=schemas.StudentOut)
+def admin_update_student(
+    user_id: int,
+    student_id: int,
+    body: schemas.StudentUpdate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Update a student belonging to a specific user. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    student = db.query(models.Student).filter(
+        models.Student.id == student_id,
+        models.Student.user_id == user_id,
+    ).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(student, field, value)
+    db.commit()
+    db.refresh(student)
+    return student
 
 
 @app.delete("/admin/users/{user_id}/students/{student_id}", response_model=schemas.MessageOut)

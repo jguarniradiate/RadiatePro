@@ -6,166 +6,275 @@
   <title>Dashboard — RadiatePro</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { background-color: #0a0a0a; color: #f0f0f0; }
-    .navbar { background-color: #000 !important; border-bottom: 2px solid #E3FC02; }
-    .brand-link { color: #E3FC02 !important; text-decoration: none; }
-    .card-dark { background-color: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; }
-    .card-header-dark {
-      background-color: #111; border-bottom: 1px solid #2a2a2a;
-      border-radius: 12px 12px 0 0 !important; color: #E3FC02;
-      font-weight: 700; padding: 1rem 1.25rem;
-      display: flex; align-items: center; justify-content: space-between;
+    *, *::before, *::after { box-sizing: border-box; }
+    body { background-color: #0a0a0a; color: #f0f0f0; margin: 0; font-family: system-ui, sans-serif; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0;
+      width: 240px; background: #111; border-right: 1px solid #2a2a2a;
+      display: flex; flex-direction: column; z-index: 200;
+      overflow-y: auto;
     }
-    .label-muted { color: #666; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .25rem; }
-    .field-value { color: #f0f0f0; font-weight: 600; font-size: .95rem; }
-    .avatar-circle {
-      width: 56px; height: 56px; border-radius: 50%;
-      background-color: #E3FC02; color: #000;
+    .sidebar-brand {
+      padding: 1.5rem 1.25rem 1rem;
+      font-size: 1.2rem; font-weight: 800; color: #E3FC02;
+      letter-spacing: -.01em; border-bottom: 1px solid #2a2a2a;
+    }
+    .sidebar-user {
+      padding: 1.1rem 1.25rem;
+      border-bottom: 1px solid #2a2a2a;
+      display: flex; align-items: center; gap: .75rem;
+    }
+    .avatar-sm {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: #E3FC02; color: #000;
       display: flex; align-items: center; justify-content: center;
-      font-size: 1.5rem; font-weight: 700; flex-shrink: 0;
+      font-size: 1rem; font-weight: 700; flex-shrink: 0;
     }
+    .sidebar-username { font-weight: 600; font-size: .9rem; line-height: 1.2; }
+    .sidebar-studio   { font-size: .75rem; color: #666; }
+    .sidebar-nav { flex: 1; padding: .75rem 0; }
+    .nav-item {
+      display: flex; align-items: center; gap: .75rem;
+      padding: .65rem 1.25rem; color: #888; font-size: .9rem;
+      cursor: pointer; border: none; background: none; width: 100%;
+      text-align: left; text-decoration: none; border-left: 3px solid transparent;
+      transition: background .15s, color .15s;
+    }
+    .nav-item:hover { background: #1a1a1a; color: #f0f0f0; }
+    .nav-item.active { color: #E3FC02; background: #1a1a1a; border-left-color: #E3FC02; font-weight: 600; }
+    .nav-item .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+    .sidebar-footer { padding: .75rem 1.25rem 1.25rem; border-top: 1px solid #2a2a2a; }
+    .sidebar-footer button {
+      background: none; border: 1px solid #333; color: #888;
+      padding: .4rem .9rem; border-radius: 6px; font-size: .85rem;
+      cursor: pointer; width: 100%; text-align: left;
+      transition: background .15s, color .15s;
+    }
+    .sidebar-footer button:hover { background: #1a1a1a; color: #f0f0f0; }
+
+    /* ── Main content ── */
+    .main-wrap { margin-left: 240px; min-height: 100vh; }
+    .topbar {
+      display: none; /* hidden on desktop */
+      background: #111; border-bottom: 1px solid #2a2a2a;
+      padding: .75rem 1rem; align-items: center; gap: .75rem;
+    }
+    .topbar-brand { color: #E3FC02; font-weight: 800; font-size: 1.1rem; flex: 1; }
+    .content { padding: 2rem; max-width: 780px; }
+
+    /* ── Cards ── */
+    .card-dark { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; }
+    .section-title { color: #E3FC02; font-weight: 700; font-size: 1.3rem; margin-bottom: 1.5rem; }
+    .label-muted { color: #666; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .2rem; }
+    .field-value { color: #f0f0f0; font-weight: 600; font-size: .95rem; margin: 0; }
+    .divider { border-color: #2a2a2a; }
+
+    /* ── Buttons ── */
     .btn-accent { background-color: #E3FC02; color: #000; font-weight: 700; border: none; }
     .btn-accent:hover { background-color: #cce500; color: #000; }
     .btn-accent-outline { border: 1px solid #E3FC02; color: #E3FC02; background: transparent; font-weight: 600; }
     .btn-accent-outline:hover { background: #E3FC02; color: #000; }
-    .welcome-name { color: #E3FC02; }
-    .divider { border-color: #2a2a2a; }
-    .form-control { background: #111; border-color: #333; color: #f0f0f0; }
-    .form-control:focus { background: #111; border-color: #E3FC02; color: #f0f0f0; box-shadow: 0 0 0 .2rem rgba(227,252,2,.2); }
+
+    /* ── Forms ── */
+    .form-control, .form-select { background: #111; border-color: #333; color: #f0f0f0; }
+    .form-control:focus, .form-select:focus { background: #111; border-color: #E3FC02; color: #f0f0f0; box-shadow: 0 0 0 .2rem rgba(227,252,2,.2); }
     .form-control::placeholder { color: #555; }
     .form-label { color: #ccc; }
+
+    /* ── Table ── */
+    .tbl { --bs-table-bg: transparent; --bs-table-color: #f0f0f0; --bs-table-border-color: #2a2a2a; }
+    thead th { color: #E3FC02; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; }
+
+    /* ── Quick stat cards ── */
+    .stat-mini { background: #111; border: 1px solid #2a2a2a; border-radius: 10px; padding: 1.1rem; }
+    .stat-num  { color: #E3FC02; font-size: 1.6rem; font-weight: 700; line-height: 1; }
+
+    /* ── Responsive ── */
+    @media (max-width: 767px) {
+      .sidebar { transform: translateX(-100%); transition: transform .25s; }
+      .sidebar.open { transform: translateX(0); }
+      .main-wrap { margin-left: 0; }
+      .topbar { display: flex; }
+      .content { padding: 1.25rem; }
+    }
   </style>
 </head>
 <body>
 
-  <!-- Navbar -->
-  <nav class="navbar navbar-dark px-4 py-3">
-    <a href="index.html" class="brand-link fw-bold fs-5">RadiatePro</a>
-    <div class="ms-auto d-flex align-items-center gap-3">
-      <span class="text-secondary small" id="userEmail"></span>
-      <a href="events.html" class="text-muted text-decoration-none small">Events</a>
-      <button class="btn btn-outline-secondary btn-sm" onclick="logout()">Sign Out</button>
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">RadiatePro</div>
+
+    <div class="sidebar-user">
+      <div class="avatar-sm" id="sidebarAvatar">?</div>
+      <div>
+        <div class="sidebar-username" id="sidebarName">Loading…</div>
+        <div class="sidebar-studio"  id="sidebarStudio"></div>
+      </div>
+    </div>
+
+    <div class="sidebar-nav">
+      <button class="nav-item active" id="nav-home"     onclick="showSection('home')">
+        <span class="nav-icon">&#127968;</span> Home
+      </button>
+      <button class="nav-item" id="nav-profile"  onclick="showSection('profile')">
+        <span class="nav-icon">&#128100;</span> My Profile
+      </button>
+      <button class="nav-item" id="nav-students" onclick="showSection('students')">
+        <span class="nav-icon">&#127891;</span> My Students
+      </button>
+      <a class="nav-item" href="events.html">
+        <span class="nav-icon">&#128197;</span> Events
+      </a>
+      <a class="nav-item" href="admin.html" id="adminLink" style="display:none;">
+        <span class="nav-icon">&#9881;</span> Admin Portal
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <button onclick="logout()">&#x2192; Sign Out</button>
     </div>
   </nav>
 
-  <div class="container py-5" style="max-width: 760px;">
+  <!-- ── Main wrap ── -->
+  <div class="main-wrap">
 
-    <!-- Welcome banner -->
-    <div class="card-dark shadow mb-4 p-4 d-flex align-items-center gap-3">
-      <div class="avatar-circle">
-        <span id="avatarInitial">?</span>
-      </div>
-      <div>
-        <h4 class="mb-0 fw-bold">Welcome back, <span class="welcome-name" id="welcomeName">…</span></h4>
-        <p class="mb-0 text-muted small" id="welcomeStudio">Loading…</p>
-      </div>
+    <!-- Mobile topbar -->
+    <div class="topbar" id="topbar">
+      <button style="background:none;border:none;color:#E3FC02;font-size:1.4rem;padding:0;" onclick="toggleSidebar()">&#9776;</button>
+      <span class="topbar-brand">RadiatePro</span>
     </div>
 
-    <!-- Profile Card -->
-    <div class="card-dark shadow">
-      <div class="card-header-dark">
-        <span>My Profile</span>
-        <button class="btn btn-accent-outline btn-sm" id="editToggleBtn" onclick="toggleEdit()">Edit Profile</button>
-      </div>
+    <div class="content">
 
-      <!-- View Mode -->
-      <div id="viewMode" class="p-4">
-        <div class="row g-4">
-          <div class="col-sm-6">
-            <p class="label-muted">First Name</p>
-            <p class="field-value mb-0" id="fieldFirstName">—</p>
+      <!-- ── Home Section ── -->
+      <div id="sec-home">
+        <div class="card-dark p-4 d-flex align-items-center gap-3 mb-4">
+          <div class="avatar-sm" id="homeAvatar" style="width:56px;height:56px;font-size:1.5rem;">?</div>
+          <div>
+            <h4 class="mb-0 fw-bold">Welcome back, <span style="color:#E3FC02;" id="homeWelcomeName">…</span></h4>
+            <p class="mb-0 text-muted small" id="homeStudio"></p>
           </div>
-          <div class="col-sm-6">
-            <p class="label-muted">Last Name</p>
-            <p class="field-value mb-0" id="fieldLastName">—</p>
+        </div>
+        <div class="row g-3 mb-4">
+          <div class="col-6 col-md-4">
+            <div class="stat-mini">
+              <div class="stat-num" id="homeStudentCount">—</div>
+              <div class="text-muted small mt-1">Students</div>
+            </div>
           </div>
-          <div class="col-12"><hr class="divider my-0"></div>
-          <div class="col-sm-6">
-            <p class="label-muted">Studio Name</p>
-            <p class="field-value mb-0" id="fieldStudio">—</p>
+          <div class="col-6 col-md-4">
+            <div class="stat-mini">
+              <div class="stat-num" id="homeEventCount">—</div>
+              <div class="text-muted small mt-1">Upcoming Events</div>
+            </div>
           </div>
-          <div class="col-sm-6">
-            <p class="label-muted">Phone Number</p>
-            <p class="field-value mb-0" id="fieldPhone">—</p>
-          </div>
-          <div class="col-12"><hr class="divider my-0"></div>
-          <div class="col-sm-6">
-            <p class="label-muted">Email</p>
-            <p class="field-value mb-0" id="fieldEmail">—</p>
-          </div>
-          <div class="col-sm-6">
-            <p class="label-muted">Account ID</p>
-            <p class="field-value mb-0" id="fieldId">—</p>
-          </div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-accent btn-sm" onclick="showSection('students')">Manage Students</button>
+          <a href="events.html" class="btn btn-outline-secondary btn-sm">View Events</a>
         </div>
       </div>
 
-      <!-- Edit Mode -->
-      <div id="editMode" class="p-4 d-none">
-        <div id="editAlert" class="alert alert-danger d-none mb-3"></div>
-        <div id="editSuccess" class="alert alert-success d-none mb-3">Profile updated successfully!</div>
-        <form id="editForm" novalidate>
-          <div class="row g-3">
+      <!-- ── Profile Section ── -->
+      <div id="sec-profile" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h5 class="section-title mb-0">My Profile</h5>
+          <button class="btn btn-accent-outline btn-sm" id="editToggleBtn" onclick="toggleEdit()">Edit Profile</button>
+        </div>
+
+        <!-- View Mode -->
+        <div id="viewMode" class="card-dark p-4">
+          <div class="row g-4">
             <div class="col-sm-6">
-              <label class="form-label fw-semibold">First Name</label>
-              <input type="text" class="form-control" id="editFirstName" placeholder="First name">
+              <p class="label-muted">First Name</p>
+              <p class="field-value" id="fieldFirstName">—</p>
             </div>
             <div class="col-sm-6">
-              <label class="form-label fw-semibold">Last Name</label>
-              <input type="text" class="form-control" id="editLastName" placeholder="Last name">
+              <p class="label-muted">Last Name</p>
+              <p class="field-value" id="fieldLastName">—</p>
             </div>
-            <div class="col-12">
-              <label class="form-label fw-semibold">Studio Name</label>
-              <input type="text" class="form-control" id="editStudio" placeholder="Studio name">
+            <div class="col-12"><hr class="divider"></div>
+            <div class="col-sm-6">
+              <p class="label-muted">Studio Name</p>
+              <p class="field-value" id="fieldStudio">—</p>
             </div>
-            <div class="col-12">
-              <label class="form-label fw-semibold">Phone Number</label>
-              <input type="tel" class="form-control" id="editPhone" placeholder="Phone number">
+            <div class="col-sm-6">
+              <p class="label-muted">Phone Number</p>
+              <p class="field-value" id="fieldPhone">—</p>
             </div>
-            <div class="col-12">
-              <label class="form-label fw-semibold">Email</label>
-              <input type="email" class="form-control" id="editEmail" placeholder="Email address">
+            <div class="col-12"><hr class="divider"></div>
+            <div class="col-sm-6">
+              <p class="label-muted">Email</p>
+              <p class="field-value" id="fieldEmail">—</p>
             </div>
           </div>
-          <div class="d-flex gap-2 mt-4">
-            <button type="submit" class="btn btn-accent" id="saveBtn">Save Changes</button>
-            <button type="button" class="btn btn-outline-secondary" onclick="toggleEdit()">Cancel</button>
-          </div>
-        </form>
+        </div>
+
+        <!-- Edit Mode -->
+        <div id="editMode" class="card-dark p-4 d-none">
+          <div id="editAlert"   class="alert alert-danger  d-none mb-3"></div>
+          <div id="editSuccess" class="alert alert-success d-none mb-3">Profile updated!</div>
+          <form id="editForm" novalidate>
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <label class="form-label fw-semibold">First Name</label>
+                <input type="text"  class="form-control" id="editFirstName" placeholder="First name">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label fw-semibold">Last Name</label>
+                <input type="text"  class="form-control" id="editLastName"  placeholder="Last name">
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold">Studio Name</label>
+                <input type="text"  class="form-control" id="editStudio"    placeholder="Studio name">
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold">Phone Number</label>
+                <input type="tel"   class="form-control" id="editPhone"     placeholder="Phone number">
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold">Email</label>
+                <input type="email" class="form-control" id="editEmail"     placeholder="Email address">
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-4">
+              <button type="submit" class="btn btn-accent" id="saveBtn">Save Changes</button>
+              <button type="button" class="btn btn-outline-secondary" onclick="toggleEdit()">Cancel</button>
+            </div>
+          </form>
+        </div>
       </div>
 
-    </div>
+      <!-- ── Students Section ── -->
+      <div id="sec-students" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h5 class="section-title mb-0">My Students</h5>
+          <button class="btn btn-accent btn-sm" onclick="openAddStudent()">+ Add Student</button>
+        </div>
 
-    <!-- Students Card -->
-    <div class="card-dark shadow mt-4">
-      <div class="card-header-dark">
-        <span>My Students</span>
-        <button class="btn btn-accent btn-sm" onclick="openAddStudent()">+ Add Student</button>
-      </div>
-
-      <div class="p-4">
-        <div id="studentsLoading" class="text-center py-3">
+        <div id="studentsLoading" class="text-center py-4">
           <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
         </div>
-        <div id="studentsEmpty" class="text-muted text-center py-3 d-none">No students added yet.</div>
+        <div id="studentsEmpty" class="text-muted text-center py-4 d-none">No students added yet.</div>
         <div id="studentsError" class="alert alert-danger d-none"></div>
 
         <div class="table-responsive d-none" id="studentsTableWrap">
-          <table class="table align-middle mb-0" style="--bs-table-bg:transparent;--bs-table-color:#f0f0f0;--bs-table-border-color:#2a2a2a;">
+          <table class="table tbl align-middle mb-0">
             <thead>
-              <tr style="color:#E3FC02;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;">
-                <th>Name</th><th>Date of Birth</th><th>Gender</th><th></th>
-              </tr>
+              <tr><th>Name</th><th>Date of Birth</th><th>Gender</th><th></th></tr>
             </thead>
             <tbody id="studentsBody"></tbody>
           </table>
         </div>
       </div>
-    </div>
 
-  </div>
+    </div><!-- /content -->
+  </div><!-- /main-wrap -->
 
-  <!-- Add/Edit Student Modal -->
+  <!-- ── Add/Edit Student Modal ── -->
   <div class="modal fade" id="studentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#f0f0f0;">
@@ -178,7 +287,7 @@
           <input type="hidden" id="studentId">
           <div class="mb-3">
             <label class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="studentName" placeholder="Student's full name" required>
+            <input type="text" class="form-control" id="studentName" placeholder="Student's full name">
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Date of Birth</label>
@@ -186,10 +295,10 @@
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Gender</label>
-            <select class="form-control" id="studentGender">
+            <select class="form-select" id="studentGender">
               <option value="">— Select —</option>
-              <option value="Male">Male</option>
               <option value="Female">Female</option>
+              <option value="Male">Male</option>
               <option value="Non-binary">Non-binary</option>
               <option value="Prefer not to say">Prefer not to say</option>
             </select>
@@ -203,60 +312,100 @@
     </div>
   </div>
 
+  <!-- Mobile sidebar overlay -->
+  <div id="sidebarOverlay" onclick="toggleSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:199;"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
     let currentUser = null;
+    let studentModal;
+    let studentsLoaded = false;
+
+    // ── Sidebar & mobile ──────────────────────────────────────────────────────
+
+    function toggleSidebar() {
+      const sb  = document.getElementById('sidebar');
+      const ovl = document.getElementById('sidebarOverlay');
+      const open = sb.classList.toggle('open');
+      ovl.style.display = open ? 'block' : 'none';
+    }
+
+    // ── Section switching ─────────────────────────────────────────────────────
+
+    function showSection(name) {
+      ['home','profile','students'].forEach(s => {
+        document.getElementById(`sec-${s}`).style.display    = s === name ? '' : 'none';
+        document.getElementById(`nav-${s}`).classList.toggle('active', s === name);
+      });
+      // Close mobile sidebar after nav
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarOverlay').style.display = 'none';
+
+      // Lazy-load students
+      if (name === 'students' && !studentsLoaded) { studentsLoaded = true; loadStudents(); }
+    }
+
+    // ── User ──────────────────────────────────────────────────────────────────
 
     async function loadUser() {
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html'; return; }
 
       try {
-        const res = await fetch(`${API}/auth/me`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
+        const [userRes, studRes, evtRes] = await Promise.all([
+          fetch(`${API}/auth/me`,  { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API}/students`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API}/events`),
+        ]);
 
-        if (res.status === 401) {
-          localStorage.removeItem('token');
-          window.location.href = 'login.html';
-          return;
-        }
+        if (userRes.status === 401) { localStorage.removeItem('token'); window.location.href = 'login.html'; return; }
 
-        currentUser = await res.json();
-        renderProfile(currentUser);
+        currentUser = await userRes.json();
+        const students = studRes.ok  ? await studRes.json() : [];
+        const events   = evtRes.ok   ? await evtRes.json()  : [];
+
+        renderUser(currentUser);
+
+        // Home stats
+        const now = new Date();
+        document.getElementById('homeStudentCount').textContent = students.length;
+        document.getElementById('homeEventCount').textContent   = events.filter(e => new Date(e.event_date) >= now).length;
+
+        if (currentUser.is_admin) document.getElementById('adminLink').style.display = '';
+
       } catch {
         window.location.href = 'login.html';
       }
     }
 
-    function renderProfile(u) {
+    function renderUser(u) {
       const firstName = u.first_name || '';
-      const lastName  = u.last_name  || '';
+      const initial   = (firstName || u.email).charAt(0).toUpperCase();
 
-      document.getElementById('userEmail').textContent     = u.email;
-      document.getElementById('avatarInitial').textContent = (firstName || u.email).charAt(0).toUpperCase();
-      document.getElementById('welcomeName').textContent   = firstName || u.email;
-      document.getElementById('welcomeStudio').textContent = u.studio_name || '';
+      document.getElementById('sidebarAvatar').textContent   = initial;
+      document.getElementById('sidebarName').textContent     = firstName ? `${firstName} ${u.last_name||''}`.trim() : u.email;
+      document.getElementById('sidebarStudio').textContent   = u.studio_name || '';
+      document.getElementById('homeAvatar').textContent      = initial;
+      document.getElementById('homeWelcomeName').textContent = firstName || u.email;
+      document.getElementById('homeStudio').textContent      = u.studio_name || '';
 
-      document.getElementById('fieldFirstName').textContent = firstName || '—';
-      document.getElementById('fieldLastName').textContent  = lastName  || '—';
+      document.getElementById('fieldFirstName').textContent = u.first_name  || '—';
+      document.getElementById('fieldLastName').textContent  = u.last_name   || '—';
       document.getElementById('fieldStudio').textContent    = u.studio_name || '—';
       document.getElementById('fieldPhone').textContent     = u.phone || '—';
       document.getElementById('fieldEmail').textContent     = u.email;
-      document.getElementById('fieldId').textContent        = `#${u.id}`;
     }
 
     function toggleEdit() {
-      const viewing = !document.getElementById('editMode').classList.contains('d-none');
-      document.getElementById('viewMode').classList.toggle('d-none', !viewing);
-      document.getElementById('editMode').classList.toggle('d-none', viewing);
-      document.getElementById('editToggleBtn').textContent = viewing ? 'Edit Profile' : 'Cancel';
+      const editing = !document.getElementById('editMode').classList.contains('d-none');
+      document.getElementById('viewMode').classList.toggle('d-none', !editing);
+      document.getElementById('editMode').classList.toggle('d-none', editing);
+      document.getElementById('editToggleBtn').textContent = editing ? 'Edit Profile' : 'Cancel';
 
-      if (!viewing && currentUser) {
-        // Pre-fill edit form
-        document.getElementById('editFirstName').value = currentUser.first_name || '';
-        document.getElementById('editLastName').value  = currentUser.last_name  || '';
+      if (!editing && currentUser) {
+        document.getElementById('editFirstName').value = currentUser.first_name  || '';
+        document.getElementById('editLastName').value  = currentUser.last_name   || '';
         document.getElementById('editStudio').value    = currentUser.studio_name || '';
         document.getElementById('editPhone').value     = currentUser.phone || '';
         document.getElementById('editEmail').value     = currentUser.email || '';
@@ -267,7 +416,7 @@
 
     document.getElementById('editForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const token = localStorage.getItem('token');
+      const token     = localStorage.getItem('token');
       const alertEl   = document.getElementById('editAlert');
       const successEl = document.getElementById('editSuccess');
       const saveBtn   = document.getElementById('saveBtn');
@@ -288,27 +437,22 @@
       try {
         const res = await fetch(`${API}/users/me`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(body),
         });
-
-        let data = {};
-        try { data = await res.json(); } catch {}
+        let data = {}; try { data = await res.json(); } catch {}
 
         if (res.ok) {
           currentUser = data;
-          renderProfile(data);
+          renderUser(data);
           successEl.classList.remove('d-none');
-          // Return to view mode after short delay
-          setTimeout(() => {
-            toggleEdit();
-          }, 1200);
+          setTimeout(() => toggleEdit(), 1200);
         } else {
           alertEl.textContent = data.detail || `Error ${res.status}`;
           alertEl.classList.remove('d-none');
         }
       } catch {
-        alertEl.textContent = 'Something went wrong. Please try again.';
+        alertEl.textContent = 'Something went wrong.';
         alertEl.classList.remove('d-none');
       } finally {
         saveBtn.disabled = false;
@@ -321,8 +465,12 @@
       window.location.href = 'login.html';
     }
 
-    // ── Students ─────────────────────────────────────────────────────────────
-    let studentModal;
+    // ── Students ──────────────────────────────────────────────────────────────
+
+    function esc(str) {
+      return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
 
     function fmtDob(iso) {
       if (!iso) return '—';
@@ -333,9 +481,7 @@
     async function loadStudents() {
       const token = localStorage.getItem('token');
       try {
-        const res = await fetch(`${API}/students`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
+        const res      = await fetch(`${API}/students`, { headers: { Authorization: `Bearer ${token}` } });
         const students = await res.json();
 
         document.getElementById('studentsLoading').classList.add('d-none');
@@ -353,16 +499,11 @@
             <td>${esc(s.gender || '—')}</td>
             <td class="text-nowrap">
               <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
-                onclick="openEditStudent(${s.id},'${esc(s.name)}','${s.date_of_birth||''}','${esc(s.gender||'')}')">
-                Edit
-              </button>
+                onclick="openEditStudent(${s.id},'${esc(s.name)}','${s.date_of_birth||''}','${esc(s.gender||'')}')">Edit</button>
               <button class="btn btn-sm btn-outline-danger py-0 px-2"
-                onclick="deleteStudent(${s.id},'${esc(s.name)}')">
-                Remove
-              </button>
+                onclick="deleteStudent(${s.id},'${esc(s.name)}')">Remove</button>
             </td>
-          </tr>
-        `).join('');
+          </tr>`).join('');
       } catch {
         document.getElementById('studentsLoading').classList.add('d-none');
         document.getElementById('studentsError').textContent = 'Failed to load students.';
@@ -372,9 +513,9 @@
 
     function openAddStudent() {
       document.getElementById('studentModalTitle').textContent = 'Add Student';
-      document.getElementById('studentId').value = '';
-      document.getElementById('studentName').value = '';
-      document.getElementById('studentDob').value  = '';
+      document.getElementById('studentId').value    = '';
+      document.getElementById('studentName').value  = '';
+      document.getElementById('studentDob').value   = '';
       document.getElementById('studentGender').value = '';
       document.getElementById('studentAlert').classList.add('d-none');
       studentModal.show();
@@ -397,11 +538,7 @@
       const saveBtn   = document.getElementById('studentSaveBtn');
       const name      = document.getElementById('studentName').value.trim();
 
-      if (!name) {
-        alertEl.textContent = 'Student name is required.';
-        alertEl.classList.remove('d-none');
-        return;
-      }
+      if (!name) { alertEl.textContent = 'Student name is required.'; alertEl.classList.remove('d-none'); return; }
 
       alertEl.classList.add('d-none');
       saveBtn.disabled = true;
@@ -409,8 +546,8 @@
 
       const body = {
         name,
-        date_of_birth: document.getElementById('studentDob').value    || null,
-        gender:        document.getElementById('studentGender').value  || null,
+        date_of_birth: document.getElementById('studentDob').value   || null,
+        gender:        document.getElementById('studentGender').value || null,
       };
 
       const url    = studentId ? `${API}/students/${studentId}` : `${API}/students`;
@@ -419,16 +556,13 @@
       try {
         const res = await fetch(url, {
           method,
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(body),
         });
-
-        let data = {};
-        try { data = await res.json(); } catch {}
+        let data = {}; try { data = await res.json(); } catch {}
 
         if (res.ok) {
           studentModal.hide();
-          // Refresh student list
           document.getElementById('studentsTableWrap').classList.add('d-none');
           document.getElementById('studentsEmpty').classList.add('d-none');
           document.getElementById('studentsLoading').classList.remove('d-none');
@@ -438,7 +572,7 @@
           alertEl.classList.remove('d-none');
         }
       } catch {
-        alertEl.textContent = 'Something went wrong. Please try again.';
+        alertEl.textContent = 'Something went wrong.';
         alertEl.classList.remove('d-none');
       } finally {
         saveBtn.disabled = false;
@@ -450,10 +584,7 @@
       if (!confirm(`Remove student "${name}"?`)) return;
       const token = localStorage.getItem('token');
       try {
-        const res = await fetch(`${API}/students/${id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
+        const res = await fetch(`${API}/students/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
           document.getElementById(`srow-${id}`).remove();
           if (!document.getElementById('studentsBody').children.length) {
@@ -464,15 +595,9 @@
       } catch { alert('Failed to remove student.'); }
     }
 
-    function esc(str) {
-      return String(str)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }
-
-    loadUser();
+    // ── Init ──────────────────────────────────────────────────────────────────
     studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
-    loadStudents();
+    loadUser();
   </script>
 </body>
 </html>

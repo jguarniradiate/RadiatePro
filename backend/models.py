@@ -32,6 +32,7 @@ class User(Base):
 
     # Relationships
     students = relationship("Student", back_populates="owner", cascade="all, delete-orphan")
+    event_registrations = relationship("EventRegistration", back_populates="user", cascade="all, delete-orphan")
 
 
 class Student(Base):
@@ -55,4 +56,31 @@ class Event(Base):
     description = Column(String, nullable=True)
     event_date = Column(DateTime(timezone=True), nullable=False)
     location = Column(String, nullable=True)
+    event_type = Column(String, nullable=True)  # "convention" or "competition"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    registrations = relationship("EventRegistration", back_populates="event", cascade="all, delete-orphan")
+
+
+class EventRegistration(Base):
+    __tablename__ = "event_registrations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    event = relationship("Event", back_populates="registrations")
+    user = relationship("User", back_populates="event_registrations")
+    attending_students = relationship("EventRegistrationStudent", back_populates="registration", cascade="all, delete-orphan")
+
+
+class EventRegistrationStudent(Base):
+    __tablename__ = "event_registration_students"
+
+    id = Column(Integer, primary_key=True, index=True)
+    registration_id = Column(Integer, ForeignKey("event_registrations.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+
+    registration = relationship("EventRegistration", back_populates="attending_students")
+    student = relationship("Student")

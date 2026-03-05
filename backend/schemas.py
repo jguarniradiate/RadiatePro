@@ -43,7 +43,7 @@ class UserUpdate(BaseModel):
     email: EmailStr | None = None
 
 
-# ── New schemas ───────────────────────────────────────────────────────────────
+# ── Misc ──────────────────────────────────────────────────────────────────────
 
 class MessageOut(BaseModel):
     message: str
@@ -93,6 +93,7 @@ class EventCreate(BaseModel):
     description: str | None = None
     event_date: datetime
     location: str | None = None
+    event_type: str | None = None  # "convention" or "competition"
 
 
 class EventUpdate(BaseModel):
@@ -100,6 +101,7 @@ class EventUpdate(BaseModel):
     description: str | None = None
     event_date: datetime | None = None
     location: str | None = None
+    event_type: str | None = None
 
 
 class EventOut(BaseModel):
@@ -108,6 +110,23 @@ class EventOut(BaseModel):
     description: str | None = None
     event_date: datetime
     location: str | None = None
+    event_type: str | None = None
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# ── Event Registration schemas ────────────────────────────────────────────────
+
+class EventRegistrationCreate(BaseModel):
+    student_ids: list[int] = []
+
+
+class EventRegistrationOut(BaseModel):
+    id: int
+    event_id: int
+    user_id: int
+    student_ids: list[int] = []
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

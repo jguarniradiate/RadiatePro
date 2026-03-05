@@ -9,20 +9,37 @@
     body { background-color: #0a0a0a; color: #f0f0f0; }
     .navbar { background-color: #000 !important; border-bottom: 2px solid #E3FC02; }
     .brand-link { color: #E3FC02 !important; text-decoration: none; }
+    .btn-accent { background-color: #E3FC02; color: #000; font-weight: 700; border: none; }
+    .btn-accent:hover { background-color: #cce500; color: #000; }
     .event-card {
       background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px;
       transition: border-color .2s;
     }
-    .event-card:hover { border-color: #E3FC02; }
+    .event-card:hover { border-color: #444; }
+    .event-card.registered { border-color: #198754; }
     .event-date-badge {
       background: #E3FC02; color: #000;
       border-radius: 8px; padding: .4rem .75rem;
-      font-weight: 700; font-size: .85rem; white-space: nowrap;
+      font-weight: 700; font-size: .85rem; white-space: nowrap; min-width: 90px; text-align: center;
     }
     .event-title { color: #f0f0f0; font-weight: 700; font-size: 1.1rem; }
     .event-meta { color: #888; font-size: .85rem; }
     .page-title { color: #E3FC02; }
     #spinner { color: #E3FC02; }
+    .badge-convention  { background: #0d6efd; color: #fff; font-size: .75rem; }
+    .badge-competition { background: #fd7e14; color: #000; font-size: .75rem; }
+    /* Modal */
+    .modal-content { background: #1a1a1a; border: 1px solid #2a2a2a; color: #f0f0f0; }
+    .modal-header { border-bottom-color: #2a2a2a; }
+    .modal-footer { border-top-color: #2a2a2a; }
+    .modal-title { color: #E3FC02; }
+    .form-check-label { color: #ccc; }
+    .form-check-input:checked { background-color: #E3FC02; border-color: #E3FC02; }
+    .btn-close { filter: invert(1); }
+    .reg-badge {
+      background: #198754; color: #fff; font-size: .72rem; font-weight: 600;
+      padding: .25rem .6rem; border-radius: 20px; white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -36,26 +53,64 @@
     </div>
   </nav>
 
-  <div class="container py-5" style="max-width: 760px;">
+  <div class="container py-5" style="max-width: 780px;">
 
-    <h4 class="fw-bold page-title mb-4">Upcoming Events</h4>
+    <h4 class="fw-bold page-title mb-4">Events</h4>
 
     <div id="spinner" class="text-center py-5">
       <div class="spinner-border" role="status"><span class="visually-hidden">Loading…</span></div>
     </div>
 
-    <div id="emptyMsg" class="text-muted text-center py-5 d-none">No upcoming events at this time.</div>
+    <div id="emptyMsg" class="text-muted text-center py-5 d-none">No events at this time.</div>
     <div id="errorMsg" class="alert alert-danger d-none"></div>
     <div id="eventsList"></div>
 
   </div>
 
+  <!-- Registration Modal -->
+  <div class="modal fade" id="regModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="regModalTitle">Register for Event</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="regAlert" class="alert alert-danger d-none mb-3"></div>
+          <input type="hidden" id="regEventId">
+          <p class="small text-muted mb-3">Select which students will be attending:</p>
+          <div id="studentCheckboxes"></div>
+          <p id="noStudentsMsg" class="text-muted small d-none">
+            You haven't added any students yet.
+            <a href="dashboard.html" class="text-decoration-none" style="color:#E3FC02;">Add in Dashboard →</a>
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-danger btn-sm me-auto" id="unregBtn" onclick="unregisterFromEvent()" style="display:none;">
+            Cancel Registration
+          </button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-accent" id="regSaveBtn" onclick="saveRegistration()">Register</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
+    let myStudents = [];
+    let myRegistrations = {}; // event_id (string) → {registration_id, student_ids}
+    let regModal;
 
     function logout() {
       localStorage.removeItem('token');
       window.location.href = 'login.html';
+    }
+
+    function esc(str) {
+      return String(str || '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
     function fmtDate(iso) {
@@ -66,55 +121,191 @@
       };
     }
 
-    function esc(str) {
-      return String(str || '')
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    function typeBadge(type) {
+      if (!type) return '';
+      const cls = type === 'competition' ? 'badge-competition' : 'badge-convention';
+      return `<span class="badge ${cls} me-2">${type.charAt(0).toUpperCase()+type.slice(1)}</span>`;
+    }
+
+    function renderEvents(events) {
+      document.getElementById('spinner').classList.add('d-none');
+
+      if (!events.length) {
+        document.getElementById('emptyMsg').classList.remove('d-none');
+        return;
+      }
+
+      const now = new Date();
+      const upcoming = events.filter(e => new Date(e.event_date) >= now);
+      const past     = events.filter(e => new Date(e.event_date) <  now);
+
+      function renderGroup(label, list) {
+        if (!list.length) return '';
+        return `
+          <h6 class="text-muted text-uppercase small mb-3 mt-4" style="letter-spacing:.08em;">${label}</h6>
+          ${list.map(e => {
+            const dt   = fmtDate(e.event_date);
+            const reg  = myRegistrations[String(e.id)];
+            const isPast = new Date(e.event_date) < now;
+            return `
+              <div class="event-card p-4 mb-3 d-flex gap-3 align-items-start ${reg ? 'registered' : ''}" id="ecard-${e.id}">
+                <div class="event-date-badge flex-shrink-0">${dt.short}</div>
+                <div class="flex-grow-1">
+                  <div class="event-title mb-1">${typeBadge(e.event_type)}${esc(e.title)}</div>
+                  ${e.description ? `<p class="event-meta mb-2">${esc(e.description)}</p>` : ''}
+                  <div class="event-meta d-flex flex-wrap gap-3 mb-2">
+                    <span>&#128337; ${dt.time}</span>
+                    ${e.location ? `<span>&#128205; ${esc(e.location)}</span>` : ''}
+                  </div>
+                  ${!isPast ? `
+                  <div class="d-flex align-items-center gap-2 mt-2">
+                    ${reg ? `<span class="reg-badge">&#10003; Registered</span>` : ''}
+                    <button id="reg-btn-${e.id}" class="btn btn-sm ${reg ? 'btn-outline-secondary' : 'btn-accent'} py-1 px-3"
+                      onclick="openRegModal(${e.id}, '${esc(e.title)}')">
+                      ${reg ? 'Edit Registration' : 'Register'}
+                    </button>
+                  </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
+                </div>
+              </div>`;
+          }).join('')}`;
+      }
+
+      document.getElementById('eventsList').innerHTML =
+        renderGroup('Upcoming', upcoming) + renderGroup('Past Events', past);
+    }
+
+    function openRegModal(eventId, eventTitle) {
+      document.getElementById('regEventId').value = eventId;
+      document.getElementById('regModalTitle').textContent = eventTitle;
+      document.getElementById('regAlert').classList.add('d-none');
+
+      const reg = myRegistrations[String(eventId)];
+      const checkedIds = reg ? reg.student_ids : [];
+
+      const container = document.getElementById('studentCheckboxes');
+      if (myStudents.length === 0) {
+        container.innerHTML = '';
+        document.getElementById('noStudentsMsg').classList.remove('d-none');
+      } else {
+        document.getElementById('noStudentsMsg').classList.add('d-none');
+        container.innerHTML = myStudents.map(s => `
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" value="${s.id}" id="stu-${s.id}" ${checkedIds.includes(s.id) ? 'checked' : ''}>
+            <label class="form-check-label" for="stu-${s.id}">${esc(s.name)}${s.date_of_birth ? ` <span class="text-muted small">(${s.date_of_birth})</span>` : ''}</label>
+          </div>`).join('');
+      }
+
+      const unregBtn = document.getElementById('unregBtn');
+      const saveBtn  = document.getElementById('regSaveBtn');
+      unregBtn.style.display = reg ? 'inline-block' : 'none';
+      saveBtn.textContent    = reg ? 'Update Registration' : 'Register';
+
+      regModal.show();
+    }
+
+    async function saveRegistration() {
+      const token    = localStorage.getItem('token');
+      const eventId  = document.getElementById('regEventId').value;
+      const alertEl  = document.getElementById('regAlert');
+      const saveBtn  = document.getElementById('regSaveBtn');
+      const studentIds = [...document.querySelectorAll('#studentCheckboxes input:checked')]
+                          .map(cb => parseInt(cb.value));
+
+      alertEl.classList.add('d-none');
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+      try {
+        const res = await fetch(`${API}/events/${eventId}/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ student_ids: studentIds }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          myRegistrations[String(eventId)] = { registration_id: data.id, student_ids: data.student_ids };
+          updateEventCard(eventId, true);
+          regModal.hide();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          alertEl.textContent = data.detail || `Error ${res.status}`;
+          alertEl.classList.remove('d-none');
+        }
+      } catch {
+        alertEl.textContent = 'Something went wrong. Please try again.';
+        alertEl.classList.remove('d-none');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = myRegistrations[String(eventId)] ? 'Update Registration' : 'Register';
+      }
+    }
+
+    async function unregisterFromEvent() {
+      const token   = localStorage.getItem('token');
+      const eventId = document.getElementById('regEventId').value;
+      if (!confirm('Cancel your registration for this event?')) return;
+
+      try {
+        const res = await fetch(`${API}/events/${eventId}/register`, {
+          method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (res.ok) {
+          delete myRegistrations[String(eventId)];
+          updateEventCard(eventId, false);
+          regModal.hide();
+        } else {
+          alert('Failed to cancel registration.');
+        }
+      } catch { alert('Something went wrong.'); }
+    }
+
+    function updateEventCard(eventId, isRegistered) {
+      const card   = document.getElementById(`ecard-${eventId}`);
+      const btn    = document.getElementById(`reg-btn-${eventId}`);
+      if (card) {
+        if (isRegistered) card.classList.add('registered');
+        else card.classList.remove('registered');
+      }
+      if (btn) {
+        if (isRegistered) {
+          btn.className = 'btn btn-sm btn-outline-secondary py-1 px-3';
+          btn.textContent = 'Edit Registration';
+          // insert badge if not already there
+          const parent = btn.parentElement;
+          if (!parent.querySelector('.reg-badge')) {
+            const badge = document.createElement('span');
+            badge.className = 'reg-badge';
+            badge.innerHTML = '&#10003; Registered';
+            parent.insertBefore(badge, btn);
+          }
+        } else {
+          btn.className = 'btn btn-sm btn-accent py-1 px-3';
+          btn.textContent = 'Register';
+          const badge = btn.parentElement.querySelector('.reg-badge');
+          if (badge) badge.remove();
+        }
+      }
     }
 
     (async () => {
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html'; return; }
 
+      regModal = new bootstrap.Modal(document.getElementById('regModal'));
+
       try {
-        const res = await fetch(`${API}/events`);
-        let events = [];
-        try { events = await res.json(); } catch {}
+        const [studRes, evtRes, regRes] = await Promise.all([
+          fetch(`${API}/students`,              { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(`${API}/events`),
+          fetch(`${API}/events/my-registrations`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        ]);
 
-        document.getElementById('spinner').classList.add('d-none');
+        myStudents      = studRes.ok ? await studRes.json() : [];
+        const events    = evtRes.ok  ? await evtRes.json()  : [];
+        myRegistrations = regRes.ok  ? await regRes.json()  : {};
 
-        if (!events.length) {
-          document.getElementById('emptyMsg').classList.remove('d-none');
-          return;
-        }
-
-        const now = new Date();
-        const upcoming = events.filter(e => new Date(e.event_date) >= now);
-        const past     = events.filter(e => new Date(e.event_date) <  now);
-
-        function renderGroup(title, list) {
-          if (!list.length) return '';
-          return `
-            <h6 class="text-muted text-uppercase small mb-3 mt-4" style="letter-spacing:.08em;">${title}</h6>
-            ${list.map(e => {
-              const dt = fmtDate(e.event_date);
-              return `
-                <div class="event-card p-4 mb-3 d-flex gap-3 align-items-start">
-                  <div class="event-date-badge text-center" style="min-width:90px;">${dt.short}</div>
-                  <div class="flex-grow-1">
-                    <div class="event-title mb-1">${esc(e.title)}</div>
-                    ${e.description ? `<p class="event-meta mb-2">${esc(e.description)}</p>` : ''}
-                    <div class="event-meta d-flex gap-3">
-                      <span>&#128337; ${dt.time}</span>
-                      ${e.location ? `<span>&#128205; ${esc(e.location)}</span>` : ''}
-                    </div>
-                  </div>
-                </div>`;
-            }).join('')}`;
-        }
-
-        document.getElementById('eventsList').innerHTML =
-          renderGroup('Upcoming', upcoming) + renderGroup('Past Events', past);
-
+        renderEvents(events);
       } catch {
         document.getElementById('spinner').classList.add('d-none');
         document.getElementById('errorMsg').textContent = 'Failed to load events. Please try again.';
