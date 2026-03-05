@@ -155,10 +155,14 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
 <<<<<<< HEAD
+<<<<<<< HEAD
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app';
 =======
     const API = 'http://localhost:8000';
 >>>>>>> a5bddfa (initial commit)
+=======
+    const API = 'https://goldfish-app-fuu3t.ondigitalocean.app';
+>>>>>>> bf9b35d (adding non local host)
 
     // ── Tab switching ─────────────────────────────────────────────────────────
     function showTab(tab) {
@@ -194,6 +198,23 @@
         : (btnId === 'loginBtn' ? 'Sign In' : 'Create Account');
     }
 
+    // ── Error helper ──────────────────────────────────────────────────────────
+    function extractError(data, fallback) {
+      if (!data || !data.detail) return fallback;
+      if (Array.isArray(data.detail)) {
+        const first = data.detail[0];
+        if (!first) return fallback;
+        const msg = typeof first === 'object' ? (first.msg || fallback) : String(first);
+        if (msg.toLowerCase().includes('email') || msg.toLowerCase().includes('pattern'))
+          return 'Please enter a valid email address.';
+        return msg;
+      }
+      const detail = String(data.detail);
+      if (detail.toLowerCase().includes('pattern'))
+        return 'Please enter a valid email address.';
+      return detail;
+    }
+
     // ── Login ─────────────────────────────────────────────────────────────────
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -214,7 +235,7 @@
         });
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Login failed');
+        if (!res.ok) throw new Error(extractError(data, 'Login failed'));
 
         localStorage.setItem('token', data.access_token);
         window.location.href = 'dashboard.html';
@@ -255,7 +276,7 @@
         });
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Registration failed');
+        if (!res.ok) throw new Error(extractError(data, 'Registration failed'));
 
         showAlert('Account created! You can now sign in.', 'success');
         showTab('login');
