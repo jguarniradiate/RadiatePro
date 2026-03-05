@@ -39,6 +39,7 @@
     .forgot-link { color: #E3FC02 !important; }
     .forgot-link:hover { color: #cce500 !important; }
     .footer-text { color: #555; }
+    .forgot-divider { border-top: 1px solid #2a2a2a; }
   </style>
 </head>
 <body class="d-flex align-items-center justify-content-center min-vh-100">
@@ -96,7 +97,8 @@
                   <input class="form-check-input" type="checkbox" id="rememberMe">
                   <label class="form-check-label text-muted" for="rememberMe">Remember me</label>
                 </div>
-                <a href="#" class="forgot-link text-decoration-none small">Forgot password?</a>
+                <a href="#" class="forgot-link text-decoration-none small"
+                   onclick="toggleForgot(event)">Forgot password?</a>
               </div>
 
               <div class="d-grid">
@@ -105,6 +107,31 @@
                 </button>
               </div>
             </form>
+
+            <!-- Forgot Password Section (hidden by default) -->
+            <div id="forgotSection" class="d-none forgot-divider pt-3 mt-2">
+              <p class="text-muted small mb-3">
+                Enter your email and we'll send you a reset link.
+              </p>
+              <div id="forgotAlert" class="alert d-none mb-3" role="alert"></div>
+              <form id="forgotForm" novalidate>
+                <div class="mb-3">
+                  <label for="forgotEmail" class="form-label fw-semibold">Email address</label>
+                  <input type="email" class="form-control" id="forgotEmail"
+                    placeholder="you@example.com" required autocomplete="email">
+                  <div class="invalid-feedback">Please enter a valid email address.</div>
+                </div>
+                <div class="d-grid mb-3">
+                  <button type="submit" class="btn btn-accent" id="forgotBtn">
+                    Send Reset Link
+                  </button>
+                </div>
+              </form>
+              <div class="text-center">
+                <a href="#" class="forgot-link text-decoration-none small"
+                   onclick="toggleForgot(event)">&#8592; Back to Sign In</a>
+              </div>
+            </div>
 
             <!-- Register Form (hidden by default) -->
             <form id="registerForm" class="d-none" novalidate>
@@ -163,7 +190,29 @@
       document.getElementById('registerForm').classList.toggle('d-none', isLogin);
       document.getElementById('tab-login').classList.toggle('active', isLogin);
       document.getElementById('tab-register').classList.toggle('active', !isLogin);
+      // Collapse forgot section whenever switching tabs
+      document.getElementById('forgotSection').classList.add('d-none');
+      document.getElementById('loginForm').classList.toggle('d-none', !isLogin);
       hideAlert();
+    }
+
+    // ── Forgot password toggle ────────────────────────────────────────────────
+    function toggleForgot(e) {
+      e.preventDefault();
+      const forgot  = document.getElementById('forgotSection');
+      const login   = document.getElementById('loginForm');
+      const showing = !forgot.classList.contains('d-none');
+
+      forgot.classList.toggle('d-none', showing);
+      login.classList.toggle('d-none', !showing);
+
+      if (!showing) {
+        // Opening forgot section — clear state
+        hideForgotAlert();
+        document.getElementById('forgotEmail').value = '';
+        document.getElementById('forgotForm').classList.remove('was-validated');
+        hideAlert();
+      }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -182,12 +231,22 @@
       document.getElementById('alert').className = 'alert d-none';
     }
 
+    function showForgotAlert(msg, type = 'danger') {
+      const el = document.getElementById('forgotAlert');
+      el.textContent = msg;
+      el.className = `alert alert-${type}`;
+    }
+
+    function hideForgotAlert() {
+      document.getElementById('forgotAlert').className = 'alert d-none';
+    }
+
     function setLoading(btnId, loading) {
       const btn = document.getElementById(btnId);
       btn.disabled = loading;
       btn.innerHTML = loading
         ? '<span class="spinner-border spinner-border-sm me-2"></span>Please wait…'
-        : (btnId === 'loginBtn' ? 'Sign In' : 'Create Account');
+        : (btnId === 'loginBtn' ? 'Sign In' : btnId === 'forgotBtn' ? 'Send Reset Link' : 'Create Account');
     }
 
     // ── Error helper ──────────────────────────────────────────────────────────
@@ -239,6 +298,41 @@
       }
     });
 
+    // ── Forgot password ───────────────────────────────────────────────────────
+    document.getElementById('forgotForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideForgotAlert();
+
+      const form = e.target;
+      if (!form.checkValidity()) { form.classList.add('was-validated'); return; }
+
+      const email = document.getElementById('forgotEmail').value.trim();
+
+      setLoading('forgotBtn', true);
+      try {
+        const res = await fetch(`${API}/auth/request-password-reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+
+        let data = {};
+        try { data = await res.json(); } catch {}
+
+        // Always show a success message (backend never reveals if email exists)
+        showForgotAlert(
+          data.message || "If that email is registered, you'll receive a reset link.",
+          'success'
+        );
+        form.reset();
+        form.classList.remove('was-validated');
+      } catch {
+        showForgotAlert('Something went wrong. Please try again.');
+      } finally {
+        setLoading('forgotBtn', false);
+      }
+    });
+
     // ── Register ──────────────────────────────────────────────────────────────
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -272,8 +366,9 @@
         try { data = await res.json(); } catch {}
         if (!res.ok) throw new Error(extractError(data, `Error ${res.status}`));
 
-        showAlert('Account created! You can now sign in.', 'success');
-        showTab('login');
+        showAlert('Account created! Check your email to verify before signing in.', 'success');
+        form.reset();
+        form.classList.remove('was-validated');
       } catch (err) {
         showAlert(err.message);
       } finally {

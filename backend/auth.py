@@ -1,4 +1,5 @@
 import os
+import secrets
 import hashlib
 import base64
 from datetime import datetime, timedelta, timezone
@@ -23,6 +24,11 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(_prepare(plain), hashed.encode())
+
+
+def generate_token() -> str:
+    """Return a cryptographically secure URL-safe random token."""
+    return secrets.token_urlsafe(32)
 
 
 def create_access_token(data: dict, expires_delta: timedelta = None) -> str:

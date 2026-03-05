@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify Email — RadiatePro</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #000; color: #f0f0f0; }
+    .brand-link { color: #E3FC02 !important; text-decoration: none; }
+    .auth-card { background-color: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; }
+    .btn-accent { background-color: #E3FC02; color: #000; font-weight: 700; border: none; }
+    .btn-accent:hover { background-color: #cce500; color: #000; }
+    .footer-text { color: #555; }
+    .icon-circle {
+      width: 72px; height: 72px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; margin: 0 auto 1.25rem;
+    }
+    .icon-success { background-color: rgba(227, 252, 2, 0.15); color: #E3FC02; }
+    .icon-error   { background-color: rgba(220, 53, 69, 0.15);  color: #dc3545; }
+    .icon-loading { background-color: rgba(255, 255, 255, 0.05); }
+  </style>
+</head>
+<body class="d-flex align-items-center justify-content-center min-vh-100">
+
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-12 col-sm-10 col-md-6 col-lg-4">
+
+        <!-- Brand -->
+        <div class="text-center mb-4">
+          <a href="index.html" class="brand-link">
+            <h2 class="fw-bold">RadiatePro</h2>
+          </a>
+        </div>
+
+        <!-- Card -->
+        <div class="auth-card shadow">
+          <div class="card-body p-4 text-center">
+
+            <!-- Loading state (default) -->
+            <div id="stateLoading">
+              <div class="icon-circle icon-loading mx-auto mb-3">
+                <div class="spinner-border text-light" style="width:2rem;height:2rem;" role="status">
+                  <span class="visually-hidden">Loading…</span>
+                </div>
+              </div>
+              <h5 class="fw-bold mb-2">Verifying your email…</h5>
+              <p class="text-muted small mb-0">Please wait a moment.</p>
+            </div>
+
+            <!-- Success state -->
+            <div id="stateSuccess" class="d-none">
+              <div class="icon-circle icon-success">&#10003;</div>
+              <h5 class="fw-bold mb-2">Email Verified!</h5>
+              <p class="text-muted small mb-4">Your email has been confirmed. You can now sign in to your account.</p>
+              <a href="login.html" class="btn btn-accent btn-lg w-100">Sign In</a>
+            </div>
+
+            <!-- Error state -->
+            <div id="stateError" class="d-none">
+              <div class="icon-circle icon-error">&#10007;</div>
+              <h5 class="fw-bold mb-2" id="errorTitle">Verification Failed</h5>
+              <p class="text-muted small mb-4" id="errorMessage">
+                This verification link is invalid or has expired.
+              </p>
+              <a href="login.html" class="btn btn-accent btn-lg w-100">Back to Sign In</a>
+            </div>
+
+          </div>
+        </div>
+
+        <p class="text-center footer-text mt-4 small">
+          &copy; 2026 RadiatePro
+        </p>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
+
+    function show(state) {
+      ['Loading', 'Success', 'Error'].forEach(s =>
+        document.getElementById('state' + s).classList.toggle('d-none', s !== state)
+      );
+    }
+
+    (async () => {
+      const params = new URLSearchParams(window.location.search);
+      const token  = params.get('token');
+
+      if (!token) {
+        document.getElementById('errorTitle').textContent   = 'Invalid Link';
+        document.getElementById('errorMessage').textContent = 'No verification token was found. Please check your email and try again.';
+        show('Error');
+        return;
+      }
+
+      try {
+        const res  = await fetch(`${API}/auth/verify-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
+
+        let data = {};
+        try { data = await res.json(); } catch {}
+
+        if (res.ok) {
+          show('Success');
+        } else {
+          const detail = data.detail || `Error ${res.status}`;
+          if (detail.toLowerCase().includes('expired')) {
+            document.getElementById('errorTitle').textContent   = 'Link Expired';
+            document.getElementById('errorMessage').textContent = 'Your verification link has expired. Please register again to get a new link.';
+          } else {
+            document.getElementById('errorMessage').textContent = detail;
+          }
+          show('Error');
+        }
+      } catch {
+        document.getElementById('errorMessage').textContent = 'Something went wrong. Please try again later.';
+        show('Error');
+      }
+    })();
+  </script>
+</body>
+</html>
