@@ -179,6 +179,38 @@
     </div>
   </div>
 
+  <!-- Admin Add Student for User Modal -->
+  <div class="modal fade" id="adminAddStudentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="adminAddStudentTitle">Add Student</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="adminAddStudentAlert" class="alert alert-danger d-none mb-3"></div>
+          <input type="hidden" id="aasUserId">
+          <div class="mb-3"><label class="form-label fw-semibold">Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="aasName" placeholder="Student's full name"></div>
+          <div class="mb-3"><label class="form-label fw-semibold">Date of Birth</label><input type="date" class="form-control" id="aasDob"></div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Gender</label>
+            <select class="form-select" id="aasGender">
+              <option value="">— Select —</option>
+              <option value="Female">Female</option>
+              <option value="Male">Male</option>
+              <option value="Non-binary">Non-binary</option>
+              <option value="Prefer not to say">Prefer not to say</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-accent" id="adminAddStudentSaveBtn" onclick="saveAdminNewStudent()">Add Student</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Add Student to Registration Modal -->
   <div class="modal fade" id="addRegStudentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -235,7 +267,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
-    let editModal, adminStudentModal, addRegStudentModal, eventModal;
+    let editModal, adminStudentModal, adminAddStudentModal, addRegStudentModal, eventModal;
     let _regCtx = {}; // { eventId, regId }
 
     function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
@@ -324,11 +356,17 @@
         const res = await fetch(`${API}/admin/users/${userId}/students`, { headers: { 'Authorization': `Bearer ${token}` } });
         const students = await res.json();
         if (!students.length) {
-          content.innerHTML = `<p class="text-muted small mb-0">No students for <strong>${esc(name||studio)}</strong>.</p>`;
+          content.innerHTML = `
+            <p class="text-muted small mb-2">No students for <strong>${esc(name||studio)}</strong>.</p>
+            <button class="btn btn-accent btn-sm" onclick="openAdminAddStudent(${userId},'${esc(name||studio)}')">+ Add Student</button>`;
           return;
         }
         content.innerHTML = `
-          <p class="small fw-semibold mb-2" style="color:#E3FC02;">Students — ${esc(studio||name)}</p>
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <p class="small fw-semibold mb-0" style="color:#E3FC02;">Students — ${esc(studio||name)}</p>
+            <button class="btn btn-accent btn-sm py-0 px-2" style="font-size:.78rem;"
+              onclick="openAdminAddStudent(${userId},'${esc(name||studio)}')">+ Add Student</button>
+          </div>
           <table class="table table-sm mb-0" style="--bs-table-bg:transparent;--bs-table-color:#ccc;--bs-table-border-color:#2a2a2a;font-size:.85rem;">
             <thead><tr style="color:#888;"><th>Name</th><th>Date of Birth</th><th>Gender</th><th></th></tr></thead>
             <tbody id="admin-students-${userId}">
@@ -397,6 +435,61 @@
         if (res.ok) document.getElementById(`asr-${studentId}`).remove();
         else alert('Failed to remove student.');
       } catch { alert('Failed to remove student.'); }
+    }
+
+    function openAdminAddStudent(userId, userName) {
+      document.getElementById('aasUserId').value  = userId;
+      document.getElementById('aasName').value    = '';
+      document.getElementById('aasDob').value     = '';
+      document.getElementById('aasGender').value  = '';
+      document.getElementById('adminAddStudentTitle').textContent = `Add Student — ${userName}`;
+      document.getElementById('adminAddStudentAlert').classList.add('d-none');
+      adminAddStudentModal.show();
+    }
+
+    async function saveAdminNewStudent() {
+      const token   = localStorage.getItem('token');
+      const userId  = document.getElementById('aasUserId').value;
+      const alertEl = document.getElementById('adminAddStudentAlert');
+      const saveBtn = document.getElementById('adminAddStudentSaveBtn');
+      const name    = document.getElementById('aasName').value.trim();
+      if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      alertEl.classList.add('d-none');
+      saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+      try {
+        const res = await fetch(`${API}/admin/users/${userId}/students`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ name, date_of_birth: document.getElementById('aasDob').value||null, gender: document.getElementById('aasGender').value||null }),
+        });
+        let data = {}; try { data = await res.json(); } catch {}
+        if (res.ok) {
+          adminAddStudentModal.hide();
+          // Inject new row into the student table if it's visible
+          const tbody = document.getElementById(`admin-students-${userId}`);
+          if (tbody) {
+            const tr = document.createElement('tr');
+            tr.id = `asr-${data.id}`;
+            const dob = data.date_of_birth ? new Date(data.date_of_birth+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+            tr.innerHTML = `
+              <td>${esc(data.name)}</td>
+              <td>${dob}</td>
+              <td>${esc(data.gender||'—')}</td>
+              <td class="text-nowrap">
+                <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
+                  onclick="openAdminEditStudent(${userId},${data.id},'${esc(data.name)}','${data.date_of_birth||''}','${esc(data.gender||'')}')">Edit</button>
+                <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                  onclick="adminDeleteStudent(${userId},${data.id},'${esc(data.name)}')">Remove</button>
+              </td>`;
+            tbody.appendChild(tr);
+          } else {
+            // Table wasn't rendered (was in "no students" state) — reload the row
+            toggleStudents(userId, '', '');
+            toggleStudents(userId, '', '');
+          }
+        } else { alertEl.textContent = data.detail || `Error ${res.status}`; alertEl.classList.remove('d-none'); }
+      } catch { alertEl.textContent = 'Something went wrong.'; alertEl.classList.remove('d-none'); }
+      finally { saveBtn.disabled = false; saveBtn.textContent = 'Add Student'; }
     }
 
     function openEdit(id, firstName, lastName, studio, phone, email) {
@@ -711,10 +804,11 @@
     (async () => {
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html?next=admin.html'; return; }
-      editModal         = new bootstrap.Modal(document.getElementById('editModal'));
-      adminStudentModal = new bootstrap.Modal(document.getElementById('adminStudentModal'));
-      addRegStudentModal= new bootstrap.Modal(document.getElementById('addRegStudentModal'));
-      eventModal        = new bootstrap.Modal(document.getElementById('eventModal'));
+      editModal          = new bootstrap.Modal(document.getElementById('editModal'));
+      adminStudentModal  = new bootstrap.Modal(document.getElementById('adminStudentModal'));
+      adminAddStudentModal = new bootstrap.Modal(document.getElementById('adminAddStudentModal'));
+      addRegStudentModal = new bootstrap.Modal(document.getElementById('addRegStudentModal'));
+      eventModal         = new bootstrap.Modal(document.getElementById('eventModal'));
 
       let eventsLoaded = false;
       document.getElementById('events-tab').addEventListener('shown.bs.tab', () => {

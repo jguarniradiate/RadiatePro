@@ -6,11 +6,70 @@
   <title>Events — RadiatePro</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { background-color: #0a0a0a; color: #f0f0f0; }
-    .navbar { background-color: #000 !important; border-bottom: 2px solid #E3FC02; }
-    .brand-link { color: #E3FC02 !important; text-decoration: none; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { background-color: #0a0a0a; color: #f0f0f0; margin: 0; font-family: system-ui, sans-serif; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0;
+      width: 240px; background: #111; border-right: 1px solid #2a2a2a;
+      display: flex; flex-direction: column; z-index: 200;
+      overflow-y: auto;
+    }
+    .sidebar-brand {
+      padding: 1.5rem 1.25rem 1rem;
+      font-size: 1.2rem; font-weight: 800; color: #E3FC02;
+      letter-spacing: -.01em; border-bottom: 1px solid #2a2a2a;
+      cursor: pointer; text-decoration: none; display: block;
+    }
+    .sidebar-user {
+      padding: 1.1rem 1.25rem;
+      border-bottom: 1px solid #2a2a2a;
+      display: flex; align-items: center; gap: .75rem;
+    }
+    .avatar-sm {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: #E3FC02; color: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; font-weight: 700; flex-shrink: 0;
+    }
+    .sidebar-username { font-weight: 600; font-size: .9rem; line-height: 1.2; }
+    .sidebar-studio   { font-size: .75rem; color: #ccc; }
+    .sidebar-nav { flex: 1; padding: .75rem 0; }
+    .nav-item {
+      display: flex; align-items: center; gap: .75rem;
+      padding: .65rem 1.25rem; color: #888; font-size: .9rem;
+      cursor: pointer; border: none; background: none; width: 100%;
+      text-align: left; text-decoration: none; border-left: 3px solid transparent;
+      transition: background .15s, color .15s;
+    }
+    .nav-item:hover { background: #1a1a1a; color: #f0f0f0; }
+    .nav-item.active { color: #E3FC02; background: #1a1a1a; border-left-color: #E3FC02; font-weight: 600; }
+    .nav-item .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+    .sidebar-footer { padding: .75rem 1.25rem 1.25rem; border-top: 1px solid #2a2a2a; }
+    .sidebar-footer button {
+      background: none; border: 1px solid #333; color: #888;
+      padding: .4rem .9rem; border-radius: 6px; font-size: .85rem;
+      cursor: pointer; width: 100%; text-align: left;
+      transition: background .15s, color .15s;
+    }
+    .sidebar-footer button:hover { background: #1a1a1a; color: #f0f0f0; }
+
+    /* ── Main content ── */
+    .main-wrap { margin-left: 240px; min-height: 100vh; }
+    .topbar {
+      display: none;
+      background: #111; border-bottom: 1px solid #2a2a2a;
+      padding: .75rem 1rem; align-items: center; gap: .75rem;
+    }
+    .topbar-brand { color: #E3FC02; font-weight: 800; font-size: 1.1rem; flex: 1; }
+    .content { padding: 2rem; max-width: 780px; }
+
+    /* ── Events ── */
     .btn-accent { background-color: #E3FC02; color: #000; font-weight: 700; border: none; }
     .btn-accent:hover { background-color: #cce500; color: #000; }
+    .page-title { color: #E3FC02; }
+    #spinner { color: #E3FC02; }
     .event-card {
       background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px;
       transition: border-color .2s;
@@ -24,51 +83,105 @@
     }
     .event-title { color: #f0f0f0; font-weight: 700; font-size: 1.1rem; }
     .event-meta { color: #888; font-size: .85rem; }
-    .page-title { color: #E3FC02; }
-    #spinner { color: #E3FC02; }
     .badge-convention  { background: #0d6efd; color: #fff; font-size: .75rem; }
     .badge-competition { background: #fd7e14; color: #000; font-size: .75rem; }
+    .reg-badge {
+      background: #198754; color: #fff; font-size: .72rem; font-weight: 600;
+      padding: .25rem .6rem; border-radius: 20px; white-space: nowrap;
+    }
     /* Modal */
     .modal-content { background: #1a1a1a; border: 1px solid #2a2a2a; color: #f0f0f0; }
     .modal-header { border-bottom-color: #2a2a2a; }
     .modal-footer { border-top-color: #2a2a2a; }
     .modal-title { color: #E3FC02; }
     .btn-close { filter: invert(1); }
-    .reg-badge {
-      background: #198754; color: #fff; font-size: .72rem; font-weight: 600;
-      padding: .25rem .6rem; border-radius: 20px; white-space: nowrap;
-    }
     /* Student toggle buttons */
     .stu-toggle {
-      border: 1px solid #444; background: #111; color: #aaa;
-      border-radius: 20px; padding: .3rem .85rem; font-size: .85rem;
+      border: 1px solid #333; background: #111; color: #aaa;
+      border-radius: 20px; padding: .3rem .85rem .3rem .55rem; font-size: .85rem;
       cursor: pointer; transition: all .15s; user-select: none;
+      display: inline-flex; align-items: center; gap: .5rem;
     }
-    .stu-toggle:hover { border-color: #E3FC02; color: #E3FC02; }
-    .stu-toggle.selected {
-      background: #E3FC02; border-color: #E3FC02; color: #000; font-weight: 700;
+    .stu-toggle::before {
+      content: '';
+      width: 13px; height: 13px; border-radius: 50%;
+      border: 2px solid #555; background: transparent;
+      flex-shrink: 0; transition: background .15s, border-color .15s;
+    }
+    .stu-toggle:hover { border-color: #666; color: #ddd; }
+    .stu-toggle:hover::before { border-color: #999; }
+    .stu-toggle.selected { border-color: #444; color: #f0f0f0; background: #1a1a1a; }
+    .stu-toggle.selected::before { background: #E3FC02; border-color: #E3FC02; }
+
+    /* ── Responsive ── */
+    @media (max-width: 767px) {
+      .sidebar { transform: translateX(-100%); transition: transform .25s; }
+      .sidebar.open { transform: translateX(0); }
+      .main-wrap { margin-left: 0; }
+      .topbar { display: flex; }
+      .content { padding: 1.25rem; }
     }
   </style>
 </head>
 <body>
 
-  <nav class="navbar navbar-dark px-4 py-3">
-    <a href="dashboard.html" class="brand-link fw-bold fs-5">RadiatePro</a>
-    <div class="ms-auto d-flex align-items-center gap-3">
-      <a href="dashboard.html" class="text-muted text-decoration-none small">Dashboard</a>
-      <button class="btn btn-outline-secondary btn-sm" onclick="logout()">Sign Out</button>
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar" id="sidebar">
+    <a href="dashboard.html" class="sidebar-brand">RadiatePro</a>
+
+    <div class="sidebar-user">
+      <div class="avatar-sm" id="sidebarAvatar">?</div>
+      <div>
+        <div class="sidebar-username" id="sidebarName">Loading…</div>
+        <div class="sidebar-studio"   id="sidebarStudio"></div>
+      </div>
+    </div>
+
+    <div class="sidebar-nav">
+      <a class="nav-item" href="dashboard.html">
+        <span class="nav-icon">&#127968;</span> Home
+      </a>
+      <a class="nav-item" href="dashboard.html#profile">
+        <span class="nav-icon">&#128100;</span> My Profile
+      </a>
+      <a class="nav-item" href="dashboard.html#students">
+        <span class="nav-icon">&#127891;</span> My Students
+      </a>
+      <a class="nav-item active" href="events.html">
+        <span class="nav-icon">&#128197;</span> Events
+      </a>
+      <a class="nav-item" href="admin.html" id="adminLink" style="display:none;">
+        <span class="nav-icon">&#9881;</span> Admin Portal
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <button onclick="logout()">&#x2192; Sign Out</button>
     </div>
   </nav>
 
-  <div class="container py-5" style="max-width: 780px;">
-    <h4 class="fw-bold page-title mb-4">Events</h4>
-    <div id="spinner" class="text-center py-5">
-      <div class="spinner-border" role="status"><span class="visually-hidden">Loading…</span></div>
+  <!-- ── Main wrap ── -->
+  <div class="main-wrap">
+
+    <!-- Mobile topbar -->
+    <div class="topbar" id="topbar">
+      <button style="background:none;border:none;color:#E3FC02;font-size:1.4rem;padding:0;" onclick="toggleSidebar()">&#9776;</button>
+      <span class="topbar-brand">RadiatePro</span>
     </div>
-    <div id="emptyMsg" class="text-muted text-center py-5 d-none">No events at this time.</div>
-    <div id="errorMsg" class="alert alert-danger d-none"></div>
-    <div id="eventsList"></div>
+
+    <div class="content">
+      <h4 class="fw-bold page-title mb-4">Events</h4>
+      <div id="spinner" class="text-center py-5">
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading…</span></div>
+      </div>
+      <div id="emptyMsg" class="text-muted text-center py-5 d-none">No events at this time.</div>
+      <div id="errorMsg" class="alert alert-danger d-none"></div>
+      <div id="eventsList"></div>
+    </div>
   </div>
+
+  <!-- Mobile sidebar overlay -->
+  <div id="sidebarOverlay" onclick="toggleSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:199;"></div>
 
   <!-- Registration Modal -->
   <div class="modal fade" id="regModal" tabindex="-1" aria-hidden="true">
@@ -84,9 +197,42 @@
           <p class="small text-muted mb-3">Tap a student to toggle their attendance:</p>
           <div id="studentToggles" class="d-flex flex-wrap gap-2"></div>
           <p id="noStudentsMsg" class="text-muted small d-none">
-            You haven't added any students yet.
-            <a href="dashboard.html" class="text-decoration-none" style="color:#E3FC02;">Add in Dashboard →</a>
+            You haven't added any students yet. Add one below:
           </p>
+
+          <!-- Quick add student -->
+          <div class="mt-3 pt-3" style="border-top:1px solid #2a2a2a;">
+            <button class="btn btn-outline-secondary btn-sm" style="font-size:.8rem;" type="button"
+              onclick="toggleAddStudentForm()">+ Add New Student</button>
+            <div id="quickAddStudentForm" class="mt-2 d-none">
+              <div id="quickAddAlert" class="alert alert-danger d-none mb-2" style="font-size:.8rem;padding:.4rem .75rem;"></div>
+              <div class="d-flex gap-2 flex-wrap align-items-end">
+                <div>
+                  <label class="form-label mb-1" style="font-size:.75rem;color:#aaa;">Name *</label>
+                  <input type="text" id="qsName" class="form-control form-control-sm" placeholder="Full name"
+                    style="background:#111;border-color:#333;color:#f0f0f0;width:180px;">
+                </div>
+                <div>
+                  <label class="form-label mb-1" style="font-size:.75rem;color:#aaa;">Date of Birth</label>
+                  <input type="date" id="qsDob" class="form-control form-control-sm"
+                    style="background:#111;border-color:#333;color:#f0f0f0;width:150px;">
+                </div>
+                <div>
+                  <label class="form-label mb-1" style="font-size:.75rem;color:#aaa;">Gender</label>
+                  <select id="qsGender" class="form-select form-select-sm"
+                    style="background:#111;border-color:#333;color:#f0f0f0;width:140px;">
+                    <option value="">— Select —</option>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Non-binary">Non-binary</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                </div>
+                <button class="btn btn-accent btn-sm" id="qsSaveBtn" onclick="quickSaveStudent()"
+                  style="height:31px;">Add</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-danger btn-sm me-auto" id="unregBtn" onclick="unregisterFromEvent()" style="display:none;">
@@ -107,6 +253,13 @@
     let regModal;
 
     function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
+
+    function toggleSidebar() {
+      const sb  = document.getElementById('sidebar');
+      const ovl = document.getElementById('sidebarOverlay');
+      const open = sb.classList.toggle('open');
+      ovl.style.display = open ? 'block' : 'none';
+    }
 
     function esc(str) {
       return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -168,6 +321,55 @@
 
       document.getElementById('eventsList').innerHTML =
         renderGroup('Upcoming', upcoming) + renderGroup('Past Events', past);
+    }
+
+    // ── Quick-add student ──────────────────────────────────────────────────────
+
+    function toggleAddStudentForm() {
+      const form = document.getElementById('quickAddStudentForm');
+      form.classList.toggle('d-none');
+      if (!form.classList.contains('d-none')) document.getElementById('qsName').focus();
+    }
+
+    async function quickSaveStudent() {
+      const token   = localStorage.getItem('token');
+      const name    = document.getElementById('qsName').value.trim();
+      const alertEl = document.getElementById('quickAddAlert');
+      const saveBtn = document.getElementById('qsSaveBtn');
+      if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      alertEl.classList.add('d-none');
+      saveBtn.disabled = true; saveBtn.innerHTML = '…';
+      try {
+        const res = await fetch(`${API}/students`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({
+            name,
+            date_of_birth: document.getElementById('qsDob').value || null,
+            gender: document.getElementById('qsGender').value || null,
+          }),
+        });
+        let data = {}; try { data = await res.json(); } catch {}
+        if (res.ok) {
+          // Add to local list and render a new toggle button (pre-selected)
+          myStudents.push(data);
+          const container = document.getElementById('studentToggles');
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'stu-toggle selected';
+          btn.dataset.studentId = data.id;
+          btn.onclick = function() { toggleStudentBtn(this); };
+          btn.textContent = data.name;
+          container.appendChild(btn);
+          // Clear form and hide
+          document.getElementById('qsName').value = '';
+          document.getElementById('qsDob').value  = '';
+          document.getElementById('qsGender').value = '';
+          document.getElementById('quickAddStudentForm').classList.add('d-none');
+          document.getElementById('noStudentsMsg').classList.add('d-none');
+        } else { alertEl.textContent = data.detail || `Error ${res.status}`; alertEl.classList.remove('d-none'); }
+      } catch { alertEl.textContent = 'Something went wrong.'; alertEl.classList.remove('d-none'); }
+      finally { saveBtn.disabled = false; saveBtn.textContent = 'Add'; }
     }
 
     // ── Toggle-button helpers ──────────────────────────────────────────────────
@@ -288,11 +490,21 @@
       if (!token) { window.location.href = 'login.html'; return; }
       regModal = new bootstrap.Modal(document.getElementById('regModal'));
       try {
-        const [studRes, evtRes, regRes] = await Promise.all([
+        const [userRes, studRes, evtRes, regRes] = await Promise.all([
+          fetch(`${API}/auth/me`,               { headers: { 'Authorization': `Bearer ${token}` } }),
           fetch(`${API}/students`,               { headers: { 'Authorization': `Bearer ${token}` } }),
           fetch(`${API}/events`),
           fetch(`${API}/events/my-registrations`,{ headers: { 'Authorization': `Bearer ${token}` } }),
         ]);
+
+        if (userRes.status === 401) { localStorage.removeItem('token'); window.location.href = 'login.html'; return; }
+        const user = await userRes.json();
+        const firstName = user.first_name || '';
+        document.getElementById('sidebarAvatar').textContent = (firstName || user.email).charAt(0).toUpperCase();
+        document.getElementById('sidebarName').textContent   = firstName ? `${firstName} ${user.last_name||''}`.trim() : user.email;
+        document.getElementById('sidebarStudio').textContent = user.studio_name || '';
+        if (user.is_admin) document.getElementById('adminLink').style.display = '';
+
         myStudents      = studRes.ok ? await studRes.json() : [];
         const events    = evtRes.ok  ? await evtRes.json()  : [];
         myRegistrations = regRes.ok  ? await regRes.json()  : {};

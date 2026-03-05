@@ -712,6 +712,27 @@ def admin_list_students(
     return db.query(models.Student).filter(models.Student.user_id == user_id).order_by(models.Student.name).all()
 
 
+@app.post("/admin/users/{user_id}/students", response_model=schemas.StudentOut, status_code=201)
+def admin_create_student(
+    user_id: int,
+    body: schemas.StudentCreate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Create a student for a given user. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    student = models.Student(user_id=user_id, **body.model_dump())
+    db.add(student)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
 @app.patch("/admin/users/{user_id}/students/{student_id}", response_model=schemas.StudentOut)
 def admin_update_student(
     user_id: int,

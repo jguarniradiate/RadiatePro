@@ -33,7 +33,7 @@
       font-size: 1rem; font-weight: 700; flex-shrink: 0;
     }
     .sidebar-username { font-weight: 600; font-size: .9rem; line-height: 1.2; }
-    .sidebar-studio   { font-size: .75rem; color: #666; }
+    .sidebar-studio   { font-size: .75rem; color: #ccc; }
     .sidebar-nav { flex: 1; padding: .75rem 0; }
     .nav-item {
       display: flex; align-items: center; gap: .75rem;
@@ -155,7 +155,7 @@
           <div class="avatar-sm" id="homeAvatar" style="width:56px;height:56px;font-size:1.5rem;">?</div>
           <div>
             <h4 class="mb-0 fw-bold">Welcome back, <span style="color:#E3FC02;" id="homeWelcomeName">…</span></h4>
-            <p class="mb-0 text-muted small" id="homeStudio"></p>
+            <p class="mb-0 small" style="color:#f0f0f0;" id="homeStudio"></p>
           </div>
         </div>
         <div class="row g-3 mb-4">
@@ -186,29 +186,27 @@
         </div>
 
         <!-- View Mode -->
-        <div id="viewMode" class="card-dark p-4">
-          <div class="row g-4">
-            <div class="col-sm-6">
-              <p class="label-muted">First Name</p>
-              <p class="field-value" id="fieldFirstName">—</p>
+        <div id="viewMode" class="card-dark p-3">
+          <div class="d-flex flex-column gap-0">
+            <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;">
+              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">First Name</span>
+              <span class="field-value" id="fieldFirstName">—</span>
             </div>
-            <div class="col-sm-6">
-              <p class="label-muted">Last Name</p>
-              <p class="field-value" id="fieldLastName">—</p>
+            <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;">
+              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">Last Name</span>
+              <span class="field-value" id="fieldLastName">—</span>
             </div>
-            <div class="col-12"><hr class="divider"></div>
-            <div class="col-sm-6">
-              <p class="label-muted">Studio Name</p>
-              <p class="field-value" id="fieldStudio">—</p>
+            <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;">
+              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">Studio Name</span>
+              <span class="field-value" id="fieldStudio">—</span>
             </div>
-            <div class="col-sm-6">
-              <p class="label-muted">Phone Number</p>
-              <p class="field-value" id="fieldPhone">—</p>
+            <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;">
+              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">Phone</span>
+              <span class="field-value" id="fieldPhone">—</span>
             </div>
-            <div class="col-12"><hr class="divider"></div>
-            <div class="col-sm-6">
-              <p class="label-muted">Email</p>
-              <p class="field-value" id="fieldEmail">—</p>
+            <div class="d-flex align-items-center py-2">
+              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">Email</span>
+              <span class="field-value" id="fieldEmail">—</span>
             </div>
           </div>
         </div>
@@ -597,6 +595,9 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
+    // Support deep-linking via hash: dashboard.html#profile, #students
+    const _hash = location.hash.replace('#','');
+    if (['profile','students'].includes(_hash)) showSection(_hash);
     loadUser();
   </script>
 </body>
