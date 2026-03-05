@@ -88,6 +88,9 @@
       <li class="nav-item">
         <button class="nav-link" id="events-tab" data-bs-toggle="tab" data-bs-target="#eventsPane" type="button">Events</button>
       </li>
+      <li class="nav-item">
+        <button class="nav-link" id="payments-tab" data-bs-toggle="tab" data-bs-target="#paymentsPane" type="button">Payments</button>
+      </li>
     </ul>
 
     <div class="tab-content">
@@ -156,6 +159,42 @@
         <div id="eventsEmpty" class="text-muted text-center py-3 d-none">No events yet.</div>
         <div id="eventsError" class="alert alert-danger d-none"></div>
         <div id="eventsList"></div>
+      </div>
+
+      <!-- ── Payments Tab ── -->
+      <div class="tab-pane fade" id="paymentsPane">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h4 class="fw-bold page-title mb-0">Payments</h4>
+          <button class="btn btn-accent btn-sm" onclick="loadPayments()">&#8635; Refresh</button>
+        </div>
+
+        <!-- Summary stats -->
+        <div class="row g-3 mb-4">
+          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="payStatTotal">—</div><div class="text-muted small">Total Transactions</div></div></div>
+          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="payStatRevenue">—</div><div class="text-muted small">Total Revenue</div></div></div>
+          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="payStatStudents">—</div><div class="text-muted small">Students Paid</div></div></div>
+          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="payStatFree">—</div><div class="text-muted small">Free Regs</div></div></div>
+        </div>
+
+        <div id="paymentsLoading" class="text-center py-3"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div></div>
+        <div id="paymentsEmpty" class="text-muted text-center py-3 d-none">No payments recorded yet.</div>
+        <div id="paymentsError" class="alert alert-danger d-none"></div>
+        <div class="table-responsive d-none" id="paymentsTableWrap">
+          <table class="table tbl align-middle mb-0">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Studio</th>
+                <th>Event</th>
+                <th>Students</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="paymentsBody"></tbody>
+          </table>
+        </div>
       </div>
 
     </div>
@@ -1158,6 +1197,80 @@
       document.getElementById('events-tab').addEventListener('shown.bs.tab', () => {
         if (!eventsLoaded) { eventsLoaded = true; loadEvents(); }
       });
+
+      // ── Payments ────────────────────────────────────────────────────────────
+
+      async function loadPayments() {
+        const token = localStorage.getItem('token');
+        document.getElementById('paymentsLoading').classList.remove('d-none');
+        document.getElementById('paymentsEmpty').classList.add('d-none');
+        document.getElementById('paymentsError').classList.add('d-none');
+        document.getElementById('paymentsTableWrap').classList.add('d-none');
+
+        try {
+          const res = await fetch(`${API}/admin/payments`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const payments = await res.json();
+
+          document.getElementById('paymentsLoading').classList.add('d-none');
+
+          // Stats
+          const total    = payments.length;
+          const revenue  = payments.reduce((s, p) => s + (p.amount_paid || 0), 0);
+          const students = payments.reduce((s, p) => s + (p.student_count || 0), 0);
+          const freeRegs = payments.filter(p => p.payment_status === 'free').length;
+          document.getElementById('payStatTotal').textContent   = total;
+          document.getElementById('payStatRevenue').textContent = `$${revenue.toFixed(2)}`;
+          document.getElementById('payStatStudents').textContent = students;
+          document.getElementById('payStatFree').textContent    = freeRegs;
+
+          if (!payments.length) {
+            document.getElementById('paymentsEmpty').classList.remove('d-none');
+            return;
+          }
+
+          document.getElementById('paymentsTableWrap').classList.remove('d-none');
+          document.getElementById('paymentsBody').innerHTML = payments.map(p => {
+            const evDate = p.event_date
+              ? new Date(p.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : '—';
+            const paidOn = p.finalized_at
+              ? new Date(p.finalized_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : '—';
+            const amtStr = p.payment_status === 'free'
+              ? '<span style="color:#4ade80;font-weight:600;">Free</span>'
+              : `<span style="font-weight:600;">$${Number(p.amount_paid).toFixed(2)}</span>`;
+            const statusBadge = p.payment_status === 'free'
+              ? '<span class="badge" style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;">Free</span>'
+              : '<span class="badge" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;">&#10003; Paid</span>';
+            const eName = (p.user_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const eStudio = (p.studio_name||'Independent').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const eEvent = (p.event_title||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            return `<tr>
+              <td class="fw-semibold">${eName}</td>
+              <td style="color:#aaa;font-size:.88rem;">${eStudio}</td>
+              <td>${eEvent}</td>
+              <td>${p.student_count}</td>
+              <td>${amtStr}</td>
+              <td>${statusBadge}</td>
+              <td style="color:#888;font-size:.85rem;white-space:nowrap;">${paidOn}</td>
+            </tr>`;
+          }).join('');
+
+        } catch (err) {
+          document.getElementById('paymentsLoading').classList.add('d-none');
+          document.getElementById('paymentsError').textContent = 'Failed to load payments.';
+          document.getElementById('paymentsError').classList.remove('d-none');
+        }
+      }
+
+      let paymentsLoaded = false;
+      document.getElementById('payments-tab').addEventListener('shown.bs.tab', () => {
+        if (!paymentsLoaded) { paymentsLoaded = true; loadPayments(); }
+      });
+
       loadUsers();
     })();
   </script>

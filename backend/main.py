@@ -3,10 +3,15 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import FastAPI, Depends, HTTPException, Header
+import stripe
+from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://goldfish-app-fuu3t.ondigitalocean.app")
 
 import models
 import schemas
@@ -68,6 +73,12 @@ def run_migrations(eng):
             student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
             UNIQUE(registration_id, student_id)
         )""",
+        # Payment / finalization columns
+        "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS is_finalized BOOLEAN NOT NULL DEFAULT false",
+        "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS payment_status VARCHAR",
+        "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS stripe_session_id VARCHAR",
+        "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(10,2)",
+        "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMPTZ",
     ]
     with eng.connect() as conn:
         for stmt in stmts:
@@ -530,7 +541,14 @@ def get_my_registrations(
     result = {}
     for reg in regs:
         student_ids = [ers.student_id for ers in reg.attending_students]
-        result[str(reg.event_id)] = {"registration_id": reg.id, "student_ids": student_ids}
+        result[str(reg.event_id)] = {
+            "registration_id": reg.id,
+            "student_ids": student_ids,
+            "is_finalized": reg.is_finalized,
+            "payment_status": reg.payment_status,
+            "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else None,
+            "stripe_session_id": reg.stripe_session_id,
+        }
     return result
 
 
@@ -551,6 +569,12 @@ def register_for_event(
         models.EventRegistration.event_id == event_id,
         models.EventRegistration.user_id == user.id,
     ).first()
+
+    if existing and existing.is_finalized:
+        raise HTTPException(
+            status_code=400,
+            detail="This registration is finalized. Use the Add Dancers flow to add more students."
+        )
 
     # Capacity check
     if event.max_students is not None and body.student_ids:
@@ -616,9 +640,350 @@ def unregister_from_event(
     ).first()
     if not reg:
         raise HTTPException(status_code=404, detail="Not registered for this event.")
+    if reg.is_finalized:
+        raise HTTPException(
+            status_code=400,
+            detail="Finalized registrations cannot be cancelled. Please contact the event organizer."
+        )
     db.delete(reg)
     db.commit()
     return {"message": "Unregistered from event."}
+
+
+def _effective_price(event: models.Event):
+    """Return (price_in_dollars, is_free) for the event right now."""
+    from decimal import Decimal as D
+    now = datetime.now(timezone.utc)
+    if event.early_price is not None and event.early_price_deadline is not None:
+        dl = event.early_price_deadline
+        if dl.tzinfo is None:
+            dl = dl.replace(tzinfo=timezone.utc)
+        price = event.early_price if now < dl else event.regular_price
+    else:
+        price = event.regular_price
+    if price is None:
+        return D("0"), True
+    return D(str(price)), False
+
+
+def _build_reg_out(reg: models.EventRegistration) -> schemas.EventRegistrationOut:
+    return schemas.EventRegistrationOut(
+        id=reg.id,
+        event_id=reg.event_id,
+        user_id=reg.user_id,
+        student_ids=[ers.student_id for ers in reg.attending_students],
+        created_at=reg.created_at,
+        is_finalized=reg.is_finalized,
+        payment_status=reg.payment_status,
+        amount_paid=reg.amount_paid,
+    )
+
+
+@app.post("/events/{event_id}/register/checkout", response_model=schemas.CheckoutSessionOut, status_code=201)
+def create_checkout(
+    event_id: int,
+    body: schemas.EventRegistrationCreate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Create or update an unfinalized registration and return a Stripe Checkout URL."""
+    user = get_current_user(authorization, db)
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+    if not body.student_ids:
+        raise HTTPException(status_code=400, detail="Select at least one student.")
+
+    existing = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.user_id == user.id,
+    ).first()
+    if existing and existing.is_finalized:
+        raise HTTPException(status_code=400, detail="Registration already finalized. Use Add Dancers.")
+
+    # Capacity check
+    if event.max_students is not None:
+        current_total = sum(len(r.attending_students) for r in event.registrations)
+        if existing:
+            current_total -= len(existing.attending_students)
+        available = event.max_students - current_total
+        if len(body.student_ids) > available:
+            raise HTTPException(status_code=400, detail=f"Only {available} spot(s) remaining.")
+
+    price_per_student, is_free = _effective_price(event)
+
+    # Upsert registration + students
+    if existing:
+        db.query(models.EventRegistrationStudent).filter(
+            models.EventRegistrationStudent.registration_id == existing.id
+        ).delete()
+        reg = existing
+    else:
+        reg = models.EventRegistration(event_id=event_id, user_id=user.id)
+        db.add(reg)
+        db.flush()
+
+    for sid in body.student_ids:
+        s = db.query(models.Student).filter(
+            models.Student.id == sid, models.Student.user_id == user.id
+        ).first()
+        if s:
+            db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+
+    if is_free:
+        reg.is_finalized = True
+        reg.payment_status = "free"
+        reg.amount_paid = 0
+        reg.finalized_at = datetime.now(timezone.utc)
+        db.commit()
+        return schemas.CheckoutSessionOut(checkout_url="", session_id="free")
+
+    # Paid event — create Stripe Checkout Session
+    amount_cents = int(price_per_student * len(body.student_ids) * 100)
+    user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": f"{event.title} — {len(body.student_ids)} dancer(s)"},
+                    "unit_amount": int(price_per_student * 100),
+                },
+                "quantity": len(body.student_ids),
+            }],
+            mode="payment",
+            customer_email=user.email,
+            success_url=(
+                f"{FRONTEND_URL}/events.html"
+                f"?payment=success&event_id={event_id}&session_id={{CHECKOUT_SESSION_ID}}"
+            ),
+            cancel_url=f"{FRONTEND_URL}/events.html?payment=cancelled&event_id={event_id}",
+            metadata={"registration_id": str(reg.id), "event_id": str(event_id), "user_name": user_name},
+        )
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message}")
+
+    reg.payment_status = "pending"
+    reg.stripe_session_id = session.id
+    db.commit()
+    return schemas.CheckoutSessionOut(checkout_url=session.url, session_id=session.id)
+
+
+@app.post("/events/{event_id}/register/verify-payment", response_model=schemas.EventRegistrationOut)
+def verify_payment(
+    event_id: int,
+    body: schemas.VerifyPaymentRequest,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Verify a Stripe Checkout session and finalize the registration if paid."""
+    user = get_current_user(authorization, db)
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.user_id == user.id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found.")
+    if reg.is_finalized:
+        return _build_reg_out(reg)
+
+    try:
+        session = stripe.checkout.Session.retrieve(body.session_id)
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message}")
+
+    if session.payment_status == "paid":
+        from decimal import Decimal as D
+        reg.is_finalized = True
+        reg.payment_status = "paid"
+        reg.amount_paid = D(str(session.amount_total)) / 100
+        reg.finalized_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(reg)
+
+    return _build_reg_out(reg)
+
+
+@app.post("/events/{event_id}/register/add-students", response_model=schemas.CheckoutSessionOut, status_code=201)
+def add_students_to_finalized(
+    event_id: int,
+    body: schemas.EventRegistrationCreate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Add new dancers to a finalized registration and return a Stripe Checkout URL."""
+    user = get_current_user(authorization, db)
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.user_id == user.id,
+    ).first()
+    if not reg or not reg.is_finalized:
+        raise HTTPException(status_code=400, detail="No finalized registration found for this event.")
+    if not body.student_ids:
+        raise HTTPException(status_code=400, detail="Select at least one new student.")
+
+    existing_ids = {ers.student_id for ers in reg.attending_students}
+    new_ids = [sid for sid in body.student_ids if sid not in existing_ids]
+    if not new_ids:
+        raise HTTPException(status_code=400, detail="All selected students are already registered.")
+
+    # Capacity check for new students only
+    if event.max_students is not None:
+        current_total = sum(len(r.attending_students) for r in event.registrations)
+        available = event.max_students - current_total
+        if len(new_ids) > available:
+            raise HTTPException(status_code=400, detail=f"Only {available} spot(s) remaining.")
+
+    price_per_student, is_free = _effective_price(event)
+
+    if is_free:
+        for sid in new_ids:
+            s = db.query(models.Student).filter(
+                models.Student.id == sid, models.Student.user_id == user.id
+            ).first()
+            if s:
+                db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+        db.commit()
+        return schemas.CheckoutSessionOut(checkout_url="", session_id="free")
+
+    # Paid — create checkout for new students only
+    user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": f"{event.title} — {len(new_ids)} additional dancer(s)"},
+                    "unit_amount": int(price_per_student * 100),
+                },
+                "quantity": len(new_ids),
+            }],
+            mode="payment",
+            customer_email=user.email,
+            success_url=(
+                f"{FRONTEND_URL}/events.html"
+                f"?payment=success&event_id={event_id}&session_id={{CHECKOUT_SESSION_ID}}"
+                f"&new_students={','.join(str(i) for i in new_ids)}"
+            ),
+            cancel_url=f"{FRONTEND_URL}/events.html?payment=cancelled&event_id={event_id}",
+            metadata={
+                "registration_id": str(reg.id),
+                "event_id": str(event_id),
+                "new_student_ids": ",".join(str(i) for i in new_ids),
+                "user_name": user_name,
+            },
+        )
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message}")
+
+    reg.stripe_session_id = session.id
+    db.commit()
+    return schemas.CheckoutSessionOut(checkout_url=session.url, session_id=session.id)
+
+
+@app.post("/webhooks/stripe")
+async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    """Handle Stripe webhook events — finalizes registrations on checkout.session.completed."""
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+    except stripe.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid Stripe signature.")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Webhook error.")
+
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        reg_id = int(session.get("metadata", {}).get("registration_id", 0))
+        new_student_ids_raw = session.get("metadata", {}).get("new_student_ids", "")
+        reg = db.query(models.EventRegistration).filter(models.EventRegistration.id == reg_id).first()
+        if reg:
+            from decimal import Decimal as D
+            # Add new students if this was an add-dancers checkout
+            if new_student_ids_raw:
+                for sid_str in new_student_ids_raw.split(","):
+                    try:
+                        sid = int(sid_str.strip())
+                        already = db.query(models.EventRegistrationStudent).filter(
+                            models.EventRegistrationStudent.registration_id == reg.id,
+                            models.EventRegistrationStudent.student_id == sid,
+                        ).first()
+                        if not already:
+                            db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+                    except ValueError:
+                        pass
+            amount_total = session.get("amount_total") or 0
+            prev_paid = reg.amount_paid or D("0")
+            reg.is_finalized = True
+            reg.payment_status = "paid"
+            reg.amount_paid = prev_paid + D(str(amount_total)) / 100
+            reg.finalized_at = datetime.now(timezone.utc)
+            db.commit()
+
+    return {"ok": True}
+
+
+@app.get("/events/my-payments")
+def get_my_payments(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Return all finalized/paid registrations for the current user as transaction history."""
+    user = get_current_user(authorization, db)
+    regs = db.query(models.EventRegistration).filter(
+        models.EventRegistration.user_id == user.id,
+        models.EventRegistration.payment_status.in_(["paid", "free"]),
+    ).order_by(models.EventRegistration.finalized_at.desc()).all()
+    result = []
+    for reg in regs:
+        result.append({
+            "registration_id": reg.id,
+            "event_id": reg.event_id,
+            "event_title": reg.event.title,
+            "event_date": reg.event.event_date.isoformat() if reg.event.event_date else None,
+            "student_count": len(reg.attending_students),
+            "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else 0,
+            "payment_status": reg.payment_status,
+            "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
+        })
+    return result
+
+
+@app.get("/admin/payments")
+def admin_list_payments(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Return all paid registrations across all users. Admin only."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    regs = db.query(models.EventRegistration).filter(
+        models.EventRegistration.payment_status.in_(["paid", "free"]),
+    ).order_by(models.EventRegistration.finalized_at.desc()).all()
+    result = []
+    for reg in regs:
+        user_name = f"{reg.user.first_name or ''} {reg.user.last_name or ''}".strip() or reg.user.email
+        result.append({
+            "registration_id": reg.id,
+            "event_id": reg.event_id,
+            "event_title": reg.event.title,
+            "user_id": reg.user_id,
+            "user_name": user_name,
+            "studio_name": reg.user.studio_name,
+            "student_count": len(reg.attending_students),
+            "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else 0,
+            "payment_status": reg.payment_status,
+            "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
+        })
+    return result
 
 
 @app.get("/admin/events/{event_id}/registrations")

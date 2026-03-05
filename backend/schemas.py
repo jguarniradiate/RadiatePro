@@ -143,5 +143,17 @@ class EventRegistrationOut(BaseModel):
     user_id: int
     student_ids: list[int] = []
     created_at: datetime | None = None
+    is_finalized: bool = False
+    payment_status: str | None = None
+    amount_paid: Decimal | None = None
 
     model_config = {"from_attributes": True}
+
+
+class CheckoutSessionOut(BaseModel):
+    checkout_url: str   # empty string = free event, skip redirect
+    session_id: str     # 'free' for free events
+
+
+class VerifyPaymentRequest(BaseModel):
+    session_id: str

@@ -93,6 +93,19 @@
     .stat-mini { background: #111; border: 1px solid #2a2a2a; border-radius: 10px; padding: 1.1rem; }
     .stat-num  { color: #E3FC02; font-size: 1.6rem; font-weight: 700; line-height: 1; }
 
+    /* ── Transactions ── */
+    .tx-status-paid { background: rgba(34,197,94,.15); color: #22c55e; border: 1px solid #22c55e; font-size: .72rem; font-weight: 600; padding: .2rem .5rem; border-radius: 20px; }
+    .tx-status-free { background: rgba(34,197,94,.1);  color: #4ade80; border: 1px solid #4ade80; font-size: .72rem; font-weight: 600; padding: .2rem .5rem; border-radius: 20px; }
+
+    /* ── Profile mobile ── */
+    .profile-field-row { display: flex; align-items: center; padding: .5rem 0; border-bottom: 1px solid #2a2a2a; flex-wrap: wrap; gap: .15rem; }
+    .profile-field-row:last-child { border-bottom: none; }
+    .profile-field-label { color: #888; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; width: 130px; flex-shrink: 0; }
+    @media (max-width: 480px) {
+      .profile-field-label { width: 100%; margin-bottom: .1rem; }
+      .profile-field-row .field-value { word-break: break-all; }
+    }
+
     /* ── Responsive ── */
     @media (max-width: 767px) {
       .sidebar { transform: translateX(-100%); transition: transform .25s; }
@@ -132,6 +145,9 @@
       <a class="nav-item" href="events.html">
         <span class="nav-icon">&#128197;</span> Events
       </a>
+      <button class="nav-item" id="nav-transactions" onclick="showSection('transactions')">
+        <span class="nav-icon">&#128179;</span> Transactions
+      </button>
     </div>
 
     <div class="sidebar-footer">
@@ -209,26 +225,26 @@
         <!-- View Mode -->
         <div id="viewMode" class="card-dark p-3">
           <div class="d-flex flex-column gap-0">
-            <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;">
-              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">First Name</span>
+            <div class="profile-field-row">
+              <span class="profile-field-label">First Name</span>
               <span class="field-value" id="fieldFirstName">—</span>
             </div>
-            <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;">
-              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">Last Name</span>
+            <div class="profile-field-row">
+              <span class="profile-field-label">Last Name</span>
               <span class="field-value" id="fieldLastName">—</span>
             </div>
-            <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;" id="fieldStudioRow">
-              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;" id="fieldStudioLabel">Studio Name</span>
+            <div class="profile-field-row" id="fieldStudioRow">
+              <span class="profile-field-label" id="fieldStudioLabel">Studio Name</span>
               <span class="field-value" id="fieldStudio">—</span>
             </div>
-            <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;">
-              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">Phone</span>
+            <div class="profile-field-row">
+              <span class="profile-field-label">Phone</span>
               <span class="field-value" id="fieldPhone">—</span>
             </div>
-            <div class="d-flex align-items-center py-2">
-              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">Email</span>
-              <span class="field-value" id="fieldEmail">—</span>
-              <span id="fieldVerified" class="ms-2"></span>
+            <div class="profile-field-row" style="border-bottom:none;">
+              <span class="profile-field-label">Email</span>
+              <span class="field-value" id="fieldEmail" style="word-break:break-all;">—</span>
+              <span id="fieldVerified" class="ms-2 flex-shrink-0"></span>
             </div>
           </div>
         </div>
@@ -287,6 +303,40 @@
               <tr><th>Name</th><th>Date of Birth</th><th>Gender</th><th></th></tr>
             </thead>
             <tbody id="studentsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Transactions Section ── -->
+      <div id="sec-transactions" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h5 class="section-title mb-0">Transactions</h5>
+          <button class="btn btn-outline-secondary btn-sm" onclick="loadTransactions()">&#8635; Refresh</button>
+        </div>
+
+        <div id="txLoading" class="text-center py-4">
+          <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+        </div>
+        <div id="txEmpty" class="text-center py-5 d-none">
+          <div style="font-size:2rem;margin-bottom:.75rem;">&#128179;</div>
+          <p class="mb-0" style="color:#888;">No transactions yet.</p>
+          <p class="mb-0 mt-1" style="color:#555;font-size:.85rem;">Payments will appear here after you register for a paid event.</p>
+        </div>
+        <div id="txError" class="alert alert-danger d-none"></div>
+
+        <div class="table-responsive d-none" id="txTableWrap">
+          <table class="table tbl align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Event Date</th>
+                <th>Students</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Paid On</th>
+              </tr>
+            </thead>
+            <tbody id="txBody"></tbody>
           </table>
         </div>
       </div>
@@ -354,7 +404,7 @@
     // ── Section switching ─────────────────────────────────────────────────────
 
     function showSection(name) {
-      ['home','profile','students'].forEach(s => {
+      ['home','profile','students','transactions'].forEach(s => {
         document.getElementById(`sec-${s}`).style.display    = s === name ? '' : 'none';
         document.getElementById(`nav-${s}`).classList.toggle('active', s === name);
       });
@@ -364,6 +414,8 @@
 
       // Lazy-load students
       if (name === 'students' && !studentsLoaded) { studentsLoaded = true; loadStudents(); }
+      // Lazy-load transactions
+      if (name === 'transactions' && !transactionsLoaded) { transactionsLoaded = true; loadTransactions(); }
     }
 
     // ── User ──────────────────────────────────────────────────────────────────
@@ -635,11 +687,67 @@
       } catch { alert('Failed to remove student.'); }
     }
 
+    // ── Transactions ──────────────────────────────────────────────────────────
+
+    let transactionsLoaded = false;
+
+    async function loadTransactions() {
+      const token = localStorage.getItem('token');
+      document.getElementById('txLoading').classList.remove('d-none');
+      document.getElementById('txEmpty').classList.add('d-none');
+      document.getElementById('txError').classList.add('d-none');
+      document.getElementById('txTableWrap').classList.add('d-none');
+
+      try {
+        const res = await fetch(`${API}/events/my-payments`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('Failed');
+        const txs = await res.json();
+
+        document.getElementById('txLoading').classList.add('d-none');
+
+        if (!txs.length) {
+          document.getElementById('txEmpty').classList.remove('d-none');
+          return;
+        }
+
+        document.getElementById('txTableWrap').classList.remove('d-none');
+        document.getElementById('txBody').innerHTML = txs.map(t => {
+          const evDate = t.event_date
+            ? new Date(t.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : '—';
+          const paidOn = t.finalized_at
+            ? new Date(t.finalized_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : '—';
+          const amtStr = t.payment_status === 'free'
+            ? '<span style="color:#4ade80;font-weight:600;">Free</span>'
+            : `<span style="font-weight:600;">$${Number(t.amount_paid).toFixed(2)}</span>`;
+          const statusBadge = t.payment_status === 'free'
+            ? '<span class="tx-status-free">Free</span>'
+            : '<span class="tx-status-paid">&#10003; Paid</span>';
+          return `<tr>
+            <td class="fw-semibold">${esc(t.event_title)}</td>
+            <td style="white-space:nowrap;">${evDate}</td>
+            <td>${t.student_count}</td>
+            <td>${amtStr}</td>
+            <td>${statusBadge}</td>
+            <td style="color:#888;font-size:.85rem;white-space:nowrap;">${paidOn}</td>
+          </tr>`;
+        }).join('');
+
+      } catch {
+        document.getElementById('txLoading').classList.add('d-none');
+        document.getElementById('txError').textContent = 'Failed to load transactions.';
+        document.getElementById('txError').classList.remove('d-none');
+      }
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────
     studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
-    // Support deep-linking via hash: dashboard.html#profile, #students
+    // Support deep-linking via hash: dashboard.html#profile, #students, #transactions
     const _hash = location.hash.replace('#','');
-    if (['profile','students'].includes(_hash)) showSection(_hash);
+    if (['profile','students','transactions'].includes(_hash)) showSection(_hash);
     loadUser();
   </script>
 </body>

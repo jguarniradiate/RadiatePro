@@ -79,6 +79,13 @@ class EventRegistration(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Payment / finalization
+    is_finalized      = Column(Boolean, default=False, nullable=False, server_default="false")
+    payment_status    = Column(String, nullable=True)   # 'pending' | 'paid' | 'free'
+    stripe_session_id = Column(String, nullable=True)
+    amount_paid       = Column(Numeric(10, 2), nullable=True)
+    finalized_at      = Column(DateTime(timezone=True), nullable=True)
+
     event = relationship("Event", back_populates="registrations")
     user = relationship("User", back_populates="event_registrations")
     attending_students = relationship("EventRegistrationStudent", back_populates="registration", cascade="all, delete-orphan")
