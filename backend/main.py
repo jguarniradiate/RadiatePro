@@ -836,6 +836,46 @@ def verify_payment(
     return _build_reg_out(reg)
 
 
+@app.post("/events/{event_id}/register/add-students-save", response_model=schemas.EventRegistrationOut, status_code=200)
+def add_students_save(
+    event_id: int,
+    body: schemas.EventRegistrationCreate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Add new dancers to a registration (finalized or not) without requiring payment now."""
+    user = get_current_user(authorization, db)
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.user_id == user.id,
+    ).first()
+
+    if not reg:
+        # No existing registration — create one
+        reg = models.EventRegistration(event_id=event_id, user_id=user.id)
+        db.add(reg)
+        db.flush()
+
+    # Add only students not already in the registration
+    existing_ids = {ers.student_id for ers in reg.attending_students}
+    for sid in body.student_ids:
+        if sid in existing_ids:
+            continue
+        s = db.query(models.Student).filter(
+            models.Student.id == sid, models.Student.user_id == user.id
+        ).first()
+        if s:
+            db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+
+    db.commit()
+    db.refresh(reg)
+    return _build_reg_out(reg)
+
+
 @app.post("/events/{event_id}/register/add-students", response_model=schemas.CheckoutSessionOut, status_code=201)
 def add_students_to_finalized(
     event_id: int,

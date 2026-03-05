@@ -524,7 +524,13 @@
         saveBtn.className = 'btn btn-finalize';
         saveBtn.textContent = 'Add Dancers & Finalize';
         saveBtn.onclick = () => checkoutRegistration(true);
-        draftBtn.style.display = 'none';
+        if (hasPricing) {
+          draftBtn.style.display = 'inline-block';
+          draftBtn.textContent = 'Save';
+          draftBtn.onclick = () => saveDancersDraft();
+        } else {
+          draftBtn.style.display = 'none';
+        }
       } else if (hasPricing) {
         // Paid event — offer Save (draft) and Finalize Registration
         saveBtn.className = 'btn btn-finalize';
@@ -637,6 +643,57 @@
           is_finalized: false,
           payment_status: null,
           stripe_session_id: null,
+        };
+        updateEventCard(eventId, true);
+        regModal.hide();
+      } catch {
+        alertEl.textContent = 'Something went wrong. Please try again.';
+        alertEl.classList.remove('d-none');
+      } finally {
+        draftBtn.disabled = false;
+        draftBtn.textContent = 'Save';
+      }
+    }
+
+    async function saveDancersDraft() {
+      // Save new dancers to a finalized registration without requiring immediate payment
+      const token    = localStorage.getItem('token');
+      const eventId  = parseInt(document.getElementById('regEventId').value);
+      const alertEl  = document.getElementById('regAlert');
+      const draftBtn = document.getElementById('regSaveDraftBtn');
+      const studentIds = getSelectedStudentIds();
+
+      // Only submit IDs that aren't already locked (i.e. newly selected ones)
+      const reg = myRegistrations[String(eventId)];
+      const lockedIds = reg ? reg.student_ids : [];
+      const newIds = studentIds.filter(id => !lockedIds.includes(id));
+
+      if (!newIds.length) {
+        alertEl.textContent = 'Please select at least one new dancer to add.';
+        alertEl.classList.remove('d-none');
+        return;
+      }
+
+      alertEl.classList.add('d-none');
+      draftBtn.disabled = true;
+      draftBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+      try {
+        const res = await fetch(`${API}/events/${eventId}/register/add-students-save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ student_ids: newIds }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alertEl.textContent = data.detail || `Error ${res.status}`;
+          alertEl.classList.remove('d-none');
+          return;
+        }
+        // Merge new student IDs into the local registration state
+        myRegistrations[String(eventId)] = {
+          ...myRegistrations[String(eventId)],
+          student_ids: [...lockedIds, ...newIds],
         };
         updateEventCard(eventId, true);
         regModal.hide();
