@@ -441,6 +441,31 @@ def delete_student(
     ).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found.")
+
+    # Block deletion if dancer is in a finalized registration for an upcoming event
+    from datetime import timezone as tz
+    upcoming_finalized = (
+        db.query(models.EventRegistrationStudent)
+        .join(models.EventRegistration,
+              models.EventRegistrationStudent.registration_id == models.EventRegistration.id)
+        .join(models.Event,
+              models.EventRegistration.event_id == models.Event.id)
+        .filter(
+            models.EventRegistrationStudent.student_id == student_id,
+            models.EventRegistration.is_finalized.is_(True),
+            models.Event.event_date >= datetime.now(tz.utc),
+        )
+        .first()
+    )
+    if upcoming_finalized:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'"{student.name}" cannot be removed — they are registered '
+                f"for an upcoming event. Contact the event organizer if changes are needed."
+            ),
+        )
+
     db.delete(student)
     db.commit()
     return {"message": "Student deleted."}

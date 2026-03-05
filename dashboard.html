@@ -140,7 +140,7 @@
         <span class="nav-icon">&#128100;</span> My Profile
       </button>
       <button class="nav-item" id="nav-students" onclick="showSection('students')">
-        <span class="nav-icon">&#127891;</span> My Students
+        <span class="nav-icon">&#127891;</span> My Dancers
       </button>
       <a class="nav-item" href="events.html">
         <span class="nav-icon">&#128197;</span> Events
@@ -184,8 +184,8 @@
             <div style="width:36px;height:36px;border-radius:50%;background:#E3FC02;color:#000;font-weight:800;
                         font-size:1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
             <div style="flex:1;min-width:0;">
-              <div class="fw-semibold mb-1" style="color:#f0f0f0;">Add Your Students</div>
-              <div style="color:#888;font-size:.82rem;">You currently have <strong style="color:#E3FC02;" id="homeStudentCount">—</strong> student(s) registered.</div>
+              <div class="fw-semibold mb-1" style="color:#f0f0f0;">Add Your Dancers</div>
+              <div style="color:#888;font-size:.82rem;">You currently have <strong style="color:#E3FC02;" id="homeStudentCount">—</strong> dancer(s) registered.</div>
             </div>
             <div class="d-flex gap-2 flex-shrink-0">
               <button class="btn btn-accent btn-sm" onclick="showSection('students');openAddStudent();">+ Add</button>
@@ -206,7 +206,7 @@
                         font-size:1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
             <div style="flex:1;min-width:0;">
               <div class="fw-semibold mb-1" id="homeStep2Title" style="color:#888;">Register for Events</div>
-              <div style="color:#888;font-size:.82rem;" id="homeStep2Sub">Add students first, then browse and register for upcoming events.</div>
+              <div style="color:#888;font-size:.82rem;" id="homeStep2Sub">Add dancers first, then browse and register for upcoming events.</div>
             </div>
             <a href="events.html" class="btn btn-sm flex-shrink-0" id="homeEventsBtn"
                style="background:#1a1a1a;border:1px solid #333;color:#666;pointer-events:none;">View Events</a>
@@ -287,14 +287,14 @@
       <!-- ── Students Section ── -->
       <div id="sec-students" style="display:none;">
         <div class="d-flex justify-content-between align-items-center mb-4">
-          <h5 class="section-title mb-0">My Students</h5>
-          <button class="btn btn-accent btn-sm" onclick="openAddStudent()">+ Add Student</button>
+          <h5 class="section-title mb-0">My Dancers</h5>
+          <button class="btn btn-accent btn-sm" onclick="openAddStudent()">+ Add Dancer</button>
         </div>
 
         <div id="studentsLoading" class="text-center py-4">
           <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
         </div>
-        <div id="studentsEmpty" class="text-muted text-center py-4 d-none">No students added yet.</div>
+        <div id="studentsEmpty" class="text-muted text-center py-4 d-none">No dancers added yet.</div>
         <div id="studentsError" class="alert alert-danger d-none"></div>
 
         <div class="table-responsive d-none" id="studentsTableWrap">
@@ -330,7 +330,7 @@
               <tr>
                 <th>Event</th>
                 <th>Event Date</th>
-                <th>Students</th>
+                <th>Dancers</th>
                 <th>Amount</th>
                 <th>Status</th>
                 <th>Paid On</th>
@@ -349,7 +349,7 @@
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#f0f0f0;">
         <div class="modal-header" style="border-bottom-color:#2a2a2a;">
-          <h5 class="modal-title" id="studentModalTitle" style="color:#E3FC02;">Add Student</h5>
+          <h5 class="modal-title" id="studentModalTitle" style="color:#E3FC02;">Add Dancer</h5>
           <button type="button" class="btn-close" style="filter:invert(1);" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
@@ -447,7 +447,7 @@
           document.getElementById('homeStep2Num').style.background = '#E3FC02';
           document.getElementById('homeStep2Num').style.color = '#000';
           document.getElementById('homeStep2Title').style.color = '#f0f0f0';
-          document.getElementById('homeStep2Sub').textContent = `${upcomingCount} upcoming event${upcomingCount !== 1 ? 's' : ''} available. Browse and register your students.`;
+          document.getElementById('homeStep2Sub').textContent = `${upcomingCount} upcoming event${upcomingCount !== 1 ? 's' : ''} available. Browse and register your dancers.`;
           const btn = document.getElementById('homeEventsBtn');
           btn.style.background = ''; btn.style.border = ''; btn.style.color = '';
           btn.classList.add('btn-accent'); btn.style.pointerEvents = '';
@@ -605,7 +605,7 @@
     }
 
     function openAddStudent() {
-      document.getElementById('studentModalTitle').textContent = 'Add Student';
+      document.getElementById('studentModalTitle').textContent = 'Add Dancer';
       document.getElementById('studentId').value    = '';
       document.getElementById('studentName').value  = '';
       document.getElementById('studentDob').value   = '';
@@ -615,7 +615,7 @@
     }
 
     function openEditStudent(id, name, dob, gender) {
-      document.getElementById('studentModalTitle').textContent = 'Edit Student';
+      document.getElementById('studentModalTitle').textContent = 'Edit Dancer';
       document.getElementById('studentId').value     = id;
       document.getElementById('studentName').value   = name;
       document.getElementById('studentDob').value    = dob;
@@ -631,7 +631,7 @@
       const saveBtn   = document.getElementById('studentSaveBtn');
       const name      = document.getElementById('studentName').value.trim();
 
-      if (!name) { alertEl.textContent = 'Student name is required.'; alertEl.classList.remove('d-none'); return; }
+      if (!name) { alertEl.textContent = 'Dancer name is required.'; alertEl.classList.remove('d-none'); return; }
 
       alertEl.classList.add('d-none');
       saveBtn.disabled = true;
@@ -674,8 +674,10 @@
     }
 
     async function deleteStudent(id, name) {
-      if (!confirm(`Remove student "${name}"?`)) return;
+      if (!confirm(`Remove dancer "${name}"?`)) return;
       const token = localStorage.getItem('token');
+      const errEl = document.getElementById('studentsError');
+      errEl.classList.add('d-none');
       try {
         const res = await fetch(`${API}/students/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
@@ -684,8 +686,16 @@
             document.getElementById('studentsTableWrap').classList.add('d-none');
             document.getElementById('studentsEmpty').classList.remove('d-none');
           }
+        } else {
+          const data = await res.json().catch(() => ({}));
+          errEl.textContent = data.detail || 'Failed to remove dancer.';
+          errEl.classList.remove('d-none');
+          errEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
-      } catch { alert('Failed to remove student.'); }
+      } catch {
+        errEl.textContent = 'Failed to remove dancer.';
+        errEl.classList.remove('d-none');
+      }
     }
 
     // ── Transactions ──────────────────────────────────────────────────────────
