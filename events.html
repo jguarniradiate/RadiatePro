@@ -259,12 +259,13 @@
           </div>
         </div>
         <div class="modal-footer flex-column align-items-stretch gap-2" style="padding:.75rem 1rem;">
-          <div class="d-flex gap-2">
+          <div class="d-flex gap-2 flex-wrap">
             <button class="btn btn-outline-danger btn-sm me-auto" id="unregBtn" onclick="unregisterFromEvent()" style="display:none;">
               Cancel Registration
             </button>
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-accent" id="regSaveBtn" onclick="saveRegistration()">Register</button>
+            <button type="button" class="btn btn-outline-secondary" id="regSaveDraftBtn" style="display:none;">Save</button>
+            <button type="button" class="btn btn-accent" id="regSaveBtn">Register</button>
           </div>
         </div>
       </div>
@@ -328,6 +329,7 @@
             const isFull = e.max_students && (e.registered_count || 0) >= e.max_students && !reg;
             const isFinalized = reg && reg.is_finalized;
             const isPending   = reg && reg.payment_status === 'pending';
+            const hasPricing  = !!(e.early_price || e.regular_price);
             return `
               <div class="event-card p-4 mb-3 d-flex gap-3 align-items-start ${reg ? 'registered' : ''} ${isFull ? 'full' : ''}" id="ecard-${e.id}">
                 <div class="event-date-badge flex-shrink-0">${dt.short}</div>
@@ -350,7 +352,7 @@
                       ${isFull && !reg ? 'disabled' : `onclick="openRegModal(eventsCache[${e.id}])"`}>
                       ${isFinalized ? '+ Add Dancers' : reg ? 'Edit Registration' : isFull ? '&#9940; Event Full' : 'Register'}
                     </button>
-                    ${isPending ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="finalize-btn-${e.id}" onclick="resumeCheckout(${e.id})">&#10003; Finalize Registration</button>` : ''}
+                    ${(reg && !isFinalized && hasPricing) ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="finalize-btn-${e.id}" onclick="resumeCheckout(${e.id})">&#10003; Finalize Registration</button>` : ''}
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
                 </div>
               </div>`;
@@ -510,20 +512,33 @@
 
       renderStudentTable(selectedIds, lockedIds);
 
-      const unregBtn = document.getElementById('unregBtn');
-      const saveBtn  = document.getElementById('regSaveBtn');
+      const unregBtn  = document.getElementById('unregBtn');
+      const saveBtn   = document.getElementById('regSaveBtn');
+      const draftBtn  = document.getElementById('regSaveDraftBtn');
       unregBtn.style.display = (reg && !isFinalized) ? 'inline-block' : 'none';
 
-      const hasPricing = event.early_price || event.regular_price;
+      const hasPricing = !!(event.early_price || event.regular_price);
+
       if (isFinalized) {
-        saveBtn.textContent = 'Add Dancers & Pay';
+        // Adding dancers to a locked registration
+        saveBtn.className = 'btn btn-finalize';
+        saveBtn.textContent = 'Add Dancers & Finalize';
         saveBtn.onclick = () => checkoutRegistration(true);
+        draftBtn.style.display = 'none';
       } else if (hasPricing) {
-        saveBtn.textContent = 'Continue to Payment \u2192';
+        // Paid event — offer Save (draft) and Finalize Registration
+        saveBtn.className = 'btn btn-finalize';
+        saveBtn.textContent = '✓ Finalize Registration';
         saveBtn.onclick = () => checkoutRegistration(false);
+        draftBtn.style.display = 'inline-block';
+        draftBtn.textContent = 'Save';
+        draftBtn.onclick = () => saveDraftRegistration();
       } else {
+        // Free event — single Register/Update button
+        saveBtn.className = 'btn btn-accent';
         saveBtn.textContent = reg ? 'Update Registration' : 'Register';
         saveBtn.onclick = () => checkoutRegistration(false);
+        draftBtn.style.display = 'none';
       }
       regModal.show();
     }
@@ -585,13 +600,57 @@
       }
     }
 
-    async function resumeCheckout(eventId) {
-      const reg = myRegistrations[String(eventId)];
-      if (!reg || !reg.stripe_session_id) return;
+    async function saveDraftRegistration() {
+      const token    = localStorage.getItem('token');
+      const eventId  = parseInt(document.getElementById('regEventId').value);
+      const alertEl  = document.getElementById('regAlert');
+      const draftBtn = document.getElementById('regSaveDraftBtn');
+      const studentIds = getSelectedStudentIds();
+
+      if (!studentIds.length) {
+        alertEl.textContent = 'Please select at least one student.';
+        alertEl.classList.remove('d-none');
+        return;
+      }
+
+      alertEl.classList.add('d-none');
+      draftBtn.disabled = true;
+      draftBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
       try {
-        const session = await stripe.checkout.Session.retrieve(reg.stripe_session_id).catch(() => null);
-      } catch {}
-      // Re-open the registration modal to let user re-submit
+        const res = await fetch(`${API}/events/${eventId}/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ student_ids: studentIds }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alertEl.textContent = data.detail || `Error ${res.status}`;
+          alertEl.classList.remove('d-none');
+          return;
+        }
+        // Update local state — saved but not finalized/paid
+        myRegistrations[String(eventId)] = {
+          ...myRegistrations[String(eventId)],
+          id: data.id,
+          student_ids: studentIds,
+          is_finalized: false,
+          payment_status: null,
+          stripe_session_id: null,
+        };
+        updateEventCard(eventId, true);
+        regModal.hide();
+      } catch {
+        alertEl.textContent = 'Something went wrong. Please try again.';
+        alertEl.classList.remove('d-none');
+      } finally {
+        draftBtn.disabled = false;
+        draftBtn.textContent = 'Save';
+      }
+    }
+
+    function resumeCheckout(eventId) {
+      // Open the modal — the Finalize Registration button handles checkout
       openRegModal(eventsCache[eventId]);
     }
 
@@ -635,8 +694,10 @@
           badge.className = reg && reg.payment_status === 'pending' ? 'badge-pending-pay' : 'reg-badge';
           badge.innerHTML = reg && reg.payment_status === 'pending' ? '&#9203; Awaiting Payment' : '&#10003; Registered';
           parent.insertBefore(badge, btn);
-          // Re-add finalize button if still pending
-          if (reg && reg.payment_status === 'pending') {
+          // Show Finalize Registration for any non-finalized registration on a priced event
+          const ev = eventsCache[eventId];
+          const eventHasPricing = ev && !!(ev.early_price || ev.regular_price);
+          if (eventHasPricing) {
             const finBtn = document.createElement('button');
             finBtn.id = `finalize-btn-${eventId}`;
             finBtn.className = 'btn btn-sm btn-finalize py-1 px-3';
