@@ -406,10 +406,12 @@
       const pct = Math.min(100, Math.round(cnt / max * 100));
       const barColor = pct >= 100 ? '#ff5555' : pct >= 80 ? '#ff9900' : '#E3FC02';
       const isFull = pct >= 100;
-      const fullLabel = isFull ? `<div class="cap-label full-lbl" style="margin-bottom:.3rem;">&#9940; Event Full</div>` : '';
       return `
         <div style="margin-top:.6rem;">
-          ${fullLabel}
+          <div class="cap-label${isFull ? ' full-lbl' : ''}">
+            <span>Event Capacity</span>
+            ${isFull ? '<span>&#9940; Full</span>' : ''}
+          </div>
           <div class="cap-bar-wrap">
             <div class="cap-bar" style="width:${pct}%;background:${barColor};"></div>
           </div>
