@@ -68,6 +68,8 @@
     /* ── Events ── */
     .btn-accent { background-color: #E3FC02; color: #000; font-weight: 700; border: none; }
     .btn-accent:hover { background-color: #cce500; color: #000; }
+    .btn-finalize { background-color: #22c55e; color: #000; font-weight: 700; border: none; }
+    .btn-finalize:hover { background-color: #16a34a; color: #fff; }
     .page-title { color: #E3FC02; }
     #spinner { color: #E3FC02; }
     .event-card {
@@ -348,7 +350,7 @@
                       ${isFull && !reg ? 'disabled' : `onclick="openRegModal(eventsCache[${e.id}])"`}>
                       ${isFinalized ? '+ Add Dancers' : reg ? 'Edit Registration' : isFull ? '&#9940; Event Full' : 'Register'}
                     </button>
-                    ${isPending ? `<button class="btn btn-sm btn-accent py-1 px-3" onclick="resumeCheckout(${e.id})">Complete Payment &#8594;</button>` : ''}
+                    ${isPending ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="finalize-btn-${e.id}" onclick="resumeCheckout(${e.id})">&#10003; Finalize Registration</button>` : ''}
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
                 </div>
               </div>`;
@@ -623,12 +625,25 @@
         } else if (isRegistered) {
           btn.className = 'btn btn-sm btn-outline-secondary py-1 px-3';
           btn.textContent = 'Edit Registration';
+          btn.onclick = () => openRegModal(eventsCache[eventId]);
           const parent = btn.parentElement;
           parent.querySelectorAll('.reg-badge,.badge-finalized,.badge-pending-pay').forEach(el => el.remove());
+          // Remove any stale finalize button
+          const oldFin = parent.querySelector(`#finalize-btn-${eventId}`);
+          if (oldFin) oldFin.remove();
           const badge = document.createElement('span');
-          badge.className = 'reg-badge';
-          badge.innerHTML = '&#10003; Registered';
+          badge.className = reg && reg.payment_status === 'pending' ? 'badge-pending-pay' : 'reg-badge';
+          badge.innerHTML = reg && reg.payment_status === 'pending' ? '&#9203; Awaiting Payment' : '&#10003; Registered';
           parent.insertBefore(badge, btn);
+          // Re-add finalize button if still pending
+          if (reg && reg.payment_status === 'pending') {
+            const finBtn = document.createElement('button');
+            finBtn.id = `finalize-btn-${eventId}`;
+            finBtn.className = 'btn btn-sm btn-finalize py-1 px-3';
+            finBtn.innerHTML = '&#10003; Finalize Registration';
+            finBtn.onclick = () => resumeCheckout(eventId);
+            parent.appendChild(finBtn);
+          }
         } else {
           btn.className = 'btn btn-sm btn-accent py-1 px-3';
           btn.textContent = 'Register';
