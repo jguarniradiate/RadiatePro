@@ -1,0 +1,25 @@
+/* Hero Section */
+.hero-section {
+  min-height: 70vh;
+  background: #000;
+}
+
+/* Feature icon size */
+.feature-icon {
+  font-size: 2.5rem;
+}
+
+/* Login page background */
+.login-page {
+  background-color: #f0f2f5;
+}
+
+/* Card hover lift on features */
+.card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.1) !important;
+}

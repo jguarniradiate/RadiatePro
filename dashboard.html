@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — RadiatePro</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="index.html">RadiatePro</a>
+      <div class="ms-auto d-flex align-items-center gap-3">
+        <span class="text-secondary small" id="userEmail"></span>
+        <button class="btn btn-outline-light btn-sm" onclick="logout()">Sign Out</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Dashboard Content -->
+  <div class="container py-5">
+
+    <!-- Welcome banner -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-4 d-flex align-items-center gap-3">
+        <div class="avatar-circle bg-primary text-white d-flex align-items-center justify-content-center rounded-circle fs-4 fw-bold flex-shrink-0">
+          <span id="avatarInitial">?</span>
+        </div>
+        <div>
+          <h4 class="mb-0 fw-bold">Welcome back!</h4>
+          <p class="mb-0 text-muted" id="welcomeEmail">Loading…</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats row -->
+    <div class="row g-4 mb-4">
+      <div class="col-sm-6 col-lg-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+          <div class="fs-1">&#128200;</div>
+          <h5 class="fw-bold mt-2">Projects</h5>
+          <p class="text-muted mb-0">0 active</p>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+          <div class="fs-1">&#9989;</div>
+          <h5 class="fw-bold mt-2">Tasks</h5>
+          <p class="text-muted mb-0">0 completed</p>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+          <div class="fs-1">&#128276;</div>
+          <h5 class="fw-bold mt-2">Notifications</h5>
+          <p class="text-muted mb-0">0 new</p>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+          <div class="fs-1">&#128100;</div>
+          <h5 class="fw-bold mt-2">Account</h5>
+          <p class="text-muted mb-0">Active</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Account Info Card -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white fw-bold border-bottom py-3">Account Details</div>
+      <div class="card-body p-4">
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label text-muted small">User ID</label>
+            <p class="mb-0 fw-semibold" id="userId">—</p>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label text-muted small">Email</label>
+            <p class="mb-0 fw-semibold" id="userEmailDetail">—</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <style>
+    .avatar-circle { width: 52px; height: 52px; }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const API = 'http://localhost:8000';
+
+    async function loadUser() {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+
+        if (res.status === 401) {
+          localStorage.removeItem('token');
+          window.location.href = 'login.html';
+          return;
+        }
+
+        const user = await res.json();
+        const initial = user.email.charAt(0).toUpperCase();
+
+        document.getElementById('userEmail').textContent        = user.email;
+        document.getElementById('welcomeEmail').textContent     = user.email;
+        document.getElementById('avatarInitial').textContent    = initial;
+        document.getElementById('userId').textContent           = `#${user.id}`;
+        document.getElementById('userEmailDetail').textContent  = user.email;
+      } catch {
+        window.location.href = 'login.html';
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    }
+
+    loadUser();
+  </script>
+</body>
+</html>
