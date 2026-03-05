@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -144,19 +145,6 @@ def promote_admins(eng):
     logger.info("Admin promotion applied for: %s", emails)
 
 
-# ── App ───────────────────────────────────────────────────────────────────────
-
-app = FastAPI(title="RadiatePro API", version="1.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
 # ── Background DB startup ─────────────────────────────────────────────────────
 # Migrations run in a daemon thread so uvicorn binds port 8080 and passes
 # DigitalOcean's health check before any DDL lock is attempted.  This prevents
@@ -176,10 +164,30 @@ def _db_startup() -> None:
         logger.error("promote_admins failed: %s", exc)
 
 
-@app.on_event("startup")
-async def _startup_event() -> None:
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Modern lifespan handler (replaces deprecated on_event).
+
+    Launches DB migrations in a background daemon thread so uvicorn
+    can bind port 8080 and pass health checks before any DDL runs.
+    """
     threading.Thread(target=_db_startup, daemon=True, name="db-startup").start()
     logger.info("DB startup thread launched")
+    yield  # app runs here
+    # shutdown – nothing to clean up
+
+
+# ── App ───────────────────────────────────────────────────────────────────────
+
+app = FastAPI(title="RadiatePro API", version="1.0.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
