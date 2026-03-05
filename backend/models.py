@@ -60,9 +60,15 @@ class Event(Base):
     early_price = Column(Numeric(10, 2), nullable=True)          # early-bird price (conventions)
     regular_price = Column(Numeric(10, 2), nullable=True)        # regular / at-door price
     early_price_deadline = Column(DateTime(timezone=True), nullable=True)  # deadline for early price
+    max_students = Column(Integer, nullable=True)                 # student capacity cap (None = unlimited)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     registrations = relationship("EventRegistration", back_populates="event", cascade="all, delete-orphan")
+
+    @property
+    def registered_count(self) -> int:
+        """Total number of individual students registered across all registrations."""
+        return sum(len(reg.attending_students) for reg in self.registrations)
 
 
 class EventRegistration(Base):

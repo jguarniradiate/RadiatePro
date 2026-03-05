@@ -42,17 +42,17 @@
       text-align: left; text-decoration: none; border-left: 3px solid transparent;
       transition: background .15s, color .15s;
     }
-    .nav-item:hover { background: #1a1a1a; color: #f0f0f0; }
-    .nav-item.active { color: #E3FC02; background: #1a1a1a; border-left-color: #E3FC02; font-weight: 600; }
+    .nav-item:hover { background: rgba(227,252,2,.07); color: #f0f0f0; }
+    .nav-item.active { color: #E3FC02; background: rgba(227,252,2,.1); border-left-color: #E3FC02; font-weight: 600; }
     .nav-item .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
     .sidebar-footer { padding: .75rem 1.25rem 1.25rem; border-top: 1px solid #2a2a2a; }
     .sidebar-footer button {
-      background: none; border: 1px solid #333; color: #888;
+      background: #1a1a1a; border: 1px solid #2e2e2e; color: #bbb;
       padding: .4rem .9rem; border-radius: 6px; font-size: .85rem;
       cursor: pointer; width: 100%; text-align: left;
-      transition: background .15s, color .15s;
+      transition: background .15s, color .15s, border-color .15s;
     }
-    .sidebar-footer button:hover { background: #1a1a1a; color: #f0f0f0; }
+    .sidebar-footer button:hover { background: rgba(227,252,2,.08); color: #E3FC02; border-color: #E3FC02; }
 
     /* ── Main content ── */
     .main-wrap { margin-left: 240px; min-height: 100vh; }

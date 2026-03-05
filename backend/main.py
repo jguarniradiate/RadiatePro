@@ -54,6 +54,7 @@ def run_migrations(eng):
         "ALTER TABLE events ADD COLUMN IF NOT EXISTS early_price NUMERIC(10,2)",
         "ALTER TABLE events ADD COLUMN IF NOT EXISTS regular_price NUMERIC(10,2)",
         "ALTER TABLE events ADD COLUMN IF NOT EXISTS early_price_deadline TIMESTAMPTZ",
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS max_students INTEGER",
         """CREATE TABLE IF NOT EXISTS event_registrations (
             id SERIAL PRIMARY KEY,
             event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -436,10 +437,46 @@ def delete_student(
 
 # ── Event routes (public read, admin write) ───────────────────────────────────
 
+def _build_event_out(event: models.Event) -> schemas.EventOut:
+    """Build an EventOut including live registered_count and total_revenue."""
+    from decimal import Decimal as D
+    now = datetime.now(timezone.utc)
+    count = event.registered_count
+
+    # Determine effective price (early-bird vs regular vs none)
+    price = None
+    if event.early_price is not None and event.early_price_deadline is not None:
+        dl = event.early_price_deadline
+        if dl.tzinfo is None:
+            dl = dl.replace(tzinfo=timezone.utc)
+        price = event.early_price if now < dl else event.regular_price
+    elif event.regular_price is not None:
+        price = event.regular_price
+
+    total_revenue = (D(str(price)) * count) if price is not None else None
+
+    return schemas.EventOut(
+        id=event.id,
+        title=event.title,
+        description=event.description,
+        event_date=event.event_date,
+        location=event.location,
+        event_type=event.event_type,
+        early_price=event.early_price,
+        regular_price=event.regular_price,
+        early_price_deadline=event.early_price_deadline,
+        max_students=event.max_students,
+        registered_count=count,
+        total_revenue=total_revenue,
+        created_at=event.created_at,
+    )
+
+
 @app.get("/events", response_model=list[schemas.EventOut])
 def list_events(db: Session = Depends(get_db)):
-    """Return all events ordered by date ascending."""
-    return db.query(models.Event).order_by(models.Event.event_date).all()
+    """Return all events ordered by date ascending, including capacity & revenue data."""
+    events = db.query(models.Event).order_by(models.Event.event_date).all()
+    return [_build_event_out(e) for e in events]
 
 
 @app.post("/admin/events", response_model=schemas.EventOut, status_code=201)
@@ -456,7 +493,7 @@ def create_event(
     db.add(event)
     db.commit()
     db.refresh(event)
-    return event
+    return _build_event_out(event)
 
 
 @app.patch("/admin/events/{event_id}", response_model=schemas.EventOut)
@@ -477,7 +514,7 @@ def update_event(
         setattr(event, field, value)
     db.commit()
     db.refresh(event)
-    return event
+    return _build_event_out(event)
 
 
 @app.get("/events/my-registrations")
@@ -514,6 +551,19 @@ def register_for_event(
         models.EventRegistration.event_id == event_id,
         models.EventRegistration.user_id == user.id,
     ).first()
+
+    # Capacity check
+    if event.max_students is not None and body.student_ids:
+        # Count all students registered for this event excluding the current user's existing registration
+        current_total = sum(len(reg.attending_students) for reg in event.registrations)
+        if existing:
+            current_total -= len(existing.attending_students)
+        available = event.max_students - current_total
+        if len(body.student_ids) > available:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Not enough capacity. Only {available} spot(s) remaining for this event."
+            )
 
     if existing:
         # Update attending students
@@ -597,6 +647,84 @@ def admin_list_registrations(
             "created_at": reg.created_at.isoformat() if reg.created_at else None,
         })
     return result
+
+
+@app.post("/admin/events/{event_id}/registrations/for-user", status_code=201)
+def admin_create_registration(
+    event_id: int,
+    body: dict,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Create or update a registration for any user. Admin only. Body: {user_id, student_ids}."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+
+    user_id = body.get("user_id")
+    student_ids = body.get("student_ids", [])
+
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    # Capacity check
+    if event.max_students is not None and student_ids:
+        existing_reg = db.query(models.EventRegistration).filter(
+            models.EventRegistration.event_id == event_id,
+            models.EventRegistration.user_id == user_id,
+        ).first()
+        current_total = sum(len(reg.attending_students) for reg in event.registrations)
+        if existing_reg:
+            current_total -= len(existing_reg.attending_students)
+        available = event.max_students - current_total
+        if len(student_ids) > available:
+            raise HTTPException(status_code=400, detail=f"Only {available} spot(s) remaining.")
+
+    existing = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.user_id == user_id,
+    ).first()
+
+    if existing:
+        db.query(models.EventRegistrationStudent).filter(
+            models.EventRegistrationStudent.registration_id == existing.id
+        ).delete()
+        for sid in student_ids:
+            s = db.query(models.Student).filter(
+                models.Student.id == sid, models.Student.user_id == user_id
+            ).first()
+            if s:
+                db.add(models.EventRegistrationStudent(registration_id=existing.id, student_id=sid))
+        db.commit()
+        reg = existing
+    else:
+        reg = models.EventRegistration(event_id=event_id, user_id=user_id)
+        db.add(reg)
+        db.flush()
+        for sid in student_ids:
+            s = db.query(models.Student).filter(
+                models.Student.id == sid, models.Student.user_id == user_id
+            ).first()
+            if s:
+                db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+        db.commit()
+        db.refresh(reg)
+
+    students = [{"id": ers.student_id, "name": ers.student.name} for ers in reg.attending_students]
+    name = f"{target_user.first_name or ''} {target_user.last_name or ''}".strip() or target_user.email
+    return {
+        "id": reg.id,
+        "user_id": user_id,
+        "user_name": name,
+        "studio_name": target_user.studio_name,
+        "students": students,
+        "created_at": reg.created_at.isoformat() if reg.created_at else None,
+    }
 
 
 @app.delete("/admin/events/{event_id}/registrations/{reg_id}", response_model=schemas.MessageOut)

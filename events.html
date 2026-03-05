@@ -43,17 +43,17 @@
       text-align: left; text-decoration: none; border-left: 3px solid transparent;
       transition: background .15s, color .15s;
     }
-    .nav-item:hover { background: #1a1a1a; color: #f0f0f0; }
-    .nav-item.active { color: #E3FC02; background: #1a1a1a; border-left-color: #E3FC02; font-weight: 600; }
+    .nav-item:hover { background: rgba(227,252,2,.07); color: #f0f0f0; }
+    .nav-item.active { color: #E3FC02; background: rgba(227,252,2,.1); border-left-color: #E3FC02; font-weight: 600; }
     .nav-item .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
     .sidebar-footer { padding: .75rem 1.25rem 1.25rem; border-top: 1px solid #2a2a2a; }
     .sidebar-footer button {
-      background: none; border: 1px solid #333; color: #888;
+      background: #1a1a1a; border: 1px solid #2e2e2e; color: #bbb;
       padding: .4rem .9rem; border-radius: 6px; font-size: .85rem;
       cursor: pointer; width: 100%; text-align: left;
-      transition: background .15s, color .15s;
+      transition: background .15s, color .15s, border-color .15s;
     }
-    .sidebar-footer button:hover { background: #1a1a1a; color: #f0f0f0; }
+    .sidebar-footer button:hover { background: rgba(227,252,2,.08); color: #E3FC02; border-color: #E3FC02; }
 
     /* ── Main content ── */
     .main-wrap { margin-left: 240px; min-height: 100vh; }
@@ -90,6 +90,14 @@
       background: #198754; color: #fff; font-size: .72rem; font-weight: 600;
       padding: .25rem .6rem; border-radius: 20px; white-space: nowrap;
     }
+    .cap-badge { font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px;
+      white-space: nowrap; display: inline-flex; align-items: center; gap: .3rem; }
+    .cap-badge.open { background: #0d1f12; color: #6fcf97; border: 1px solid #1e4a2a; }
+    .cap-badge.warn { background: #1f1000; color: #ff9900; border: 1px solid #3a2000; }
+    .cap-badge.full { background: #1f0808; color: #ff5555; border: 1px solid #5a1010; }
+    .cap-bar-wrap   { background:#2a2a2a; border-radius:3px; height:4px; overflow:hidden; margin-top:.35rem; }
+    .cap-bar        { height:100%; border-radius:3px; transition:width .3s; }
+    .event-card.full { border-color: #5a1010 !important; }
     /* Modal */
     .modal-content { background: #1a1a1a; border: 1px solid #2a2a2a; color: #f0f0f0; }
     .modal-header { border-bottom-color: #2a2a2a; }
@@ -309,8 +317,9 @@
             const dt  = fmtDate(e.event_date);
             const reg = myRegistrations[String(e.id)];
             const isPast = new Date(e.event_date) < now;
+            const isFull = e.max_students && (e.registered_count || 0) >= e.max_students && !reg;
             return `
-              <div class="event-card p-4 mb-3 d-flex gap-3 align-items-start ${reg ? 'registered' : ''}" id="ecard-${e.id}">
+              <div class="event-card p-4 mb-3 d-flex gap-3 align-items-start ${reg ? 'registered' : ''} ${isFull ? 'full' : ''}" id="ecard-${e.id}">
                 <div class="event-date-badge flex-shrink-0">${dt.short}</div>
                 <div class="flex-grow-1">
                   <div class="event-title mb-1">${typeBadge(e.event_type)}${esc(e.title)}</div>
@@ -320,13 +329,14 @@
                     ${e.location ? `<span>&#128205; ${esc(e.location)}</span>` : ''}
                   </div>
                   ${pricingBadge(e)}
+                  <div class="mt-1">${capacityBadge(e)}</div>
                   ${!isPast ? `
                   <div class="d-flex align-items-center gap-2 mt-2">
                     ${reg ? `<span class="reg-badge">&#10003; Registered</span>` : ''}
                     <button id="reg-btn-${e.id}"
-                      class="btn btn-sm ${reg ? 'btn-outline-secondary' : 'btn-accent'} py-1 px-3"
-                      onclick="openRegModal(eventsCache[${e.id}])">
-                      ${reg ? 'Edit Registration' : 'Register'}
+                      class="btn btn-sm ${reg ? 'btn-outline-secondary' : isFull ? 'btn-outline-secondary' : 'btn-accent'} py-1 px-3"
+                      ${isFull ? 'disabled' : `onclick="openRegModal(eventsCache[${e.id}])"`}>
+                      ${reg ? 'Edit Registration' : isFull ? '&#9940; Event Full' : 'Register'}
                     </button>
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
                 </div>
@@ -391,6 +401,22 @@
 
     function fmtPrice(val) {
       return val != null ? `$${parseFloat(val).toFixed(2)}` : null;
+    }
+
+    function capacityBadge(e) {
+      if (!e.max_students) return '';
+      const cnt = e.registered_count || 0;
+      const max = e.max_students;
+      const pct = Math.min(100, Math.round(cnt / max * 100));
+      const cls  = pct >= 100 ? 'full' : pct >= 80 ? 'warn' : 'open';
+      const barColor = pct >= 100 ? '#ff5555' : pct >= 80 ? '#ff9900' : '#E3FC02';
+      const label = pct >= 100
+        ? '&#9940; Full'
+        : `${max - cnt} spot${max - cnt !== 1 ? 's' : ''} left`;
+      return `<span class="cap-badge ${cls}">${label}</span>
+        <div class="cap-bar-wrap" style="max-width:140px;">
+          <div class="cap-bar" style="width:${pct}%;background:${barColor};"></div>
+        </div>`;
     }
 
     function pricingBadge(e) {

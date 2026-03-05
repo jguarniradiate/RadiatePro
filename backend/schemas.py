@@ -98,6 +98,7 @@ class EventCreate(BaseModel):
     early_price: Decimal | None = None
     regular_price: Decimal | None = None
     early_price_deadline: datetime | None = None
+    max_students: int | None = None  # None = unlimited
 
 
 class EventUpdate(BaseModel):
@@ -109,6 +110,7 @@ class EventUpdate(BaseModel):
     early_price: Decimal | None = None
     regular_price: Decimal | None = None
     early_price_deadline: datetime | None = None
+    max_students: int | None = None
 
 
 class EventOut(BaseModel):
@@ -121,6 +123,9 @@ class EventOut(BaseModel):
     early_price: Decimal | None = None
     regular_price: Decimal | None = None
     early_price_deadline: datetime | None = None
+    max_students: int | None = None
+    registered_count: int = 0
+    total_revenue: Decimal | None = None  # registered_count × current effective price
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

@@ -54,6 +54,16 @@
     .stu-badge { background: #2a2a2a; color: #ccc; font-size: .78rem; display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; padding: 2px 7px; }
     .stu-badge-remove { background: none; border: none; color: #777; padding: 0; line-height: 1; cursor: pointer; font-size: .9rem; }
     .stu-badge-remove:hover { color: #ff6b6b; }
+    /* Student toggle switches in modals */
+    .form-check-input.stu-switch { background-color: #333; border-color: #555; cursor: pointer; }
+    .form-check-input.stu-switch:checked { background-color: #E3FC02; border-color: #E3FC02;
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23000'/%3e%3c/svg%3e"); }
+    .form-check-input.stu-switch:focus { box-shadow: 0 0 0 .2rem rgba(227,252,2,.25); border-color: #E3FC02; }
+    /* Capacity bar */
+    .cap-bar-wrap { background:#2a2a2a;border-radius:4px;height:6px;overflow:hidden; }
+    .cap-bar { height:100%;border-radius:4px;transition:width .3s; }
+    /* Ensure all table text is white */
+    .table td, .table th { color: #f0f0f0; }
   </style>
 </head>
 <body>
@@ -91,17 +101,47 @@
         <div class="row g-3 mb-4">
           <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="statTotal">—</div><div class="text-muted small">Total Users</div></div></div>
           <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="statVerified">—</div><div class="text-muted small">Verified</div></div></div>
-          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="statUnverified">—</div><div class="text-muted small">Unverified</div></div></div>
+          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="statIndependent">—</div><div class="text-muted small">Independent</div></div></div>
           <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="statAdmins">—</div><div class="text-muted small">Admins</div></div></div>
         </div>
+
+        <!-- User type filter -->
+        <div class="d-flex gap-2 mb-3" id="userFilterBar">
+          <button class="btn btn-accent btn-sm px-3" id="filter-all" onclick="filterUsers('all')">All</button>
+          <button class="btn btn-outline-secondary btn-sm px-3" id="filter-studio" onclick="filterUsers('studio')">&#127960; Studio Users</button>
+          <button class="btn btn-outline-secondary btn-sm px-3" id="filter-independent" onclick="filterUsers('independent')">&#9733; Independent</button>
+        </div>
+
         <div id="loadingSpinner" class="text-center py-5"><div class="spinner-border" role="status"></div></div>
         <div id="errorMsg" class="alert alert-danger d-none"></div>
         <div id="tableWrapper" class="d-none">
-          <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle">
-              <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Studio</th><th>Phone</th><th>Registered</th><th>Verified</th><th>Role</th><th></th></tr></thead>
-              <tbody id="userTableBody"></tbody>
-            </table>
+
+          <!-- Studio Users section -->
+          <div id="studioSection">
+            <div class="d-flex align-items-center gap-2 mb-2 mt-1">
+              <span style="color:#E3FC02;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">&#127960; Studio Users</span>
+              <span class="badge" style="background:#2a2a2a;color:#ccc;font-size:.7rem;" id="studioCount">0</span>
+            </div>
+            <div class="table-responsive mb-4">
+              <table class="table table-striped table-hover align-middle" style="color:#f0f0f0;">
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Studio</th><th>Phone</th><th>Registered</th><th>Verified</th><th>Role</th><th></th></tr></thead>
+                <tbody id="studioTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Independent Dancers section -->
+          <div id="independentSection">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span style="color:#E3FC02;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">&#9733; Independent Dancers</span>
+              <span class="badge" style="background:#2a2a2a;color:#ccc;font-size:.7rem;" id="independentCount">0</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-striped table-hover align-middle" style="color:#f0f0f0;">
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Registered</th><th>Verified</th><th>Role</th><th></th></tr></thead>
+                <tbody id="independentTableBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -234,6 +274,38 @@
     </div>
   </div>
 
+  <!-- Admin Add Registration Modal -->
+  <div class="modal fade" id="adminCreateRegModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="adminCreateRegTitle">Add Registration</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="adminCreateRegAlert" class="alert alert-danger d-none mb-3"></div>
+          <input type="hidden" id="acrEventId">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">User <span class="text-danger">*</span></label>
+            <select class="form-select" id="acrUserId" onchange="loadAcrStudents()">
+              <option value="">— Select a user —</option>
+            </select>
+          </div>
+          <div id="acrStudentsSection" class="d-none">
+            <label class="form-label fw-semibold">Students</label>
+            <div id="acrStudentsLoading" class="text-muted small py-1">Loading students…</div>
+            <div id="acrStudentsList" class="d-flex flex-wrap gap-2"></div>
+            <div id="acrStudentsEmpty" class="text-muted small d-none">This user has no students yet.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-accent" id="adminCreateRegSaveBtn" onclick="saveAdminCreateReg()">Add Registration</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Event Modal -->
   <div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -257,6 +329,11 @@
           <div class="mb-3"><label class="form-label fw-semibold">Date &amp; Time <span class="text-danger">*</span></label><input type="datetime-local" class="form-control" id="eventDate"></div>
           <div class="mb-3"><label class="form-label fw-semibold">Location</label><input type="text" class="form-control" id="eventLocation" placeholder="Venue or address"></div>
           <div class="mb-3"><label class="form-label fw-semibold">Description</label><textarea class="form-control" id="eventDesc" rows="3" placeholder="Optional details…"></textarea></div>
+          <!-- Capacity (all event types) -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Student Capacity <span class="text-muted" style="font-size:.8rem;font-weight:400;">(leave blank for unlimited)</span></label>
+            <input type="number" class="form-control" id="eventMaxStudents" placeholder="e.g. 50" min="1" step="1">
+          </div>
           <!-- Pricing (conventions only) -->
           <div id="pricingSection" class="d-none">
             <hr style="border-color:#2a2a2a;">
@@ -301,6 +378,18 @@
 
     function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
 
+    function filterUsers(type) {
+      // Update active button style
+      ['all','studio','independent'].forEach(t => {
+        const btn = document.getElementById(`filter-${t}`);
+        btn.className = t === type ? 'btn btn-accent btn-sm px-3' : 'btn btn-outline-secondary btn-sm px-3';
+      });
+      const studioSec = document.getElementById('studioSection');
+      const indepSec  = document.getElementById('independentSection');
+      studioSec.style.display = (type === 'independent') ? 'none' : '';
+      indepSec.style.display  = (type === 'studio')      ? 'none' : '';
+    }
+
     function fmtDate(iso) {
       if (!iso) return '—';
       const d = new Date(iso);
@@ -331,23 +420,28 @@
         }
         let users = []; try { users = await res.json(); } catch {}
 
-        document.getElementById('statTotal').textContent      = users.length;
-        document.getElementById('statVerified').textContent   = users.filter(u => u.email_verified).length;
-        document.getElementById('statUnverified').textContent = users.filter(u => !u.email_verified).length;
-        document.getElementById('statAdmins').textContent     = users.filter(u => u.is_admin).length;
+        const studioUsers      = users.filter(u => u.studio_name);
+        const independentUsers = users.filter(u => !u.studio_name);
 
-        document.getElementById('userTableBody').innerHTML = users.map(u => `
-          <tr id="row-${u.id}">
+        document.getElementById('statTotal').textContent       = users.length;
+        document.getElementById('statVerified').textContent    = users.filter(u => u.email_verified).length;
+        document.getElementById('statIndependent').textContent = independentUsers.length;
+        document.getElementById('statAdmins').textContent      = users.filter(u => u.is_admin).length;
+        document.getElementById('studioCount').textContent     = studioUsers.length;
+        document.getElementById('independentCount').textContent = independentUsers.length;
+
+        const studioRow = u => `
+          <tr id="row-${u.id}" data-utype="studio">
             <td class="text-muted small">${u.id}</td>
             <td>
               <button class="btn btn-link p-0 fw-semibold text-decoration-none" style="color:#f0f0f0;"
                 onclick="toggleStudents(${u.id},'${esc((u.first_name||'')+' '+(u.last_name||''))}','${esc(u.studio_name||'')}')">
                 ${esc(u.first_name||'')} ${esc(u.last_name||'')}
-                <span class="text-muted ms-1" style="font-size:.7rem;" id="arrow-${u.id}">▶</span>
+                <span class="text-muted ms-1" style="font-size:.7rem;" id="arrow-${u.id}">▼</span>
               </button>
             </td>
             <td>${esc(u.email)}</td>
-            <td>${u.studio_name ? esc(u.studio_name) : '<span class="badge badge-independent">Independent</span>'}</td>
+            <td>${esc(u.studio_name)}</td>
             <td>${esc(u.phone||'—')}</td>
             <td>${fmtDate(u.created_at)}</td>
             <td><span class="badge ${u.email_verified?'badge-verified':'badge-unverified'}">${u.email_verified?'Verified':'Unverified'}</span></td>
@@ -362,8 +456,37 @@
             <td colspan="9" style="background:#0d0d0d;padding:0;">
               <div class="p-3" id="students-content-${u.id}"></div>
             </td>
+          </tr>`;
+
+        const indepRow = u => `
+          <tr id="row-${u.id}" data-utype="independent">
+            <td class="text-muted small">${u.id}</td>
+            <td>
+              <button class="btn btn-link p-0 fw-semibold text-decoration-none" style="color:#f0f0f0;"
+                onclick="toggleStudents(${u.id},'${esc((u.first_name||'')+' '+(u.last_name||''))}','')">
+                ${esc(u.first_name||'')} ${esc(u.last_name||'')}
+                <span class="text-muted ms-1" style="font-size:.7rem;" id="arrow-${u.id}">▼</span>
+              </button>
+            </td>
+            <td>${esc(u.email)}</td>
+            <td>${esc(u.phone||'—')}</td>
+            <td>${fmtDate(u.created_at)}</td>
+            <td><span class="badge ${u.email_verified?'badge-verified':'badge-unverified'}">${u.email_verified?'Verified':'Unverified'}</span></td>
+            <td><span class="badge ${u.is_admin?'badge-admin':'badge-user'}">${u.is_admin?'Admin':'User'}</span></td>
+            <td class="text-nowrap">
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
+                onclick="openEdit(${u.id},'${esc(u.first_name||'')}','${esc(u.last_name||'')}','','${esc(u.phone||'')}','${esc(u.email)}')">Edit</button>
+              ${u.is_admin ? '' : `<button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id},'${esc(u.email)}')">Delete</button>`}
+            </td>
           </tr>
-        `).join('');
+          <tr id="students-row-${u.id}" class="d-none">
+            <td colspan="8" style="background:#0d0d0d;padding:0;">
+              <div class="p-3" id="students-content-${u.id}"></div>
+            </td>
+          </tr>`;
+
+        document.getElementById('studioTableBody').innerHTML      = studioUsers.map(studioRow).join('');
+        document.getElementById('independentTableBody').innerHTML = independentUsers.map(indepRow).join('');
         document.getElementById('loadingSpinner').classList.add('d-none');
         document.getElementById('tableWrapper').classList.remove('d-none');
       } catch {
@@ -564,7 +687,16 @@
       const token = localStorage.getItem('token');
       try {
         const res = await fetch(`${API}/admin/users/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-        if (res.ok) { document.getElementById(`row-${id}`).remove(); document.getElementById('statTotal').textContent = parseInt(document.getElementById('statTotal').textContent) - 1; }
+        if (res.ok) {
+          const row = document.getElementById(`row-${id}`);
+          const subRow = document.getElementById(`students-row-${id}`);
+          if (row) row.remove();
+          if (subRow) subRow.remove();
+          // Update stats
+          document.getElementById('statTotal').textContent = parseInt(document.getElementById('statTotal').textContent) - 1;
+          // Reload to refresh section counts
+          loadUsers();
+        }
         else { let d={}; try{d=await res.json();}catch{}  alert(d.detail||`Error ${res.status}`); }
       } catch { alert('Failed to delete user.'); }
     }
@@ -596,17 +728,34 @@
         document.getElementById('eventsLoading').classList.add('d-none');
         if (!events.length) { document.getElementById('eventsEmpty').classList.remove('d-none'); return; }
 
-        document.getElementById('eventsList').innerHTML = events.map(e => `
+        document.getElementById('eventsList').innerHTML = events.map(e => {
+          const cap = e.max_students;
+          const cnt = e.registered_count || 0;
+          const pct = cap ? Math.min(100, Math.round(cnt / cap * 100)) : 0;
+          const barColor = pct >= 100 ? '#ff4444' : pct >= 80 ? '#ff9900' : '#E3FC02';
+          const capHtml = cap ? `
+            <div style="margin-top:.6rem;">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span style="font-size:.75rem;color:#aaa;">Capacity</span>
+                <span style="font-size:.75rem;color:${barColor};font-weight:600;">${cnt}/${cap} students${pct>=100?' &nbsp;<span style="background:#ff4444;color:#fff;padding:1px 6px;border-radius:4px;font-size:.68rem;">FULL</span>':''}</span>
+              </div>
+              <div style="background:#2a2a2a;border-radius:4px;height:6px;overflow:hidden;">
+                <div style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width .3s;"></div>
+              </div>
+            </div>` : (cnt > 0 ? `<div style="font-size:.75rem;color:#aaa;margin-top:.4rem;">${cnt} student${cnt!==1?'s':''} registered (no cap)</div>` : '');
+          const revHtml = e.total_revenue != null ? `<span style="font-size:.75rem;color:#6fcf97;font-weight:600;margin-left:.75rem;">&#36;${parseFloat(e.total_revenue).toFixed(2)} revenue</span>` : '';
+          return `
           <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;margin-bottom:.5rem;" id="erow-${e.id}">
             <div class="d-flex align-items-start justify-content-between p-3">
-              <div>
+              <div style="flex:1;min-width:0;">
                 <div class="fw-bold">${typeBadge(e.event_type)}${esc(e.title)}</div>
-                <div class="text-muted small">&#128337; ${fmtDt(e.event_date)}${e.location ? ' &nbsp;&#128205; '+esc(e.location) : ''}</div>
+                <div class="text-muted small">&#128337; ${fmtDt(e.event_date)}${e.location ? ' &nbsp;&#128205; '+esc(e.location) : ''}${revHtml}</div>
                 ${e.description ? `<div class="text-muted small mt-1">${esc(e.description)}</div>` : ''}
+                ${capHtml}
               </div>
               <div class="d-flex gap-2 ms-3 flex-shrink-0">
                 <button class="btn btn-sm btn-outline-secondary py-0 px-2"
-                  onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}','${esc(e.event_type||'')}',${e.early_price||'null'},${e.regular_price||'null'},'${e.early_price_deadline?toLocalInput(e.early_price_deadline):''}')">Edit</button>
+                  onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}','${esc(e.event_type||'')}',${e.early_price||'null'},${e.regular_price||'null'},'${e.early_price_deadline?toLocalInput(e.early_price_deadline):''}',${e.max_students||'null'})">Edit</button>
                 <button class="btn btn-sm btn-outline-danger py-0 px-2"
                   onclick="deleteEvent(${e.id},'${esc(e.title)}')">Delete</button>
               </div>
@@ -622,7 +771,8 @@
                 <div class="text-muted small text-center py-2">Loading…</div>
               </div>
             </div>
-          </div>`).join('');
+          </div>`;
+        }).join('');
       } catch {
         document.getElementById('eventsLoading').classList.add('d-none');
         document.getElementById('eventsError').textContent = 'Failed to load events.';
@@ -644,12 +794,21 @@
         const regs = await res.json();
 
         if (!regs.length) {
-          content.innerHTML = '<p class="text-muted small mb-0">No registrations yet.</p>';
+          content.innerHTML = `
+            <div class="d-flex align-items-center justify-content-between">
+              <p class="text-muted small mb-0">No registrations yet.</p>
+              <button class="btn btn-accent btn-sm py-0 px-2" style="font-size:.76rem;"
+                onclick="openAdminCreateReg(${eventId})">+ Add Registration</button>
+            </div>`;
           return;
         }
 
         content.innerHTML = `
-          <p class="small fw-bold mb-3" style="color:#E3FC02;">Registrations (${regs.length})</p>
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <p class="small fw-bold mb-0" style="color:#E3FC02;" id="ereg-heading-${eventId}">Registrations (${regs.length})</p>
+            <button class="btn btn-accent btn-sm py-0 px-2" style="font-size:.76rem;"
+              onclick="openAdminCreateReg(${eventId})">+ Add Registration</button>
+          </div>
           ${regs.map(reg => renderRegCard(eventId, reg)).join('')}`;
       } catch {
         content.innerHTML = '<div class="text-danger small">Failed to load registrations.</div>';
@@ -712,6 +871,132 @@
         if (res.ok) document.getElementById(`rst-${regId}-${studentId}`).remove();
         else alert('Failed to remove student.');
       } catch { alert('Something went wrong.'); }
+    }
+
+    let adminCreateRegModal;
+    let _allUsers = []; // cached user list for registration modal
+
+    async function openAdminCreateReg(eventId) {
+      document.getElementById('acrEventId').value = eventId;
+      document.getElementById('acrUserId').value = '';
+      document.getElementById('acrStudentsList').innerHTML = '';
+      document.getElementById('acrStudentsSection').classList.add('d-none');
+      document.getElementById('acrStudentsEmpty').classList.add('d-none');
+      document.getElementById('adminCreateRegAlert').classList.add('d-none');
+      document.getElementById('adminCreateRegTitle').textContent = 'Add Registration';
+
+      // Populate user dropdown
+      const sel = document.getElementById('acrUserId');
+      if (!_allUsers.length) {
+        const token = localStorage.getItem('token');
+        try {
+          const res = await fetch(`${API}/admin/users`, { headers: { 'Authorization': `Bearer ${token}` } });
+          _allUsers = await res.json();
+        } catch {}
+      }
+      sel.innerHTML = '<option value="">— Select a user —</option>' +
+        _allUsers.map(u => {
+          const label = `${u.first_name||''} ${u.last_name||''}`.trim() || u.email;
+          const studio = u.studio_name ? ` · ${u.studio_name}` : ' · Independent';
+          return `<option value="${u.id}">${esc(label)}${esc(studio)}</option>`;
+        }).join('');
+
+      adminCreateRegModal.show();
+    }
+
+    async function loadAcrStudents() {
+      const userId = document.getElementById('acrUserId').value;
+      const section = document.getElementById('acrStudentsSection');
+      const list = document.getElementById('acrStudentsList');
+      const loading = document.getElementById('acrStudentsLoading');
+      const empty = document.getElementById('acrStudentsEmpty');
+
+      if (!userId) { section.classList.add('d-none'); return; }
+      section.classList.remove('d-none');
+      list.innerHTML = '';
+      loading.classList.remove('d-none');
+      empty.classList.add('d-none');
+
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/users/${userId}/students`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const students = await res.json();
+        loading.classList.add('d-none');
+        if (!students.length) { empty.classList.remove('d-none'); return; }
+        list.innerHTML = students.map(s => `
+          <div class="form-check d-flex align-items-center gap-2 mb-1" style="background:#0d0d0d;border-radius:6px;padding:.3rem .6rem;">
+            <input class="form-check-input stu-switch" type="checkbox" role="switch" id="acr-s-${s.id}" value="${s.id}"
+              style="margin-top:0;cursor:pointer;">
+            <label class="form-check-label mb-0" for="acr-s-${s.id}" style="color:#ccc;font-size:.88rem;cursor:pointer;">${esc(s.name)}</label>
+          </div>`).join('');
+      } catch {
+        loading.classList.add('d-none');
+        list.innerHTML = '<div class="text-danger small">Failed to load students.</div>';
+      }
+    }
+
+    async function saveAdminCreateReg() {
+      const eventId   = document.getElementById('acrEventId').value;
+      const userId    = document.getElementById('acrUserId').value;
+      const alertEl   = document.getElementById('adminCreateRegAlert');
+      const saveBtn   = document.getElementById('adminCreateRegSaveBtn');
+      if (!userId) { alertEl.textContent = 'Please select a user.'; alertEl.classList.remove('d-none'); return; }
+
+      const studentIds = [...document.querySelectorAll('#acrStudentsList input[type="checkbox"]:checked')]
+        .map(cb => parseInt(cb.value));
+
+      alertEl.classList.add('d-none');
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/events/${eventId}/registrations/for-user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ user_id: parseInt(userId), student_ids: studentIds }),
+        });
+        let data = {}; try { data = await res.json(); } catch {}
+        if (res.ok) {
+          adminCreateRegModal.hide();
+          // Inject or update the registration card in the registrations panel
+          const content = document.getElementById(`ereg-content-${eventId}`);
+          if (content) {
+            // Check if card already exists for this user
+            const existing = document.getElementById(`areg-${data.id}`);
+            const newCard = renderRegCard(parseInt(eventId), data);
+            if (existing) {
+              existing.outerHTML = newCard;
+            } else {
+              // Append new card; ensure header is present
+              const heading = content.querySelector('p[id^="ereg-heading"]');
+              if (heading) {
+                content.insertAdjacentHTML('beforeend', newCard);
+                const cnt = content.querySelectorAll('.reg-card').length;
+                heading.textContent = `Registrations (${cnt})`;
+              } else {
+                // Panel was showing "No registrations" — reinject
+                content.innerHTML = `
+                  <div class="d-flex align-items-center justify-content-between mb-3">
+                    <p class="small fw-bold mb-0" style="color:#E3FC02;" id="ereg-heading-${eventId}">Registrations (1)</p>
+                    <button class="btn btn-accent btn-sm py-0 px-2" style="font-size:.76rem;"
+                      onclick="openAdminCreateReg(${eventId})">+ Add Registration</button>
+                  </div>
+                  ${newCard}`;
+              }
+            }
+          }
+        } else {
+          alertEl.textContent = data.detail || `Error ${res.status}`;
+          alertEl.classList.remove('d-none');
+        }
+      } catch {
+        alertEl.textContent = 'Something went wrong.';
+        alertEl.classList.remove('d-none');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Add Registration';
+      }
     }
 
     async function openAddRegStudent(eventId, regId, userId, userName, existingIds) {
@@ -780,7 +1065,7 @@
     }
 
     function openAddEvent() {
-      ['eventId','eventTitle','eventDate','eventLocation','eventDesc','eventEarlyPrice','eventRegularPrice','eventEarlyDeadline'].forEach(id => document.getElementById(id).value = '');
+      ['eventId','eventTitle','eventDate','eventLocation','eventDesc','eventEarlyPrice','eventRegularPrice','eventEarlyDeadline','eventMaxStudents'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('eventType').value = '';
       document.getElementById('pricingSection').classList.add('d-none');
       document.getElementById('eventModalTitle').textContent = 'New Event';
@@ -788,7 +1073,7 @@
       eventModal.show();
     }
 
-    function openEditEvent(id, title, date, location, desc, type, earlyPrice, regularPrice, earlyDeadline) {
+    function openEditEvent(id, title, date, location, desc, type, earlyPrice, regularPrice, earlyDeadline, maxStudents) {
       document.getElementById('eventModalTitle').textContent = 'Edit Event';
       document.getElementById('eventId').value            = id;
       document.getElementById('eventTitle').value         = title;
@@ -799,6 +1084,7 @@
       document.getElementById('eventEarlyPrice').value    = earlyPrice || '';
       document.getElementById('eventRegularPrice').value  = regularPrice || '';
       document.getElementById('eventEarlyDeadline').value = earlyDeadline || '';
+      document.getElementById('eventMaxStudents').value   = maxStudents || '';
       document.getElementById('pricingSection').classList.toggle('d-none', type !== 'convention');
       document.getElementById('eventAlert').classList.add('d-none');
       eventModal.show();
@@ -819,6 +1105,7 @@
       const earlyPrice    = document.getElementById('eventEarlyPrice').value;
       const regularPrice  = document.getElementById('eventRegularPrice').value;
       const earlyDeadline = document.getElementById('eventEarlyDeadline').value;
+      const maxStudents   = document.getElementById('eventMaxStudents').value;
 
       try {
         const res = await fetch(eventId ? `${API}/admin/events/${eventId}` : `${API}/admin/events`, {
@@ -832,6 +1119,7 @@
             early_price: (type === 'convention' && earlyPrice) ? parseFloat(earlyPrice) : null,
             regular_price: (type === 'convention' && regularPrice) ? parseFloat(regularPrice) : null,
             early_price_deadline: (type === 'convention' && earlyDeadline) ? new Date(earlyDeadline).toISOString() : null,
+            max_students: maxStudents ? parseInt(maxStudents) : null,
           }),
         });
         let data = {}; try { data = await res.json(); } catch {}
@@ -862,8 +1150,9 @@
       editModal          = new bootstrap.Modal(document.getElementById('editModal'));
       adminStudentModal  = new bootstrap.Modal(document.getElementById('adminStudentModal'));
       adminAddStudentModal = new bootstrap.Modal(document.getElementById('adminAddStudentModal'));
-      addRegStudentModal = new bootstrap.Modal(document.getElementById('addRegStudentModal'));
-      eventModal         = new bootstrap.Modal(document.getElementById('eventModal'));
+      addRegStudentModal   = new bootstrap.Modal(document.getElementById('addRegStudentModal'));
+      adminCreateRegModal  = new bootstrap.Modal(document.getElementById('adminCreateRegModal'));
+      eventModal           = new bootstrap.Modal(document.getElementById('eventModal'));
 
       let eventsLoaded = false;
       document.getElementById('events-tab').addEventListener('shown.bs.tab', () => {
