@@ -27,7 +27,12 @@ models.Base.metadata.create_all(bind=engine)
 
 
 def run_migrations(eng):
-    """Idempotently add columns introduced after initial deployment."""
+    """Idempotently add columns introduced after initial deployment.
+
+    Each statement runs in its own autocommit transaction so a lock
+    timeout on one ALTER TABLE does not roll back the others or block
+    the deploy indefinitely.
+    """
     stmts = [
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token VARCHAR",
@@ -93,10 +98,23 @@ def run_migrations(eng):
             observer_id INTEGER NOT NULL REFERENCES observers(id) ON DELETE CASCADE
         )""",
     ]
-    with eng.connect() as conn:
-        for stmt in stmts:
-            conn.execute(text(stmt))
-        conn.commit()
+    try:
+        with eng.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            # Each DDL runs as its own transaction; set a short lock
+            # timeout so ALTER TABLE never hangs the deploy.
+            conn.execute(text("SET lock_timeout = '10s'"))
+            conn.execute(text("SET statement_timeout = '30s'"))
+            for stmt in stmts:
+                try:
+                    conn.execute(text(stmt))
+                except Exception as exc:
+                    logger.warning(
+                        "Migration skipped (will retry next deploy): %.80s — %s",
+                        stmt.strip(),
+                        exc,
+                    )
+    except Exception as exc:
+        logger.error("run_migrations: DB connection failed at startup: %s", exc)
 
 
 run_migrations(engine)
