@@ -35,13 +35,28 @@
     .btn-outline-secondary:hover { border-color: #E3FC02; color: #E3FC02; background: #111; }
     .btn-accent { background-color: #E3FC02; color: #000; font-weight: 700; border: none; }
     .btn-accent:hover { background-color: #cce500; color: #000; }
-    .form-check-label { color: #888; }
-    .form-check-input:checked { background-color: #E3FC02; border-color: #E3FC02; }
-    .form-check-input:checked[type="checkbox"] { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23000'/%3e%3c/svg%3e"); }
-    .form-check-input:focus { box-shadow: 0 0 0 .2rem rgba(227,252,2,.25); border-color: #E3FC02; }
+    .form-check-label { color: #bbb; }
+    /* Accent toggle switch — matches #E3FC02 theme */
+    .form-switch .accent-switch {
+      background-color: #2a2a2a;
+      border-color: #555;
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='rgba%28255%2C255%2C255%2C0.35%29'/%3e%3c/svg%3e");
+      cursor: pointer;
+      transition: background-color .2s, border-color .2s;
+    }
+    .form-switch .accent-switch:checked {
+      background-color: #E3FC02;
+      border-color: #E3FC02;
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23000'/%3e%3c/svg%3e");
+    }
+    .form-switch .accent-switch:focus {
+      box-shadow: 0 0 0 .2rem rgba(227,252,2,.25);
+      border-color: #E3FC02;
+    }
+    .form-switch .accent-switch:checked + .form-check-label { color: #E3FC02; font-weight: 600; }
     .forgot-link { color: #E3FC02 !important; }
     .forgot-link:hover { color: #cce500 !important; }
-    .footer-text { color: #555; }
+    .footer-text { color: #888; }
     .forgot-divider { border-top: 1px solid #2a2a2a; }
   </style>
 </head>
@@ -148,13 +163,13 @@
             <form id="registerForm" class="d-none" novalidate>
               <div class="row g-3 mb-3">
                 <div class="col-6">
-                  <label for="regFirstName" class="form-label fw-semibold">First Name</label>
+                  <label for="regFirstName" class="form-label fw-semibold" id="labelFirstName">First Name</label>
                   <input type="text" class="form-control" id="regFirstName"
                     placeholder="Jane" required autocomplete="given-name">
                   <div class="invalid-feedback">Required.</div>
                 </div>
                 <div class="col-6">
-                  <label for="regLastName" class="form-label fw-semibold">Last Name</label>
+                  <label for="regLastName" class="form-label fw-semibold" id="labelLastName">Last Name</label>
                   <input type="text" class="form-control" id="regLastName"
                     placeholder="Smith" required autocomplete="family-name">
                   <div class="invalid-feedback">Required.</div>
@@ -164,10 +179,9 @@
               <!-- Independent dancer toggle -->
               <div class="mb-3">
                 <div class="form-check form-switch">
-                  <input class="form-check-input" type="checkbox" role="switch" id="regIndependent"
-                    onchange="toggleIndependent(this.checked)"
-                    style="background-color:#333;border-color:#555;">
-                  <label class="form-check-label" for="regIndependent" style="color:#ccc;">
+                  <input class="form-check-input accent-switch" type="checkbox" role="switch" id="regIndependent"
+                    onchange="toggleIndependent(this.checked)">
+                  <label class="form-check-label" for="regIndependent">
                     I'm an independent dancer (no studio)
                   </label>
                 </div>
@@ -314,6 +328,9 @@
       field.style.display = isIndependent ? 'none' : '';
       input.required = !isIndependent;
       if (isIndependent) { input.value = ''; input.classList.remove('is-invalid'); }
+      // Swap name labels for independent dancers
+      document.getElementById('labelFirstName').textContent = isIndependent ? 'Parent First Name' : 'First Name';
+      document.getElementById('labelLastName').textContent  = isIndependent ? 'Parent Last Name'  : 'Last Name';
     }
 
     // ── Error helper ──────────────────────────────────────────────────────────

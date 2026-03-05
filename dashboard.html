@@ -67,8 +67,10 @@
     /* ── Cards ── */
     .card-dark { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; }
     .section-title { color: #E3FC02; font-weight: 700; font-size: 1.3rem; margin-bottom: 1.5rem; }
-    .label-muted { color: #666; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .2rem; }
+    .label-muted { color: #888; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .2rem; }
     .field-value { color: #f0f0f0; font-weight: 600; font-size: .95rem; margin: 0; }
+    .text-muted { color: #999 !important; }
+    .badge-independent { background: #1a1a1a; border: 1px solid #E3FC02; color: #E3FC02; font-size: .75rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px; letter-spacing: .03em; }
     .divider { border-color: #2a2a2a; }
 
     /* ── Buttons ── */
@@ -200,8 +202,8 @@
               <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">Last Name</span>
               <span class="field-value" id="fieldLastName">—</span>
             </div>
-            <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;">
-              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;">Studio Name</span>
+            <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;" id="fieldStudioRow">
+              <span class="label-muted mb-0" style="width:130px;flex-shrink:0;" id="fieldStudioLabel">Studio Name</span>
               <span class="field-value" id="fieldStudio">—</span>
             </div>
             <div class="d-flex align-items-center py-2" style="border-bottom:1px solid #2a2a2a;">
@@ -386,21 +388,27 @@
       const firstName = u.first_name || '';
       const initial   = (firstName || u.email).charAt(0).toUpperCase();
 
+      const isIndependent = !u.studio_name;
+
       document.getElementById('sidebarAvatar').textContent   = initial;
       document.getElementById('sidebarName').textContent     = firstName ? `${firstName} ${u.last_name||''}`.trim() : u.email;
-      document.getElementById('sidebarStudio').textContent   = u.studio_name || '';
+      document.getElementById('sidebarStudio').textContent   = u.studio_name || 'Independent Dancer';
       document.getElementById('homeAvatar').textContent      = initial;
       document.getElementById('homeWelcomeName').textContent = firstName || u.email;
-      document.getElementById('homeStudio').textContent      = u.studio_name || '';
+      document.getElementById('homeStudio').textContent      = u.studio_name || 'Independent Dancer';
 
-      document.getElementById('fieldFirstName').textContent = u.first_name  || '—';
-      document.getElementById('fieldLastName').textContent  = u.last_name   || '—';
-      document.getElementById('fieldStudio').textContent    = u.studio_name || '—';
+      document.getElementById('fieldFirstName').textContent = u.first_name || '—';
+      document.getElementById('fieldLastName').textContent  = u.last_name  || '—';
+      // Studio row: show "Independent Dancer" badge when no studio
+      document.getElementById('fieldStudioLabel').textContent = isIndependent ? 'Affiliation' : 'Studio Name';
+      document.getElementById('fieldStudio').innerHTML = isIndependent
+        ? '<span class="badge-independent">Independent Dancer</span>'
+        : (u.studio_name || '—');
       document.getElementById('fieldPhone').textContent     = u.phone || '—';
       document.getElementById('fieldEmail').textContent     = u.email;
       document.getElementById('fieldVerified').innerHTML    = u.email_verified
         ? '<span class="badge" style="background:#198754;font-size:.7rem;font-weight:600;">&#10003; Verified</span>'
-        : '<span class="badge" style="background:#6c757d;font-size:.7rem;font-weight:600;">Unverified</span>';
+        : '<span class="badge" style="background:#777;font-size:.7rem;font-weight:600;">Unverified</span>';
     }
 
     function toggleEdit() {

@@ -17,14 +17,16 @@
     thead th { color: #E3FC02; border-bottom-color: #E3FC02 !important; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
     .badge-admin { background-color: #E3FC02; color: #000; font-weight: 700; }
     .badge-user  { background-color: #2a2a2a; color: #aaa; }
-    .badge-verified   { background-color: #198754; }
-    .badge-unverified { background-color: #6c757d; }
+    .badge-verified      { background-color: #198754; }
+    .badge-unverified    { background-color: #888; }
+    .badge-independent   { background: transparent; border: 1px solid #E3FC02; color: #E3FC02; font-weight: 600; }
     .badge-convention  { background-color: #0d6efd; color: #fff; }
     .badge-competition { background-color: #fd7e14; color: #000; }
     .page-title { color: #E3FC02; }
     .stat-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; }
     .stat-number { color: #E3FC02; font-size: 2rem; font-weight: 700; }
     #loadingSpinner { color: #E3FC02; }
+    .text-muted { color: #999 !important; }
     .admin-banner {
       background: linear-gradient(90deg, #E3FC02 0%, #c8e000 100%);
       color: #000; font-weight: 700; font-size: .8rem;
@@ -345,7 +347,7 @@
               </button>
             </td>
             <td>${esc(u.email)}</td>
-            <td>${esc(u.studio_name||'—')}</td>
+            <td>${u.studio_name ? esc(u.studio_name) : '<span class="badge badge-independent">Independent</span>'}</td>
             <td>${esc(u.phone||'—')}</td>
             <td>${fmtDate(u.created_at)}</td>
             <td><span class="badge ${u.email_verified?'badge-verified':'badge-unverified'}">${u.email_verified?'Verified':'Unverified'}</span></td>
@@ -667,7 +669,7 @@
           <div class="d-flex align-items-start justify-content-between mb-2">
             <div>
               <div class="fw-semibold" style="font-size:.9rem;">${esc(reg.user_name)}</div>
-              ${reg.studio_name ? `<div class="text-muted" style="font-size:.78rem;">${esc(reg.studio_name)}</div>` : ''}
+              <div style="font-size:.78rem;color:#999;">${reg.studio_name ? esc(reg.studio_name) : '<span class="badge badge-independent" style="font-size:.7rem;">Independent</span>'}</div>
             </div>
             <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.78rem;"
               onclick="adminRemoveRegistration(${eventId},${reg.id},'${esc(reg.user_name)}')">Remove All</button>
