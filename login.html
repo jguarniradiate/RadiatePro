@@ -228,7 +228,7 @@
 
         let data = {};
         try { data = await res.json(); } catch {}
-        if (!res.ok) throw new Error(extractError(data, 'Login failed'));
+        if (!res.ok) throw new Error(extractError(data, `Error ${res.status}`));
 
         localStorage.setItem('token', data.access_token);
         window.location.href = 'dashboard.html';
@@ -270,7 +270,7 @@
 
         let data = {};
         try { data = await res.json(); } catch {}
-        if (!res.ok) throw new Error(extractError(data, 'Registration failed'));
+        if (!res.ok) throw new Error(extractError(data, `Error ${res.status}`));
 
         showAlert('Account created! You can now sign in.', 'success');
         showTab('login');
