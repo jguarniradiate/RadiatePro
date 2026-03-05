@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from pydantic import BaseModel, EmailStr
 
 
@@ -7,7 +8,7 @@ class UserCreate(BaseModel):
     password: str
     first_name: str
     last_name: str
-    studio_name: str
+    studio_name: str | None = None   # None = independent dancer
     phone: str
 
 
@@ -94,6 +95,9 @@ class EventCreate(BaseModel):
     event_date: datetime
     location: str | None = None
     event_type: str | None = None  # "convention" or "competition"
+    early_price: Decimal | None = None
+    regular_price: Decimal | None = None
+    early_price_deadline: datetime | None = None
 
 
 class EventUpdate(BaseModel):
@@ -102,6 +106,9 @@ class EventUpdate(BaseModel):
     event_date: datetime | None = None
     location: str | None = None
     event_type: str | None = None
+    early_price: Decimal | None = None
+    regular_price: Decimal | None = None
+    early_price_deadline: datetime | None = None
 
 
 class EventOut(BaseModel):
@@ -111,6 +118,9 @@ class EventOut(BaseModel):
     event_date: datetime
     location: str | None = None
     event_type: str | None = None
+    early_price: Decimal | None = None
+    regular_price: Decimal | None = None
+    early_price_deadline: datetime | None = None
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

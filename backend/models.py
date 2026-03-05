@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date, ForeignKey, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -57,6 +57,9 @@ class Event(Base):
     event_date = Column(DateTime(timezone=True), nullable=False)
     location = Column(String, nullable=True)
     event_type = Column(String, nullable=True)  # "convention" or "competition"
+    early_price = Column(Numeric(10, 2), nullable=True)          # early-bird price (conventions)
+    regular_price = Column(Numeric(10, 2), nullable=True)        # regular / at-door price
+    early_price_deadline = Column(DateTime(timezone=True), nullable=True)  # deadline for early price
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     registrations = relationship("EventRegistration", back_populates="event", cascade="all, delete-orphan")

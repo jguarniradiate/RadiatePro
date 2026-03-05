@@ -51,6 +51,9 @@ def run_migrations(eng):
             created_at TIMESTAMPTZ DEFAULT now()
         )""",
         "ALTER TABLE events ADD COLUMN IF NOT EXISTS event_type VARCHAR",
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS early_price NUMERIC(10,2)",
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS regular_price NUMERIC(10,2)",
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS early_price_deadline TIMESTAMPTZ",
         """CREATE TABLE IF NOT EXISTS event_registrations (
             id SERIAL PRIMARY KEY,
             event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,

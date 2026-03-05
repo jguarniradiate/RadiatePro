@@ -240,12 +240,15 @@
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline-danger btn-sm me-auto" id="unregBtn" onclick="unregisterFromEvent()" style="display:none;">
-            Cancel Registration
-          </button>
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-          <button type="button" class="btn btn-accent" id="regSaveBtn" onclick="saveRegistration()">Register</button>
+        <div class="modal-footer flex-column align-items-stretch gap-2" style="padding:.75rem 1rem;">
+          <div id="regTotal" class="text-center d-none" style="font-size:.9rem;"></div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-danger btn-sm me-auto" id="unregBtn" onclick="unregisterFromEvent()" style="display:none;">
+              Cancel Registration
+            </button>
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="button" class="btn btn-accent" id="regSaveBtn" onclick="saveRegistration()">Register</button>
+          </div>
         </div>
       </div>
     </div>
@@ -256,7 +259,9 @@
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
     let myStudents = [];
     let myRegistrations = {}; // event_id (string) → {registration_id, student_ids}
+    let eventsCache = {};     // event_id → full event object
     let regModal;
+    let currentRegEvent = null; // full event object for the open modal
 
     function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
 
@@ -288,6 +293,8 @@
     function renderEvents(events) {
       document.getElementById('spinner').classList.add('d-none');
       if (!events.length) { document.getElementById('emptyMsg').classList.remove('d-none'); return; }
+      // Build lookup cache
+      events.forEach(e => { eventsCache[e.id] = e; });
 
       const now = new Date();
       const upcoming = events.filter(e => new Date(e.event_date) >= now);
@@ -311,12 +318,13 @@
                     <span>&#128337; ${dt.time}</span>
                     ${e.location ? `<span>&#128205; ${esc(e.location)}</span>` : ''}
                   </div>
+                  ${pricingBadge(e)}
                   ${!isPast ? `
                   <div class="d-flex align-items-center gap-2 mt-2">
                     ${reg ? `<span class="reg-badge">&#10003; Registered</span>` : ''}
                     <button id="reg-btn-${e.id}"
                       class="btn btn-sm ${reg ? 'btn-outline-secondary' : 'btn-accent'} py-1 px-3"
-                      onclick="openRegModal(${e.id},'${esc(e.title)}')">
+                      onclick="openRegModal(eventsCache[${e.id}])">
                       ${reg ? 'Edit Registration' : 'Register'}
                     </button>
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
@@ -380,6 +388,46 @@
       return `${m}/${d}/${y}`;
     }
 
+    function fmtPrice(val) {
+      return val != null ? `$${parseFloat(val).toFixed(2)}` : null;
+    }
+
+    function pricingBadge(e) {
+      if (!e.regular_price && !e.early_price) return '';
+      const now = new Date();
+      const earlyActive = e.early_price && e.early_price_deadline && new Date(e.early_price_deadline) > now;
+      if (earlyActive) {
+        const deadline = new Date(e.early_price_deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+        return `<div class="event-meta mt-1">
+          <span style="color:#E3FC02;font-weight:600;">&#128176; ${fmtPrice(e.early_price)} early bird</span>
+          <span class="ms-2">/ ${fmtPrice(e.regular_price)} after ${deadline}</span>
+        </div>`;
+      }
+      if (e.regular_price) {
+        return `<div class="event-meta mt-1"><span style="color:#E3FC02;font-weight:600;">&#128176; ${fmtPrice(e.regular_price)} per student</span></div>`;
+      }
+      return '';
+    }
+
+    function calcRunningTotal(event) {
+      if (!event) return null;
+      const now = new Date();
+      const earlyActive = event.early_price && event.early_price_deadline && new Date(event.early_price_deadline) > now;
+      const pricePerStudent = earlyActive ? parseFloat(event.early_price) : (event.regular_price ? parseFloat(event.regular_price) : null);
+      if (pricePerStudent == null) return null;
+      const count = [...document.querySelectorAll('.stu-switch:checked')].length;
+      return count * pricePerStudent;
+    }
+
+    function updateTotalDisplay(event) {
+      const total = calcRunningTotal(event);
+      const el = document.getElementById('regTotal');
+      if (!el) return;
+      if (total == null) { el.classList.add('d-none'); return; }
+      el.classList.remove('d-none');
+      el.innerHTML = `<span class="text-muted small">Estimated total: </span><strong style="color:#E3FC02;">$${total.toFixed(2)}</strong>`;
+    }
+
     function getSelectedStudentIds() {
       return [...document.querySelectorAll('.stu-switch:checked')].map(i => parseInt(i.dataset.studentId));
     }
@@ -392,6 +440,7 @@
       if (myStudents.length === 0) {
         wrap.classList.add('d-none');
         noMsg.classList.remove('d-none');
+        updateTotalDisplay(currentRegEvent);
         return;
       }
 
@@ -411,17 +460,24 @@
           <td>${fmtDob(s.date_of_birth)}</td>
           <td>${esc(s.gender || '—')}</td>
         </tr>`).join('');
+
+      // Attach change listeners for running total
+      tbody.querySelectorAll('.stu-switch').forEach(sw => {
+        sw.addEventListener('change', () => updateTotalDisplay(currentRegEvent));
+      });
+      updateTotalDisplay(currentRegEvent);
     }
 
     // ── Registration modal ─────────────────────────────────────────────────────
 
-    function openRegModal(eventId, eventTitle) {
-      document.getElementById('regEventId').value = eventId;
-      document.getElementById('regModalTitle').textContent = eventTitle;
+    function openRegModal(event) {
+      currentRegEvent = event;
+      document.getElementById('regEventId').value = event.id;
+      document.getElementById('regModalTitle').textContent = event.title;
       document.getElementById('regAlert').classList.add('d-none');
       document.getElementById('quickAddStudentForm').classList.add('d-none');
 
-      const reg = myRegistrations[String(eventId)];
+      const reg = myRegistrations[String(event.id)];
       const selectedIds = reg ? reg.student_ids : [];
 
       renderStudentTable(selectedIds);

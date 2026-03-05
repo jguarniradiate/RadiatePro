@@ -36,6 +36,9 @@
     .btn-accent { background-color: #E3FC02; color: #000; font-weight: 700; border: none; }
     .btn-accent:hover { background-color: #cce500; color: #000; }
     .form-check-label { color: #888; }
+    .form-check-input:checked { background-color: #E3FC02; border-color: #E3FC02; }
+    .form-check-input:checked[type="checkbox"] { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23000'/%3e%3c/svg%3e"); }
+    .form-check-input:focus { box-shadow: 0 0 0 .2rem rgba(227,252,2,.25); border-color: #E3FC02; }
     .forgot-link { color: #E3FC02 !important; }
     .forgot-link:hover { color: #cce500 !important; }
     .footer-text { color: #555; }
@@ -158,7 +161,20 @@
                 </div>
               </div>
 
+              <!-- Independent dancer toggle -->
               <div class="mb-3">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" role="switch" id="regIndependent"
+                    onchange="toggleIndependent(this.checked)"
+                    style="background-color:#333;border-color:#555;">
+                  <label class="form-check-label" for="regIndependent" style="color:#ccc;">
+                    I'm an independent dancer (no studio)
+                  </label>
+                </div>
+              </div>
+
+              <!-- Studio Name (hidden when independent) -->
+              <div class="mb-3" id="studioField">
                 <label for="regStudio" class="form-label fw-semibold">Studio Name</label>
                 <input type="text" class="form-control" id="regStudio"
                   placeholder="Radiate Studios" required autocomplete="organization">
@@ -291,6 +307,15 @@
         : (btnId === 'loginBtn' ? 'Sign In' : btnId === 'forgotBtn' ? 'Send Reset Link' : 'Create Account');
     }
 
+    // ── Independent dancer toggle ─────────────────────────────────────────────
+    function toggleIndependent(isIndependent) {
+      const field = document.getElementById('studioField');
+      const input = document.getElementById('regStudio');
+      field.style.display = isIndependent ? 'none' : '';
+      input.required = !isIndependent;
+      if (isIndependent) { input.value = ''; input.classList.remove('is-invalid'); }
+    }
+
     // ── Error helper ──────────────────────────────────────────────────────────
     function extractError(data, fallback) {
       if (!data || !data.detail) return fallback;
@@ -398,7 +423,8 @@
       const email       = document.getElementById('regEmail').value.trim();
       const first_name  = document.getElementById('regFirstName').value.trim();
       const last_name   = document.getElementById('regLastName').value.trim();
-      const studio_name = document.getElementById('regStudio').value.trim();
+      const independent = document.getElementById('regIndependent').checked;
+      const studio_name = independent ? null : document.getElementById('regStudio').value.trim();
       const phone       = document.getElementById('regPhone').value.trim();
 
       setLoading('registerBtn', true);

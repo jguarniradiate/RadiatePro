@@ -246,7 +246,7 @@
           <div class="mb-3"><label class="form-label fw-semibold">Title <span class="text-danger">*</span></label><input type="text" class="form-control" id="eventTitle" placeholder="Event title"></div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Event Type</label>
-            <select class="form-select" id="eventType">
+            <select class="form-select" id="eventType" onchange="togglePricingSection()">
               <option value="">— Select type —</option>
               <option value="convention">Convention</option>
               <option value="competition">Competition</option>
@@ -255,6 +255,33 @@
           <div class="mb-3"><label class="form-label fw-semibold">Date &amp; Time <span class="text-danger">*</span></label><input type="datetime-local" class="form-control" id="eventDate"></div>
           <div class="mb-3"><label class="form-label fw-semibold">Location</label><input type="text" class="form-control" id="eventLocation" placeholder="Venue or address"></div>
           <div class="mb-3"><label class="form-label fw-semibold">Description</label><textarea class="form-control" id="eventDesc" rows="3" placeholder="Optional details…"></textarea></div>
+          <!-- Pricing (conventions only) -->
+          <div id="pricingSection" class="d-none">
+            <hr style="border-color:#2a2a2a;">
+            <p class="small fw-semibold mb-3" style="color:#E3FC02;">Registration Pricing</p>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label fw-semibold">Early Bird Price</label>
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text" style="background:#111;border-color:#333;color:#aaa;">$</span>
+                  <input type="number" class="form-control" id="eventEarlyPrice" placeholder="0.00" min="0" step="0.01"
+                    style="background:#111;border-color:#333;color:#f0f0f0;">
+                </div>
+              </div>
+              <div class="col-6">
+                <label class="form-label fw-semibold">Regular Price</label>
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text" style="background:#111;border-color:#333;color:#aaa;">$</span>
+                  <input type="number" class="form-control" id="eventRegularPrice" placeholder="0.00" min="0" step="0.01"
+                    style="background:#111;border-color:#333;color:#f0f0f0;">
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold">Early Bird Deadline</label>
+                <input type="datetime-local" class="form-control" id="eventEarlyDeadline">
+              </div>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -577,7 +604,7 @@
               </div>
               <div class="d-flex gap-2 ms-3 flex-shrink-0">
                 <button class="btn btn-sm btn-outline-secondary py-0 px-2"
-                  onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}','${esc(e.event_type||'')}')">Edit</button>
+                  onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}','${esc(e.event_type||'')}',${e.early_price||'null'},${e.regular_price||'null'},'${e.early_price_deadline?toLocalInput(e.early_price_deadline):''}')">Edit</button>
                 <button class="btn btn-sm btn-outline-danger py-0 px-2"
                   onclick="deleteEvent(${e.id},'${esc(e.title)}')">Delete</button>
               </div>
@@ -743,22 +770,34 @@
       }
     }
 
+    function togglePricingSection() {
+      const type = document.getElementById('eventType').value;
+      const section = document.getElementById('pricingSection');
+      if (type === 'convention') section.classList.remove('d-none');
+      else { section.classList.add('d-none'); document.getElementById('eventEarlyPrice').value=''; document.getElementById('eventRegularPrice').value=''; document.getElementById('eventEarlyDeadline').value=''; }
+    }
+
     function openAddEvent() {
-      ['eventId','eventTitle','eventDate','eventLocation','eventDesc'].forEach(id => document.getElementById(id).value = '');
+      ['eventId','eventTitle','eventDate','eventLocation','eventDesc','eventEarlyPrice','eventRegularPrice','eventEarlyDeadline'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('eventType').value = '';
+      document.getElementById('pricingSection').classList.add('d-none');
       document.getElementById('eventModalTitle').textContent = 'New Event';
       document.getElementById('eventAlert').classList.add('d-none');
       eventModal.show();
     }
 
-    function openEditEvent(id, title, date, location, desc, type) {
+    function openEditEvent(id, title, date, location, desc, type, earlyPrice, regularPrice, earlyDeadline) {
       document.getElementById('eventModalTitle').textContent = 'Edit Event';
-      document.getElementById('eventId').value       = id;
-      document.getElementById('eventTitle').value    = title;
-      document.getElementById('eventType').value     = type;
-      document.getElementById('eventDate').value     = date;
-      document.getElementById('eventLocation').value = location;
-      document.getElementById('eventDesc').value     = desc;
+      document.getElementById('eventId').value            = id;
+      document.getElementById('eventTitle').value         = title;
+      document.getElementById('eventType').value          = type;
+      document.getElementById('eventDate').value          = date;
+      document.getElementById('eventLocation').value      = location;
+      document.getElementById('eventDesc').value          = desc;
+      document.getElementById('eventEarlyPrice').value    = earlyPrice || '';
+      document.getElementById('eventRegularPrice').value  = regularPrice || '';
+      document.getElementById('eventEarlyDeadline').value = earlyDeadline || '';
+      document.getElementById('pricingSection').classList.toggle('d-none', type !== 'convention');
       document.getElementById('eventAlert').classList.add('d-none');
       eventModal.show();
     }
@@ -770,14 +809,28 @@
       const saveBtn = document.getElementById('eventSaveBtn');
       const title   = document.getElementById('eventTitle').value.trim();
       const date    = document.getElementById('eventDate').value;
+      const type    = document.getElementById('eventType').value || null;
       if (!title || !date) { alertEl.textContent = 'Title and date are required.'; alertEl.classList.remove('d-none'); return; }
       alertEl.classList.add('d-none'); saveBtn.disabled = true;
       saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+      const earlyPrice    = document.getElementById('eventEarlyPrice').value;
+      const regularPrice  = document.getElementById('eventRegularPrice').value;
+      const earlyDeadline = document.getElementById('eventEarlyDeadline').value;
+
       try {
         const res = await fetch(eventId ? `${API}/admin/events/${eventId}` : `${API}/admin/events`, {
           method: eventId ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ title, event_type: document.getElementById('eventType').value||null, event_date: new Date(date).toISOString(), location: document.getElementById('eventLocation').value.trim()||null, description: document.getElementById('eventDesc').value.trim()||null }),
+          body: JSON.stringify({
+            title, event_type: type,
+            event_date: new Date(date).toISOString(),
+            location: document.getElementById('eventLocation').value.trim()||null,
+            description: document.getElementById('eventDesc').value.trim()||null,
+            early_price: (type === 'convention' && earlyPrice) ? parseFloat(earlyPrice) : null,
+            regular_price: (type === 'convention' && regularPrice) ? parseFloat(regularPrice) : null,
+            early_price_deadline: (type === 'convention' && earlyDeadline) ? new Date(earlyDeadline).toISOString() : null,
+          }),
         });
         let data = {}; try { data = await res.json(); } catch {}
         if (res.ok) {
