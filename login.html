@@ -375,7 +375,17 @@
 
         localStorage.setItem('token', data.access_token);
         const next = new URLSearchParams(window.location.search).get('next');
-        window.location.href = next || 'dashboard.html';
+        if (next) { window.location.href = next; return; }
+        // Determine destination based on role
+        try {
+          const meRes = await fetch(`${API}/auth/me`, {
+            headers: { 'Authorization': `Bearer ${data.access_token}` }
+          });
+          const me = await meRes.json();
+          window.location.href = me.is_admin ? 'admin.html' : 'dashboard.html';
+        } catch {
+          window.location.href = 'dashboard.html';
+        }
       } catch (err) {
         showAlert(err.message);
       } finally {

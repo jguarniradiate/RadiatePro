@@ -90,13 +90,10 @@
       background: #198754; color: #fff; font-size: .72rem; font-weight: 600;
       padding: .25rem .6rem; border-radius: 20px; white-space: nowrap;
     }
-    .cap-badge { font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px;
-      white-space: nowrap; display: inline-flex; align-items: center; gap: .3rem; }
-    .cap-badge.open { background: #0d1f12; color: #6fcf97; border: 1px solid #1e4a2a; }
-    .cap-badge.warn { background: #1f1000; color: #ff9900; border: 1px solid #3a2000; }
-    .cap-badge.full { background: #1f0808; color: #ff5555; border: 1px solid #5a1010; }
-    .cap-bar-wrap   { background:#2a2a2a; border-radius:3px; height:4px; overflow:hidden; margin-top:.35rem; }
-    .cap-bar        { height:100%; border-radius:3px; transition:width .3s; }
+    .cap-bar-wrap   { background:#2a2a2a; border-radius:6px; height:9px; overflow:hidden; }
+    .cap-bar        { height:100%; border-radius:6px; transition:width .3s; }
+    .cap-label      { font-size:.68rem; color:#888; margin-bottom:.3rem; display:flex; justify-content:space-between; align-items:center; }
+    .cap-label.full-lbl { color:#ff5555; font-weight:700; }
     .event-card.full { border-color: #5a1010 !important; }
     /* Modal */
     .modal-content { background: #1a1a1a; border: 1px solid #2a2a2a; color: #f0f0f0; }
@@ -408,14 +405,16 @@
       const cnt = e.registered_count || 0;
       const max = e.max_students;
       const pct = Math.min(100, Math.round(cnt / max * 100));
-      const cls  = pct >= 100 ? 'full' : pct >= 80 ? 'warn' : 'open';
       const barColor = pct >= 100 ? '#ff5555' : pct >= 80 ? '#ff9900' : '#E3FC02';
-      const label = pct >= 100
-        ? '&#9940; Full'
-        : `${max - cnt} spot${max - cnt !== 1 ? 's' : ''} left`;
-      return `<span class="cap-badge ${cls}">${label}</span>
-        <div class="cap-bar-wrap" style="max-width:140px;">
-          <div class="cap-bar" style="width:${pct}%;background:${barColor};"></div>
+      const isFull = pct >= 100;
+      const labelClass = isFull ? 'cap-label full-lbl' : 'cap-label';
+      const labelText  = isFull ? '&#9940; Event Full' : `${cnt} / ${max} students registered`;
+      return `
+        <div style="margin-top:.6rem;">
+          <div class="${labelClass}"><span>${labelText}</span></div>
+          <div class="cap-bar-wrap">
+            <div class="cap-bar" style="width:${pct}%;background:${barColor};"></div>
+          </div>
         </div>`;
     }
 

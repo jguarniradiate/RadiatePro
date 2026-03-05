@@ -130,9 +130,6 @@
       <a class="nav-item" href="events.html">
         <span class="nav-icon">&#128197;</span> Events
       </a>
-      <a class="nav-item" href="admin.html" id="adminLink" style="display:none;">
-        <span class="nav-icon">&#9881;</span> Admin Portal
-      </a>
     </div>
 
     <div class="sidebar-footer">
@@ -160,27 +157,43 @@
             <p class="mb-0 small" style="color:#f0f0f0;" id="homeStudio"></p>
           </div>
         </div>
-        <div class="row g-3 mb-4">
-          <div class="col-6 col-md-4">
-            <div class="stat-mini d-flex flex-column" style="gap:.6rem;">
-              <div>
-                <div class="stat-num" id="homeStudentCount">—</div>
-                <div class="text-muted small mt-1">Students</div>
-              </div>
-              <button class="btn btn-accent btn-sm" style="font-size:.78rem;padding:.3rem .7rem;align-self:flex-start;"
-                onclick="showSection('students');openAddStudent();">+ Add Student</button>
+        <!-- Step sequence -->
+        <p class="mb-3" style="color:#888;font-size:.85rem;letter-spacing:.04em;text-transform:uppercase;font-weight:600;">Getting Started</p>
+        <div class="d-flex flex-column gap-3">
+
+          <!-- Step 1: Add Students -->
+          <div class="card-dark p-3 d-flex align-items-center gap-3" style="border-left:3px solid #E3FC02;">
+            <div style="width:36px;height:36px;border-radius:50%;background:#E3FC02;color:#000;font-weight:800;
+                        font-size:1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+            <div style="flex:1;min-width:0;">
+              <div class="fw-semibold mb-1" style="color:#f0f0f0;">Add Your Students</div>
+              <div style="color:#888;font-size:.82rem;">You currently have <strong style="color:#E3FC02;" id="homeStudentCount">—</strong> student(s) registered.</div>
+            </div>
+            <div class="d-flex gap-2 flex-shrink-0">
+              <button class="btn btn-accent btn-sm" onclick="showSection('students');openAddStudent();">+ Add</button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="showSection('students')">Manage</button>
             </div>
           </div>
-          <div class="col-6 col-md-4">
-            <div class="stat-mini">
-              <div class="stat-num" id="homeEventCount">—</div>
-              <div class="text-muted small mt-1">Upcoming Events</div>
-            </div>
+
+          <!-- Connector arrow -->
+          <div style="display:flex;align-items:center;gap:.5rem;padding:0 1rem;">
+            <div style="flex:1;height:1px;background:#2a2a2a;"></div>
+            <span style="color:#555;font-size:.8rem;">&#9660;</span>
+            <div style="flex:1;height:1px;background:#2a2a2a;"></div>
           </div>
-        </div>
-        <div class="d-flex gap-2 flex-wrap">
-          <button class="btn btn-accent btn-sm" onclick="showSection('students')">Manage Students</button>
-          <a href="events.html" class="btn btn-outline-secondary btn-sm">View Events</a>
+
+          <!-- Step 2: Register for Events -->
+          <div class="card-dark p-3 d-flex align-items-center gap-3" id="homeStep2" style="border-left:3px solid #2a2a2a;">
+            <div id="homeStep2Num" style="width:36px;height:36px;border-radius:50%;background:#2a2a2a;color:#666;font-weight:800;
+                        font-size:1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+            <div style="flex:1;min-width:0;">
+              <div class="fw-semibold mb-1" id="homeStep2Title" style="color:#888;">Register for Events</div>
+              <div style="color:#888;font-size:.82rem;" id="homeStep2Sub">Add students first, then browse and register for upcoming events.</div>
+            </div>
+            <a href="events.html" class="btn btn-sm flex-shrink-0" id="homeEventsBtn"
+               style="background:#1a1a1a;border:1px solid #333;color:#666;pointer-events:none;">View Events</a>
+          </div>
+
         </div>
       </div>
 
@@ -375,9 +388,20 @@
         // Home stats
         const now = new Date();
         document.getElementById('homeStudentCount').textContent = students.length;
-        document.getElementById('homeEventCount').textContent   = events.filter(e => new Date(e.event_date) >= now).length;
+        // Unlock step 2 when students exist
+        if (students.length > 0) {
+          const upcomingCount = events.filter(e => new Date(e.event_date) >= now).length;
+          document.getElementById('homeStep2').style.borderLeftColor = '#E3FC02';
+          document.getElementById('homeStep2Num').style.background = '#E3FC02';
+          document.getElementById('homeStep2Num').style.color = '#000';
+          document.getElementById('homeStep2Title').style.color = '#f0f0f0';
+          document.getElementById('homeStep2Sub').textContent = `${upcomingCount} upcoming event${upcomingCount !== 1 ? 's' : ''} available. Browse and register your students.`;
+          const btn = document.getElementById('homeEventsBtn');
+          btn.style.background = ''; btn.style.border = ''; btn.style.color = '';
+          btn.classList.add('btn-accent'); btn.style.pointerEvents = '';
+        }
 
-        if (currentUser.is_admin) document.getElementById('adminLink').style.display = '';
+        if (currentUser.is_admin) { window.location.href = 'admin.html'; return; }
 
       } catch {
         window.location.href = 'login.html';
