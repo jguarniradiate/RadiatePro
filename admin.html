@@ -301,10 +301,51 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <p class="text-muted small mb-3" id="addRegForUser"></p>
+          <p class="text-muted small mb-1" id="addRegForUser"></p>
+
+          <!-- Existing students list -->
+          <p class="fw-semibold mb-2" style="font-size:.82rem;color:#E3FC02;">Existing Students</p>
           <div id="addRegStudentLoading" class="text-center py-2"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div></div>
-          <div id="addRegStudentEmpty" class="text-muted small text-center d-none">All students are already registered for this event.</div>
-          <div id="addRegStudentList" class="d-flex flex-wrap gap-2"></div>
+          <div id="addRegStudentEmpty" class="text-muted small text-center d-none">All of this user's students are already in the registration.</div>
+          <div id="addRegStudentList" class="d-flex flex-wrap gap-2 mb-3"></div>
+
+          <!-- Divider -->
+          <hr style="border-color:#2a2a2a;margin:12px 0;">
+
+          <!-- Create new student form -->
+          <div>
+            <button class="btn btn-link p-0 text-decoration-none mb-2" style="color:#E3FC02;font-size:.85rem;font-weight:600;"
+              onclick="toggleNewStudentForm()">
+              <span id="newStudentToggleIcon">&#43;</span> Create New Student &amp; Add
+            </button>
+            <div id="newStudentForm" class="d-none">
+              <div id="newStudentAlert" class="alert alert-danger d-none mb-2 py-2" style="font-size:.85rem;"></div>
+              <div class="mb-2">
+                <label class="form-label fw-semibold" style="font-size:.82rem;">Full Name <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm" id="newStudentName" placeholder="Student's full name">
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col-6">
+                  <label class="form-label fw-semibold" style="font-size:.82rem;">Date of Birth</label>
+                  <input type="date" class="form-control form-control-sm" id="newStudentDob">
+                </div>
+                <div class="col-6">
+                  <label class="form-label fw-semibold" style="font-size:.82rem;">Gender</label>
+                  <select class="form-select form-select-sm" id="newStudentGender">
+                    <option value="">— Select —</option>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                    <option value="Non-binary">Non-binary</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                </div>
+              </div>
+              <button class="btn btn-accent btn-sm w-100 mt-1" id="createNewStudentBtn"
+                onclick="createAndAddStudent()">
+                Create &amp; Add to Registration
+              </button>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
@@ -1078,11 +1119,18 @@
     }
 
     async function openAddRegStudent(eventId, regId, userId, userName, existingIds) {
-      _regCtx = { eventId, regId };
+      _regCtx = { eventId, regId, userId };
       document.getElementById('addRegForUser').textContent = `Adding students for: ${userName}`;
       document.getElementById('addRegStudentList').innerHTML = '';
       document.getElementById('addRegStudentEmpty').classList.add('d-none');
       document.getElementById('addRegStudentLoading').classList.remove('d-none');
+      // Reset new student form
+      document.getElementById('newStudentForm').classList.add('d-none');
+      document.getElementById('newStudentToggleIcon').textContent = '+';
+      document.getElementById('newStudentName').value = '';
+      document.getElementById('newStudentDob').value  = '';
+      document.getElementById('newStudentGender').value = '';
+      document.getElementById('newStudentAlert').classList.add('d-none');
       addRegStudentModal.show();
 
       const token = localStorage.getItem('token');
@@ -1132,6 +1180,97 @@
       } catch {
         alert('Something went wrong.');
         if (btn) { btn.disabled = false; btn.textContent = studentName; }
+      }
+    }
+
+    function toggleNewStudentForm() {
+      const form = document.getElementById('newStudentForm');
+      const icon = document.getElementById('newStudentToggleIcon');
+      const hidden = form.classList.toggle('d-none');
+      icon.textContent = hidden ? '+' : '−';
+    }
+
+    async function createAndAddStudent() {
+      const { eventId, regId, userId } = _regCtx;
+      const token    = localStorage.getItem('token');
+      const alertEl  = document.getElementById('newStudentAlert');
+      const createBtn = document.getElementById('createNewStudentBtn');
+      const name     = document.getElementById('newStudentName').value.trim();
+
+      if (!name) {
+        alertEl.textContent = 'Full name is required.';
+        alertEl.classList.remove('d-none');
+        return;
+      }
+      alertEl.classList.add('d-none');
+      createBtn.disabled = true;
+      createBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Creating…';
+
+      try {
+        // Step 1: Create the student under the user's account
+        const createRes = await fetch(`${API}/admin/users/${userId}/students`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({
+            name,
+            date_of_birth: document.getElementById('newStudentDob').value   || null,
+            gender:        document.getElementById('newStudentGender').value || null,
+          }),
+        });
+        const newStudent = await createRes.json().catch(() => ({}));
+        if (!createRes.ok) {
+          alertEl.textContent = newStudent.detail || `Error ${createRes.status}`;
+          alertEl.classList.remove('d-none');
+          return;
+        }
+
+        // Step 2: Add the new student to the registration
+        const addRes = await fetch(
+          `${API}/admin/events/${eventId}/registrations/${regId}/students/${newStudent.id}`,
+          { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        if (!addRes.ok) {
+          const d = await addRes.json().catch(() => ({}));
+          alertEl.textContent = d.detail || 'Student created but could not be added to registration.';
+          alertEl.classList.remove('d-none');
+          return;
+        }
+
+        // Inject badge into the registration card
+        const container = document.getElementById(`reg-students-${regId}`);
+        if (container) {
+          const addBtn = container.querySelector('button:last-child');
+          container.querySelectorAll('span.text-muted').forEach(el => {
+            if (el.textContent.trim() === 'None selected') el.remove();
+          });
+          const badge = document.createElement('span');
+          badge.id = `rst-${regId}-${newStudent.id}`;
+          badge.className = 'stu-badge';
+          badge.innerHTML = `${esc(newStudent.name)} <button class="stu-badge-remove" title="Remove student"
+            onclick="adminRemoveRegStudent(${eventId},${regId},${newStudent.id},'${esc(newStudent.name)}')">×</button>`;
+          container.insertBefore(badge, addBtn);
+        }
+
+        // Reset and collapse the form
+        document.getElementById('newStudentName').value  = '';
+        document.getElementById('newStudentDob').value   = '';
+        document.getElementById('newStudentGender').value = '';
+        document.getElementById('newStudentForm').classList.add('d-none');
+        document.getElementById('newStudentToggleIcon').textContent = '+';
+
+        // Show a brief success note
+        alertEl.textContent = `${newStudent.name} created and added.`;
+        alertEl.className   = 'alert alert-success mb-2 py-2';
+        alertEl.style.fontSize = '.85rem';
+        alertEl.classList.remove('d-none');
+        setTimeout(() => alertEl.classList.add('d-none'), 3000);
+
+      } catch {
+        alertEl.textContent = 'Something went wrong. Please try again.';
+        alertEl.classList.remove('d-none');
+      } finally {
+        createBtn.disabled = false;
+        createBtn.textContent = 'Create & Add to Registration';
       }
     }
 
