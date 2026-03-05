@@ -142,6 +142,9 @@
       <button class="nav-item" id="nav-students" onclick="showSection('students')">
         <span class="nav-icon">&#127891;</span> My Dancers
       </button>
+      <button class="nav-item" id="nav-observers" onclick="showSection('observers')">
+        <span class="nav-icon">&#128065;</span> My Observers
+      </button>
       <a class="nav-item" href="events.html">
         <span class="nav-icon">&#128197;</span> Events
       </a>
@@ -307,6 +310,29 @@
         </div>
       </div>
 
+      <!-- ── Observers Section ── -->
+      <div id="sec-observers" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h5 class="section-title mb-0">My Observers</h5>
+          <button class="btn btn-accent btn-sm" onclick="openAddObserver()">+ Add Observer</button>
+        </div>
+
+        <div id="observersLoading" class="text-center py-4">
+          <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+        </div>
+        <div id="observersEmpty" class="text-muted text-center py-4 d-none">No observers added yet.</div>
+        <div id="observersError" class="alert alert-danger d-none"></div>
+
+        <div class="table-responsive d-none" id="observersTableWrap">
+          <table class="table tbl align-middle mb-0">
+            <thead>
+              <tr><th>Name</th><th></th></tr>
+            </thead>
+            <tbody id="observersBody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- ── Transactions Section ── -->
       <div id="sec-transactions" style="display:none;">
         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -382,6 +408,30 @@
     </div>
   </div>
 
+  <!-- ── Add/Edit Observer Modal ── -->
+  <div class="modal fade" id="observerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#f0f0f0;">
+        <div class="modal-header" style="border-bottom-color:#2a2a2a;">
+          <h5 class="modal-title" id="observerModalTitle" style="color:#E3FC02;">Add Observer</h5>
+          <button type="button" class="btn-close" style="filter:invert(1);" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="observerAlert" class="alert alert-danger d-none mb-3"></div>
+          <input type="hidden" id="observerId">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="observerName" placeholder="Observer's full name">
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top-color:#2a2a2a;">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-accent" id="observerSaveBtn" onclick="saveObserver()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Mobile sidebar overlay -->
   <div id="sidebarOverlay" onclick="toggleSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:199;"></div>
 
@@ -391,6 +441,9 @@
     let currentUser = null;
     let studentModal;
     let studentsLoaded = false;
+    let observerModal;
+    let observersLoaded = false;
+    let myObservers = [];
 
     // ── Sidebar & mobile ──────────────────────────────────────────────────────
 
@@ -404,7 +457,7 @@
     // ── Section switching ─────────────────────────────────────────────────────
 
     function showSection(name) {
-      ['home','profile','students','transactions'].forEach(s => {
+      ['home','profile','students','observers','transactions'].forEach(s => {
         document.getElementById(`sec-${s}`).style.display    = s === name ? '' : 'none';
         document.getElementById(`nav-${s}`).classList.toggle('active', s === name);
       });
@@ -414,6 +467,8 @@
 
       // Lazy-load students
       if (name === 'students' && !studentsLoaded) { studentsLoaded = true; loadStudents(); }
+      // Lazy-load observers
+      if (name === 'observers' && !observersLoaded) { observersLoaded = true; loadObservers(); }
     }
 
     // ── User ──────────────────────────────────────────────────────────────────
@@ -752,11 +807,133 @@
       }
     }
 
+    // ── Observers ─────────────────────────────────────────────────────────────
+
+    async function loadObservers() {
+      const token = localStorage.getItem('token');
+      document.getElementById('observersLoading').classList.remove('d-none');
+      document.getElementById('observersEmpty').classList.add('d-none');
+      document.getElementById('observersError').classList.add('d-none');
+      document.getElementById('observersTableWrap').classList.add('d-none');
+      try {
+        const res = await fetch(`${API}/observers`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) throw new Error();
+        myObservers = await res.json();
+        document.getElementById('observersLoading').classList.add('d-none');
+        if (myObservers.length === 0) {
+          document.getElementById('observersEmpty').classList.remove('d-none');
+        } else {
+          renderObserversTable();
+          document.getElementById('observersTableWrap').classList.remove('d-none');
+        }
+      } catch {
+        document.getElementById('observersLoading').classList.add('d-none');
+        document.getElementById('observersError').textContent = 'Failed to load observers.';
+        document.getElementById('observersError').classList.remove('d-none');
+      }
+    }
+
+    function renderObserversTable() {
+      const tbody = document.getElementById('observersBody');
+      tbody.innerHTML = myObservers.map(o => `
+        <tr>
+          <td class="fw-semibold">${esc(o.name)}</td>
+          <td class="text-end" style="white-space:nowrap;">
+            <button class="btn btn-outline-secondary btn-sm me-1" onclick="openEditObserver(${o.id})">Edit</button>
+            <button class="btn btn-outline-danger btn-sm" onclick="deleteObserver(${o.id}, '${esc(o.name)}')">Delete</button>
+          </td>
+        </tr>`).join('');
+    }
+
+    function openAddObserver() {
+      document.getElementById('observerModalTitle').textContent = 'Add Observer';
+      document.getElementById('observerId').value = '';
+      document.getElementById('observerName').value = '';
+      document.getElementById('observerAlert').classList.add('d-none');
+      observerModal.show();
+    }
+
+    function openEditObserver(id) {
+      const o = myObservers.find(x => x.id === id);
+      if (!o) return;
+      document.getElementById('observerModalTitle').textContent = 'Edit Observer';
+      document.getElementById('observerId').value = id;
+      document.getElementById('observerName').value = o.name;
+      document.getElementById('observerAlert').classList.add('d-none');
+      observerModal.show();
+    }
+
+    async function saveObserver() {
+      const token   = localStorage.getItem('token');
+      const id      = document.getElementById('observerId').value;
+      const name    = document.getElementById('observerName').value.trim();
+      const alertEl = document.getElementById('observerAlert');
+      const saveBtn = document.getElementById('observerSaveBtn');
+
+      if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      alertEl.classList.add('d-none');
+      saveBtn.disabled = true;
+
+      const isEdit = !!id;
+      const url    = isEdit ? `${API}/observers/${id}` : `${API}/observers`;
+      const method = isEdit ? 'PUT' : 'POST';
+
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ name }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { alertEl.textContent = data.detail || `Error ${res.status}`; alertEl.classList.remove('d-none'); return; }
+        if (isEdit) {
+          myObservers = myObservers.map(o => o.id === parseInt(id) ? data : o);
+        } else {
+          myObservers.push(data);
+        }
+        renderObserversTable();
+        document.getElementById('observersEmpty').classList.toggle('d-none', myObservers.length > 0);
+        document.getElementById('observersTableWrap').classList.toggle('d-none', myObservers.length === 0);
+        observerModal.hide();
+      } catch {
+        alertEl.textContent = 'Something went wrong. Please try again.';
+        alertEl.classList.remove('d-none');
+      } finally {
+        saveBtn.disabled = false;
+      }
+    }
+
+    async function deleteObserver(id, name) {
+      const token = localStorage.getItem('token');
+      const errEl = document.getElementById('observersError');
+      errEl.classList.add('d-none');
+      try {
+        const res = await fetch(`${API}/observers/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          errEl.textContent = data.detail || `Failed to delete observer.`;
+          errEl.classList.remove('d-none');
+          return;
+        }
+        myObservers = myObservers.filter(o => o.id !== id);
+        renderObserversTable();
+        document.getElementById('observersEmpty').classList.toggle('d-none', myObservers.length > 0);
+        document.getElementById('observersTableWrap').classList.toggle('d-none', myObservers.length === 0);
+      } catch {
+        errEl.textContent = 'Something went wrong. Please try again.';
+        errEl.classList.remove('d-none');
+      }
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────
-    studentModal = new bootstrap.Modal(document.getElementById('studentModal'));
-    // Support deep-linking via hash: dashboard.html#profile, #students, #transactions
+    studentModal  = new bootstrap.Modal(document.getElementById('studentModal'));
+    observerModal = new bootstrap.Modal(document.getElementById('observerModal'));
+    // Support deep-linking via hash: dashboard.html#profile, #students, #observers, #transactions
     const _hash = location.hash.replace('#','');
-    if (['profile','students','transactions'].includes(_hash)) showSection(_hash);
+    if (['profile','students','observers','transactions'].includes(_hash)) showSection(_hash);
     loadUser();
   </script>
 </body>

@@ -79,6 +79,19 @@ def run_migrations(eng):
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS stripe_session_id VARCHAR",
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(10,2)",
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMPTZ",
+        # Observer columns + tables
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS observer_price NUMERIC(10,2)",
+        """CREATE TABLE IF NOT EXISTS observers (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name VARCHAR NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT now()
+        )""",
+        """CREATE TABLE IF NOT EXISTS event_registration_observers (
+            id SERIAL PRIMARY KEY,
+            registration_id INTEGER NOT NULL REFERENCES event_registrations(id) ON DELETE CASCADE,
+            observer_id INTEGER NOT NULL REFERENCES observers(id) ON DELETE CASCADE
+        )""",
     ]
     with eng.connect() as conn:
         for stmt in stmts:
@@ -125,7 +138,6 @@ VERIFICATION_EXPIRE_HOURS = 24
 RESET_EXPIRE_HOURS = 1
 
 # ── Auth routes ───────────────────────────────────────────────────────────────
-
 
 @app.post("/auth/register", response_model=schemas.MessageOut, status_code=201)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -300,7 +312,7 @@ def health():
     return {"status": "ok"}
 
 
-# ── Admin helpers ─────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def get_current_user(authorization: Optional[str], db: Session) -> models.User:
     """Resolve a Bearer token to a User, raising 401/404 as needed."""
@@ -313,366 +325,6 @@ def get_current_user(authorization: Optional[str], db: Session) -> models.User:
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
-
-
-# ── Admin routes ──────────────────────────────────────────────────────────────
-
-@app.get("/admin/users", response_model=list[schemas.UserOut])
-def admin_list_users(
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Return all users. Admin only."""
-    current = get_current_user(authorization, db)
-    if not current.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required.")
-    return db.query(models.User).order_by(models.User.id).all()
-
-
-@app.delete("/admin/users/{user_id}", response_model=schemas.MessageOut)
-def admin_delete_user(
-    user_id: int,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Delete a user by ID. Admin only. Cannot delete yourself."""
-    current = get_current_user(authorization, db)
-    if not current.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required.")
-    if current.id == user_id:
-        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
-    target = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target:
-        raise HTTPException(status_code=404, detail="User not found.")
-    db.delete(target)
-    db.commit()
-    return {"message": f"User {user_id} deleted."}
-
-
-@app.patch("/admin/users/{user_id}", response_model=schemas.UserOut)
-def admin_update_user(
-    user_id: int,
-    body: schemas.UserUpdate,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Update a user's profile fields. Admin only."""
-    current = get_current_user(authorization, db)
-    if not current.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required.")
-    target = db.query(models.User).filter(models.User.id == user_id).first()
-    if not target:
-        raise HTTPException(status_code=404, detail="User not found.")
-
-    # Check email uniqueness if changing email
-    if body.email and body.email != target.email:
-        existing = db.query(models.User).filter(models.User.email == body.email).first()
-        if existing:
-            raise HTTPException(status_code=400, detail="Email already in use.")
-
-    for field, value in body.model_dump(exclude_none=True).items():
-        setattr(target, field, value)
-
-    db.commit()
-    db.refresh(target)
-    return target
-
-
-# ── Student routes ────────────────────────────────────────────────────────────
-
-@app.get("/students", response_model=list[schemas.StudentOut])
-def list_students(
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Return all students belonging to the current user."""
-    user = get_current_user(authorization, db)
-    return db.query(models.Student).filter(models.Student.user_id == user.id).order_by(models.Student.name).all()
-
-
-@app.post("/students", response_model=schemas.StudentOut, status_code=201)
-def create_student(
-    body: schemas.StudentCreate,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Add a student to the current user's account."""
-    user = get_current_user(authorization, db)
-    student = models.Student(user_id=user.id, **body.model_dump())
-    db.add(student)
-    db.commit()
-    db.refresh(student)
-    return student
-
-
-@app.patch("/students/{student_id}", response_model=schemas.StudentOut)
-def update_student(
-    student_id: int,
-    body: schemas.StudentUpdate,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Update a student. Must belong to the current user."""
-    user = get_current_user(authorization, db)
-    student = db.query(models.Student).filter(
-        models.Student.id == student_id,
-        models.Student.user_id == user.id,
-    ).first()
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found.")
-    for field, value in body.model_dump(exclude_none=True).items():
-        setattr(student, field, value)
-    db.commit()
-    db.refresh(student)
-    return student
-
-
-@app.delete("/students/{student_id}", response_model=schemas.MessageOut)
-def delete_student(
-    student_id: int,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Delete a student. Must belong to the current user."""
-    user = get_current_user(authorization, db)
-    student = db.query(models.Student).filter(
-        models.Student.id == student_id,
-        models.Student.user_id == user.id,
-    ).first()
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found.")
-
-    # Block deletion if dancer is in a finalized registration for an upcoming event
-    from datetime import timezone as tz
-    upcoming_finalized = (
-        db.query(models.EventRegistrationStudent)
-        .join(models.EventRegistration,
-              models.EventRegistrationStudent.registration_id == models.EventRegistration.id)
-        .join(models.Event,
-              models.EventRegistration.event_id == models.Event.id)
-        .filter(
-            models.EventRegistrationStudent.student_id == student_id,
-            models.EventRegistration.is_finalized.is_(True),
-            models.Event.event_date >= datetime.now(tz.utc),
-        )
-        .first()
-    )
-    if upcoming_finalized:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f'"{student.name}" cannot be removed — they are registered '
-                f"for an upcoming event. Contact the event organizer if changes are needed."
-            ),
-        )
-
-    db.delete(student)
-    db.commit()
-    return {"message": "Student deleted."}
-
-
-# ── Event routes (public read, admin write) ───────────────────────────────────
-
-def _build_event_out(event: models.Event) -> schemas.EventOut:
-    """Build an EventOut including live registered_count and total_revenue."""
-    from decimal import Decimal as D
-    now = datetime.now(timezone.utc)
-    count = event.registered_count
-
-    # Determine effective price (early-bird vs regular vs none)
-    price = None
-    if event.early_price is not None and event.early_price_deadline is not None:
-        dl = event.early_price_deadline
-        if dl.tzinfo is None:
-            dl = dl.replace(tzinfo=timezone.utc)
-        price = event.early_price if now < dl else event.regular_price
-    elif event.regular_price is not None:
-        price = event.regular_price
-
-    total_revenue = (D(str(price)) * count) if price is not None else None
-
-    return schemas.EventOut(
-        id=event.id,
-        title=event.title,
-        description=event.description,
-        event_date=event.event_date,
-        location=event.location,
-        event_type=event.event_type,
-        early_price=event.early_price,
-        regular_price=event.regular_price,
-        early_price_deadline=event.early_price_deadline,
-        max_students=event.max_students,
-        registered_count=count,
-        total_revenue=total_revenue,
-        created_at=event.created_at,
-    )
-
-
-@app.get("/events", response_model=list[schemas.EventOut])
-def list_events(db: Session = Depends(get_db)):
-    """Return all events ordered by date ascending, including capacity & revenue data."""
-    events = db.query(models.Event).order_by(models.Event.event_date).all()
-    return [_build_event_out(e) for e in events]
-
-
-@app.post("/admin/events", response_model=schemas.EventOut, status_code=201)
-def create_event(
-    body: schemas.EventCreate,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Create a new event. Admin only."""
-    current = get_current_user(authorization, db)
-    if not current.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required.")
-    event = models.Event(**body.model_dump())
-    db.add(event)
-    db.commit()
-    db.refresh(event)
-    return _build_event_out(event)
-
-
-@app.patch("/admin/events/{event_id}", response_model=schemas.EventOut)
-def update_event(
-    event_id: int,
-    body: schemas.EventUpdate,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Update an event. Admin only."""
-    current = get_current_user(authorization, db)
-    if not current.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required.")
-    event = db.query(models.Event).filter(models.Event.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found.")
-    for field, value in body.model_dump(exclude_none=True).items():
-        setattr(event, field, value)
-    db.commit()
-    db.refresh(event)
-    return _build_event_out(event)
-
-
-@app.get("/events/my-registrations")
-def get_my_registrations(
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Return a map of event_id → {registration_id, student_ids} for the current user."""
-    user = get_current_user(authorization, db)
-    regs = db.query(models.EventRegistration).filter(
-        models.EventRegistration.user_id == user.id
-    ).all()
-    result = {}
-    for reg in regs:
-        student_ids = [ers.student_id for ers in reg.attending_students]
-        result[str(reg.event_id)] = {
-            "registration_id": reg.id,
-            "student_ids": student_ids,
-            "is_finalized": reg.is_finalized,
-            "payment_status": reg.payment_status,
-            "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else None,
-            "stripe_session_id": reg.stripe_session_id,
-        }
-    return result
-
-
-@app.post("/events/{event_id}/register", response_model=schemas.EventRegistrationOut, status_code=201)
-def register_for_event(
-    event_id: int,
-    body: schemas.EventRegistrationCreate,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Register current user for an event, with optional attending students."""
-    user = get_current_user(authorization, db)
-    event = db.query(models.Event).filter(models.Event.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found.")
-
-    existing = db.query(models.EventRegistration).filter(
-        models.EventRegistration.event_id == event_id,
-        models.EventRegistration.user_id == user.id,
-    ).first()
-
-    if existing and existing.is_finalized:
-        raise HTTPException(
-            status_code=400,
-            detail="This registration is finalized. Use the Add Dancers flow to add more students."
-        )
-
-    # Capacity check
-    if event.max_students is not None and body.student_ids:
-        # Count all students registered for this event excluding the current user's existing registration
-        current_total = sum(len(reg.attending_students) for reg in event.registrations)
-        if existing:
-            current_total -= len(existing.attending_students)
-        available = event.max_students - current_total
-        if len(body.student_ids) > available:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Not enough capacity. Only {available} spot(s) remaining for this event."
-            )
-
-    if existing:
-        # Update attending students
-        db.query(models.EventRegistrationStudent).filter(
-            models.EventRegistrationStudent.registration_id == existing.id
-        ).delete()
-        for sid in body.student_ids:
-            s = db.query(models.Student).filter(
-                models.Student.id == sid, models.Student.user_id == user.id
-            ).first()
-            if s:
-                db.add(models.EventRegistrationStudent(registration_id=existing.id, student_id=sid))
-        db.commit()
-        db.refresh(existing)
-        return schemas.EventRegistrationOut(
-            id=existing.id, event_id=existing.event_id, user_id=existing.user_id,
-            student_ids=[ers.student_id for ers in existing.attending_students],
-            created_at=existing.created_at,
-        )
-
-    reg = models.EventRegistration(event_id=event_id, user_id=user.id)
-    db.add(reg)
-    db.flush()
-    for sid in body.student_ids:
-        s = db.query(models.Student).filter(
-            models.Student.id == sid, models.Student.user_id == user.id
-        ).first()
-        if s:
-            db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
-    db.commit()
-    db.refresh(reg)
-    return schemas.EventRegistrationOut(
-        id=reg.id, event_id=reg.event_id, user_id=reg.user_id,
-        student_ids=[ers.student_id for ers in reg.attending_students],
-        created_at=reg.created_at,
-    )
-
-
-@app.delete("/events/{event_id}/register", response_model=schemas.MessageOut)
-def unregister_from_event(
-    event_id: int,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Unregister current user from an event."""
-    user = get_current_user(authorization, db)
-    reg = db.query(models.EventRegistration).filter(
-        models.EventRegistration.event_id == event_id,
-        models.EventRegistration.user_id == user.id,
-    ).first()
-    if not reg:
-        raise HTTPException(status_code=404, detail="Not registered for this event.")
-    if reg.is_finalized:
-        raise HTTPException(
-            status_code=400,
-            detail="Finalized registrations cannot be cancelled. Please contact the event organizer."
-        )
-    db.delete(reg)
-    db.commit()
-    return {"message": "Unregistered from event."}
 
 
 def _effective_price(event: models.Event):
@@ -697,11 +349,419 @@ def _build_reg_out(reg: models.EventRegistration) -> schemas.EventRegistrationOu
         event_id=reg.event_id,
         user_id=reg.user_id,
         student_ids=[ers.student_id for ers in reg.attending_students],
+        observer_ids=[ero.observer_id for ero in reg.attending_observers],
         created_at=reg.created_at,
         is_finalized=reg.is_finalized,
         payment_status=reg.payment_status,
         amount_paid=reg.amount_paid,
     )
+
+
+# ── Admin routes ──────────────────────────────────────────────────────────────
+
+@app.get("/admin/users", response_model=list[schemas.UserOut])
+def admin_list_users(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return db.query(models.User).order_by(models.User.id).all()
+
+
+@app.delete("/admin/users/{user_id}", response_model=schemas.MessageOut)
+def admin_delete_user(
+    user_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    if current.id == user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+    target = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    db.delete(target)
+    db.commit()
+    return {"message": f"User {user_id} deleted."}
+
+
+@app.patch("/admin/users/{user_id}", response_model=schemas.UserOut)
+def admin_update_user(
+    user_id: int,
+    body: schemas.UserUpdate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    target = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if body.email and body.email != target.email:
+        existing = db.query(models.User).filter(models.User.email == body.email).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already in use.")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(target, field, value)
+    db.commit()
+    db.refresh(target)
+    return target
+
+
+# ── Student routes ────────────────────────────────────────────────────────────
+
+@app.get("/students", response_model=list[schemas.StudentOut])
+def list_students(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(authorization, db)
+    return db.query(models.Student).filter(models.Student.user_id == user.id).order_by(models.Student.name).all()
+
+
+@app.post("/students", response_model=schemas.StudentOut, status_code=201)
+def create_student(
+    body: schemas.StudentCreate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(authorization, db)
+    student = models.Student(user_id=user.id, **body.model_dump())
+    db.add(student)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+@app.patch("/students/{student_id}", response_model=schemas.StudentOut)
+def update_student(
+    student_id: int,
+    body: schemas.StudentUpdate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(authorization, db)
+    student = db.query(models.Student).filter(
+        models.Student.id == student_id,
+        models.Student.user_id == user.id,
+    ).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(student, field, value)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+@app.delete("/students/{student_id}", response_model=schemas.MessageOut)
+def delete_student(
+    student_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(authorization, db)
+    student = db.query(models.Student).filter(
+        models.Student.id == student_id,
+        models.Student.user_id == user.id,
+    ).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found.")
+
+    # Block deletion if dancer is in a finalized upcoming event registration
+    upcoming_finalized = (
+        db.query(models.EventRegistrationStudent)
+        .join(models.EventRegistration,
+              models.EventRegistrationStudent.registration_id == models.EventRegistration.id)
+        .join(models.Event,
+              models.EventRegistration.event_id == models.Event.id)
+        .filter(
+            models.EventRegistrationStudent.student_id == student_id,
+            models.EventRegistration.is_finalized.is_(True),
+            models.Event.event_date >= datetime.now(timezone.utc),
+        )
+        .first()
+    )
+    if upcoming_finalized:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'"{student.name}" cannot be removed — they are registered '
+                f"for an upcoming event. Contact the event organizer if changes are needed."
+            ),
+        )
+
+    db.delete(student)
+    db.commit()
+    return {"message": "Student deleted."}
+
+
+# ── Observer routes ───────────────────────────────────────────────────────────
+
+@app.get("/observers", response_model=list[schemas.ObserverOut])
+def list_observers(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    user = get_current_user(authorization, db)
+    return db.query(models.Observer).filter(models.Observer.user_id == user.id).order_by(models.Observer.name).all()
+
+
+@app.post("/observers", response_model=schemas.ObserverOut, status_code=201)
+def create_observer(body: schemas.ObserverCreate, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    user = get_current_user(authorization, db)
+    obs = models.Observer(user_id=user.id, name=body.name.strip())
+    db.add(obs)
+    db.commit()
+    db.refresh(obs)
+    return obs
+
+
+@app.put("/observers/{observer_id}", response_model=schemas.ObserverOut)
+def update_observer(observer_id: int, body: schemas.ObserverCreate, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    user = get_current_user(authorization, db)
+    obs = db.query(models.Observer).filter(models.Observer.id == observer_id, models.Observer.user_id == user.id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observer not found.")
+    obs.name = body.name.strip()
+    db.commit()
+    db.refresh(obs)
+    return obs
+
+
+@app.delete("/observers/{observer_id}", response_model=schemas.MessageOut)
+def delete_observer(observer_id: int, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    user = get_current_user(authorization, db)
+    obs = db.query(models.Observer).filter(models.Observer.id == observer_id, models.Observer.user_id == user.id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observer not found.")
+    db.delete(obs)
+    db.commit()
+    return {"message": "Observer deleted."}
+
+
+# ── Event routes ──────────────────────────────────────────────────────────────
+
+def _build_event_out(event: models.Event) -> schemas.EventOut:
+    from decimal import Decimal as D
+    now = datetime.now(timezone.utc)
+    count = event.registered_count
+
+    price = None
+    if event.early_price is not None and event.early_price_deadline is not None:
+        dl = event.early_price_deadline
+        if dl.tzinfo is None:
+            dl = dl.replace(tzinfo=timezone.utc)
+        price = event.early_price if now < dl else event.regular_price
+    elif event.regular_price is not None:
+        price = event.regular_price
+
+    total_revenue = (D(str(price)) * count) if price is not None else None
+
+    return schemas.EventOut(
+        id=event.id,
+        title=event.title,
+        description=event.description,
+        event_date=event.event_date,
+        location=event.location,
+        event_type=event.event_type,
+        early_price=event.early_price,
+        regular_price=event.regular_price,
+        early_price_deadline=event.early_price_deadline,
+        max_students=event.max_students,
+        registered_count=count,
+        total_revenue=total_revenue,
+        observer_price=event.observer_price,
+        created_at=event.created_at,
+    )
+
+
+@app.get("/events", response_model=list[schemas.EventOut])
+def list_events(db: Session = Depends(get_db)):
+    events = db.query(models.Event).order_by(models.Event.event_date).all()
+    return [_build_event_out(e) for e in events]
+
+
+@app.post("/admin/events", response_model=schemas.EventOut, status_code=201)
+def create_event(
+    body: schemas.EventCreate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    event = models.Event(**body.model_dump())
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return _build_event_out(event)
+
+
+@app.patch("/admin/events/{event_id}", response_model=schemas.EventOut)
+def update_event(
+    event_id: int,
+    body: schemas.EventUpdate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(event, field, value)
+    db.commit()
+    db.refresh(event)
+    return _build_event_out(event)
+
+
+@app.delete("/admin/events/{event_id}", response_model=schemas.MessageOut)
+def delete_event(
+    event_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+    db.delete(event)
+    db.commit()
+    return {"message": "Event deleted."}
+
+
+# ── Registration routes ───────────────────────────────────────────────────────
+
+@app.get("/events/my-registrations")
+def get_my_registrations(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(authorization, db)
+    regs = db.query(models.EventRegistration).filter(
+        models.EventRegistration.user_id == user.id
+    ).all()
+    result = {}
+    for reg in regs:
+        student_ids = [ers.student_id for ers in reg.attending_students]
+        observer_ids = [ero.observer_id for ero in reg.attending_observers]
+        result[str(reg.event_id)] = {
+            "registration_id": reg.id,
+            "student_ids": student_ids,
+            "observer_ids": observer_ids,
+            "is_finalized": reg.is_finalized,
+            "payment_status": reg.payment_status,
+            "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else None,
+            "stripe_session_id": reg.stripe_session_id,
+        }
+    return result
+
+
+@app.post("/events/{event_id}/register", response_model=schemas.EventRegistrationOut, status_code=201)
+def register_for_event(
+    event_id: int,
+    body: schemas.EventRegistrationCreate,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(authorization, db)
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found.")
+
+    existing = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.user_id == user.id,
+    ).first()
+
+    if existing and existing.is_finalized:
+        raise HTTPException(
+            status_code=400,
+            detail="This registration is finalized. Use the Add Dancers flow to add more students."
+        )
+
+    if event.max_students is not None and body.student_ids:
+        current_total = sum(len(reg.attending_students) for reg in event.registrations)
+        if existing:
+            current_total -= len(existing.attending_students)
+        available = event.max_students - current_total
+        if len(body.student_ids) > available:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Not enough capacity. Only {available} spot(s) remaining."
+            )
+
+    if existing:
+        db.query(models.EventRegistrationStudent).filter(
+            models.EventRegistrationStudent.registration_id == existing.id
+        ).delete()
+        for sid in body.student_ids:
+            s = db.query(models.Student).filter(
+                models.Student.id == sid, models.Student.user_id == user.id
+            ).first()
+            if s:
+                db.add(models.EventRegistrationStudent(registration_id=existing.id, student_id=sid))
+        db.query(models.EventRegistrationObserver).filter(
+            models.EventRegistrationObserver.registration_id == existing.id
+        ).delete()
+        for oid in body.observer_ids:
+            o = db.query(models.Observer).filter(
+                models.Observer.id == oid, models.Observer.user_id == user.id
+            ).first()
+            if o:
+                db.add(models.EventRegistrationObserver(registration_id=existing.id, observer_id=oid))
+        db.commit()
+        db.refresh(existing)
+        return _build_reg_out(existing)
+
+    reg = models.EventRegistration(event_id=event_id, user_id=user.id)
+    db.add(reg)
+    db.flush()
+    for sid in body.student_ids:
+        s = db.query(models.Student).filter(
+            models.Student.id == sid, models.Student.user_id == user.id
+        ).first()
+        if s:
+            db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+    for oid in body.observer_ids:
+        o = db.query(models.Observer).filter(
+            models.Observer.id == oid, models.Observer.user_id == user.id
+        ).first()
+        if o:
+            db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
+    db.commit()
+    db.refresh(reg)
+    return _build_reg_out(reg)
+
+
+@app.delete("/events/{event_id}/register", response_model=schemas.MessageOut)
+def unregister_from_event(
+    event_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    user = get_current_user(authorization, db)
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.event_id == event_id,
+        models.EventRegistration.user_id == user.id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Not registered for this event.")
+    if reg.is_finalized:
+        raise HTTPException(
+            status_code=400,
+            detail="Finalized registrations cannot be cancelled. Please contact the event organizer."
+        )
+    db.delete(reg)
+    db.commit()
+    return {"message": "Unregistered from event."}
 
 
 @app.post("/events/{event_id}/register/checkout", response_model=schemas.CheckoutSessionOut, status_code=201)
@@ -711,13 +771,13 @@ def create_checkout(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Create or update an unfinalized registration and return a Stripe Checkout URL."""
+    from decimal import Decimal as D
     user = get_current_user(authorization, db)
     event = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found.")
-    if not body.student_ids:
-        raise HTTPException(status_code=400, detail="Select at least one student.")
+    if not body.student_ids and not body.observer_ids:
+        raise HTTPException(status_code=400, detail="Select at least one student or observer.")
 
     existing = db.query(models.EventRegistration).filter(
         models.EventRegistration.event_id == event_id,
@@ -726,8 +786,7 @@ def create_checkout(
     if existing and existing.is_finalized:
         raise HTTPException(status_code=400, detail="Registration already finalized. Use Add Dancers.")
 
-    # Capacity check
-    if event.max_students is not None:
+    if event.max_students is not None and body.student_ids:
         current_total = sum(len(r.attending_students) for r in event.registrations)
         if existing:
             current_total -= len(existing.attending_students)
@@ -735,12 +794,20 @@ def create_checkout(
         if len(body.student_ids) > available:
             raise HTTPException(status_code=400, detail=f"Only {available} spot(s) remaining.")
 
-    price_per_student, is_free = _effective_price(event)
+    price_per_student, _ = _effective_price(event)
+    observer_price = D(str(event.observer_price)) if event.observer_price else D("0")
 
-    # Upsert registration + students
+    dancer_total = price_per_student * len(body.student_ids)
+    observer_total = observer_price * len(body.observer_ids)
+    grand_total = dancer_total + observer_total
+    is_free = grand_total == D("0")
+
     if existing:
         db.query(models.EventRegistrationStudent).filter(
             models.EventRegistrationStudent.registration_id == existing.id
+        ).delete()
+        db.query(models.EventRegistrationObserver).filter(
+            models.EventRegistrationObserver.registration_id == existing.id
         ).delete()
         reg = existing
     else:
@@ -755,6 +822,13 @@ def create_checkout(
         if s:
             db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
 
+    for oid in body.observer_ids:
+        o = db.query(models.Observer).filter(
+            models.Observer.id == oid, models.Observer.user_id == user.id
+        ).first()
+        if o:
+            db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
+
     if is_free:
         reg.is_finalized = True
         reg.payment_status = "free"
@@ -762,9 +836,9 @@ def create_checkout(
         reg.finalized_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(reg)
-        # Send confirmation email
         try:
             student_names = [ers.student.name for ers in reg.attending_students]
+            observer_names = [ero.observer.name for ero in reg.attending_observers]
             ev_date_str = event.event_date.strftime("%B %d, %Y") if event.event_date else ""
             email_service.send_registration_confirmation(
                 to_email=user.email,
@@ -773,25 +847,37 @@ def create_checkout(
                 event_date=ev_date_str,
                 student_names=student_names,
                 amount_paid=0,
+                observer_names=observer_names,
+                observer_amount=0,
             )
         except Exception:
-            logger.exception("Failed to send registration confirmation to %s", user.email)
+            logger.exception("Failed to send confirmation to %s", user.email)
         return schemas.CheckoutSessionOut(checkout_url="", session_id="free")
 
-    # Paid event — create Stripe Checkout Session
-    amount_cents = int(price_per_student * len(body.student_ids) * 100)
     user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email
+    line_items = []
+    if dancer_total > 0:
+        line_items.append({
+            "price_data": {
+                "currency": "usd",
+                "product_data": {"name": f"{event.title} — {len(body.student_ids)} dancer(s)"},
+                "unit_amount": int(price_per_student * 100),
+            },
+            "quantity": len(body.student_ids),
+        })
+    if observer_total > 0:
+        line_items.append({
+            "price_data": {
+                "currency": "usd",
+                "product_data": {"name": f"{event.title} — {len(body.observer_ids)} observer(s)"},
+                "unit_amount": int(observer_price * 100),
+            },
+            "quantity": len(body.observer_ids),
+        })
     try:
         session = stripe.checkout.Session.create(
             payment_method_types=["card"],
-            line_items=[{
-                "price_data": {
-                    "currency": "usd",
-                    "product_data": {"name": f"{event.title} — {len(body.student_ids)} dancer(s)"},
-                    "unit_amount": int(price_per_student * 100),
-                },
-                "quantity": len(body.student_ids),
-            }],
+            line_items=line_items,
             mode="payment",
             customer_email=user.email,
             success_url=(
@@ -799,7 +885,12 @@ def create_checkout(
                 f"?payment=success&event_id={event_id}&session_id={{CHECKOUT_SESSION_ID}}"
             ),
             cancel_url=f"{FRONTEND_URL}/events.html?payment=cancelled&event_id={event_id}",
-            metadata={"registration_id": str(reg.id), "event_id": str(event_id), "user_name": user_name},
+            metadata={
+                "registration_id": str(reg.id),
+                "event_id": str(event_id),
+                "user_name": user_name,
+                "observer_ids": ",".join(str(i) for i in body.observer_ids),
+            },
         )
     except stripe.StripeError as e:
         raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message}")
@@ -817,7 +908,6 @@ def verify_payment(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Verify a Stripe Checkout session and finalize the registration if paid."""
     user = get_current_user(authorization, db)
     reg = db.query(models.EventRegistration).filter(
         models.EventRegistration.event_id == event_id,
@@ -842,11 +932,13 @@ def verify_payment(
         reg.finalized_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(reg)
-        # Send confirmation email
         try:
             event = db.query(models.Event).filter(models.Event.id == event_id).first()
             student_names = [ers.student.name for ers in reg.attending_students]
+            observer_names = [ero.observer.name for ero in reg.attending_observers]
             ev_date_str = event.event_date.strftime("%B %d, %Y") if event and event.event_date else ""
+            observer_price_val = float(event.observer_price) if event and event.observer_price else 0
+            observer_amount = observer_price_val * len(observer_names)
             email_service.send_registration_confirmation(
                 to_email=user.email,
                 studio_name=user.studio_name,
@@ -854,9 +946,11 @@ def verify_payment(
                 event_date=ev_date_str,
                 student_names=student_names,
                 amount_paid=float(amount),
+                observer_names=observer_names,
+                observer_amount=observer_amount,
             )
         except Exception:
-            logger.exception("Failed to send registration confirmation to %s", user.email)
+            logger.exception("Failed to send confirmation to %s", user.email)
 
     return _build_reg_out(reg)
 
@@ -868,7 +962,7 @@ def add_students_save(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Add new dancers to a registration (finalized or not) without requiring payment now."""
+    """Add new dancers/observers to a registration without requiring payment now."""
     user = get_current_user(authorization, db)
     event = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not event:
@@ -880,12 +974,10 @@ def add_students_save(
     ).first()
 
     if not reg:
-        # No existing registration — create one
         reg = models.EventRegistration(event_id=event_id, user_id=user.id)
         db.add(reg)
         db.flush()
 
-    # Add only students not already in the registration
     existing_ids = {ers.student_id for ers in reg.attending_students}
     for sid in body.student_ids:
         if sid in existing_ids:
@@ -895,6 +987,16 @@ def add_students_save(
         ).first()
         if s:
             db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+
+    existing_obs_ids = {ero.observer_id for ero in reg.attending_observers}
+    for oid in body.observer_ids:
+        if oid in existing_obs_ids:
+            continue
+        o = db.query(models.Observer).filter(
+            models.Observer.id == oid, models.Observer.user_id == user.id
+        ).first()
+        if o:
+            db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
 
     db.commit()
     db.refresh(reg)
@@ -908,7 +1010,7 @@ def add_students_to_finalized(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Add new dancers to a finalized registration and return a Stripe Checkout URL."""
+    from decimal import Decimal as D
     user = get_current_user(authorization, db)
     event = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not event:
@@ -920,22 +1022,31 @@ def add_students_to_finalized(
     ).first()
     if not reg or not reg.is_finalized:
         raise HTTPException(status_code=400, detail="No finalized registration found for this event.")
-    if not body.student_ids:
-        raise HTTPException(status_code=400, detail="Select at least one new student.")
+    if not body.student_ids and not body.observer_ids:
+        raise HTTPException(status_code=400, detail="Select at least one new student or observer.")
 
     existing_ids = {ers.student_id for ers in reg.attending_students}
     new_ids = [sid for sid in body.student_ids if sid not in existing_ids]
-    if not new_ids:
-        raise HTTPException(status_code=400, detail="All selected students are already registered.")
 
-    # Capacity check for new students only
-    if event.max_students is not None:
+    existing_obs_ids = {ero.observer_id for ero in reg.attending_observers}
+    new_obs_ids = [oid for oid in body.observer_ids if oid not in existing_obs_ids]
+
+    if not new_ids and not new_obs_ids:
+        raise HTTPException(status_code=400, detail="All selected students/observers are already registered.")
+
+    if event.max_students is not None and new_ids:
         current_total = sum(len(r.attending_students) for r in event.registrations)
         available = event.max_students - current_total
         if len(new_ids) > available:
             raise HTTPException(status_code=400, detail=f"Only {available} spot(s) remaining.")
 
-    price_per_student, is_free = _effective_price(event)
+    price_per_student, _ = _effective_price(event)
+    observer_price = D(str(event.observer_price)) if event.observer_price else D("0")
+
+    dancer_total = price_per_student * len(new_ids)
+    observer_total = observer_price * len(new_obs_ids)
+    grand_total = dancer_total + observer_total
+    is_free = grand_total == D("0")
 
     if is_free:
         for sid in new_ids:
@@ -944,22 +1055,39 @@ def add_students_to_finalized(
             ).first()
             if s:
                 db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+        for oid in new_obs_ids:
+            o = db.query(models.Observer).filter(
+                models.Observer.id == oid, models.Observer.user_id == user.id
+            ).first()
+            if o:
+                db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
         db.commit()
         return schemas.CheckoutSessionOut(checkout_url="", session_id="free")
 
-    # Paid — create checkout for new students only
     user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email
+    line_items = []
+    if dancer_total > 0:
+        line_items.append({
+            "price_data": {
+                "currency": "usd",
+                "product_data": {"name": f"{event.title} — {len(new_ids)} additional dancer(s)"},
+                "unit_amount": int(price_per_student * 100),
+            },
+            "quantity": len(new_ids),
+        })
+    if observer_total > 0:
+        line_items.append({
+            "price_data": {
+                "currency": "usd",
+                "product_data": {"name": f"{event.title} — {len(new_obs_ids)} additional observer(s)"},
+                "unit_amount": int(observer_price * 100),
+            },
+            "quantity": len(new_obs_ids),
+        })
     try:
         session = stripe.checkout.Session.create(
             payment_method_types=["card"],
-            line_items=[{
-                "price_data": {
-                    "currency": "usd",
-                    "product_data": {"name": f"{event.title} — {len(new_ids)} additional dancer(s)"},
-                    "unit_amount": int(price_per_student * 100),
-                },
-                "quantity": len(new_ids),
-            }],
+            line_items=line_items,
             mode="payment",
             customer_email=user.email,
             success_url=(
@@ -972,6 +1100,7 @@ def add_students_to_finalized(
                 "registration_id": str(reg.id),
                 "event_id": str(event_id),
                 "new_student_ids": ",".join(str(i) for i in new_ids),
+                "observer_ids": ",".join(str(i) for i in new_obs_ids),
                 "user_name": user_name,
             },
         )
@@ -985,7 +1114,6 @@ def add_students_to_finalized(
 
 @app.post("/webhooks/stripe")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
-    """Handle Stripe webhook events — finalizes registrations on checkout.session.completed."""
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
     try:
@@ -999,10 +1127,10 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         session = event["data"]["object"]
         reg_id = int(session.get("metadata", {}).get("registration_id", 0))
         new_student_ids_raw = session.get("metadata", {}).get("new_student_ids", "")
+        observer_ids_raw = session.get("metadata", {}).get("observer_ids", "")
         reg = db.query(models.EventRegistration).filter(models.EventRegistration.id == reg_id).first()
         if reg:
             from decimal import Decimal as D
-            # Add new students if this was an add-dancers checkout
             if new_student_ids_raw:
                 for sid_str in new_student_ids_raw.split(","):
                     try:
@@ -1015,6 +1143,18 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                             db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
                     except ValueError:
                         pass
+            if observer_ids_raw:
+                for oid_str in observer_ids_raw.split(","):
+                    try:
+                        oid = int(oid_str.strip())
+                        already = db.query(models.EventRegistrationObserver).filter(
+                            models.EventRegistrationObserver.registration_id == reg.id,
+                            models.EventRegistrationObserver.observer_id == oid,
+                        ).first()
+                        if not already:
+                            db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
+                    except ValueError:
+                        pass
             amount_total = session.get("amount_total") or 0
             prev_paid = reg.amount_paid or D("0")
             new_amount = prev_paid + D(str(amount_total)) / 100
@@ -1024,12 +1164,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             reg.finalized_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(reg)
-            # Send confirmation email (webhook path)
             try:
                 evt = reg.event
                 user = reg.user
                 student_names = [ers.student.name for ers in reg.attending_students]
+                observer_names = [ero.observer.name for ero in reg.attending_observers]
                 ev_date_str = evt.event_date.strftime("%B %d, %Y") if evt and evt.event_date else ""
+                observer_price_val = float(evt.observer_price) if evt and evt.observer_price else 0
+                observer_amount = observer_price_val * len(observer_names)
                 email_service.send_registration_confirmation(
                     to_email=user.email,
                     studio_name=user.studio_name,
@@ -1037,19 +1179,22 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     event_date=ev_date_str,
                     student_names=student_names,
                     amount_paid=float(new_amount),
+                    observer_names=observer_names,
+                    observer_amount=observer_amount,
                 )
             except Exception:
-                logger.exception("Failed to send registration confirmation in webhook for reg %s", reg_id)
+                logger.exception("Failed to send confirmation in webhook for reg %s", reg_id)
 
     return {"ok": True}
 
+
+# ── Payment history ───────────────────────────────────────────────────────────
 
 @app.get("/events/my-payments")
 def get_my_payments(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Return all finalized/paid registrations for the current user as transaction history."""
     user = get_current_user(authorization, db)
     regs = db.query(models.EventRegistration).filter(
         models.EventRegistration.user_id == user.id,
@@ -1063,6 +1208,8 @@ def get_my_payments(
             "event_title": reg.event.title,
             "event_date": reg.event.event_date.isoformat() if reg.event.event_date else None,
             "student_count": len(reg.attending_students),
+            "observer_count": len(reg.attending_observers),
+            "observer_names": [ero.observer.name for ero in reg.attending_observers],
             "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else 0,
             "payment_status": reg.payment_status,
             "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
@@ -1075,7 +1222,6 @@ def admin_list_payments(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Return all paid registrations across all users. Admin only."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -1093,6 +1239,8 @@ def admin_list_payments(
             "user_name": user_name,
             "studio_name": reg.user.studio_name,
             "student_count": len(reg.attending_students),
+            "observer_count": len(reg.attending_observers),
+            "observer_names": [ero.observer.name for ero in reg.attending_observers],
             "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else 0,
             "payment_status": reg.payment_status,
             "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
@@ -1100,13 +1248,14 @@ def admin_list_payments(
     return result
 
 
+# ── Admin event registrations ─────────────────────────────────────────────────
+
 @app.get("/admin/events/{event_id}/registrations")
 def admin_list_registrations(
     event_id: int,
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """List all registrations for an event, with per-student details. Admin only."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -1116,6 +1265,7 @@ def admin_list_registrations(
     result = []
     for reg in regs:
         students = [{"id": ers.student_id, "name": ers.student.name} for ers in reg.attending_students]
+        observers = [{"id": ero.observer_id, "name": ero.observer.name} for ero in reg.attending_observers]
         name = f"{reg.user.first_name or ''} {reg.user.last_name or ''}".strip() or reg.user.email
         result.append({
             "id": reg.id,
@@ -1123,6 +1273,7 @@ def admin_list_registrations(
             "user_name": name,
             "studio_name": reg.user.studio_name,
             "students": students,
+            "observers": observers,
             "created_at": reg.created_at.isoformat() if reg.created_at else None,
             "is_finalized": reg.is_finalized,
             "payment_status": reg.payment_status,
@@ -1139,7 +1290,6 @@ def admin_create_registration(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Create or update a registration for any user. Admin only. Body: {user_id, student_ids}."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -1155,7 +1305,6 @@ def admin_create_registration(
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found.")
 
-    # Capacity check
     if event.max_students is not None and student_ids:
         existing_reg = db.query(models.EventRegistration).filter(
             models.EventRegistration.event_id == event_id,
@@ -1217,7 +1366,6 @@ def admin_remove_registration(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Remove a user's entire event registration. Admin only."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -1240,7 +1388,6 @@ def admin_remove_reg_student(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Remove one student from an event registration. Admin only."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -1263,7 +1410,6 @@ def admin_add_reg_student(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Add a student to an event registration. Admin only."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -1290,25 +1436,7 @@ def admin_add_reg_student(
     return {"message": "Student added to registration."}
 
 
-@app.delete("/admin/events/{event_id}", response_model=schemas.MessageOut)
-def delete_event(
-    event_id: int,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db),
-):
-    """Delete an event. Admin only."""
-    current = get_current_user(authorization, db)
-    if not current.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required.")
-    event = db.query(models.Event).filter(models.Event.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found.")
-    db.delete(event)
-    db.commit()
-    return {"message": "Event deleted."}
-
-
-# ── Admin student view ────────────────────────────────────────────────────────
+# ── Admin student management ──────────────────────────────────────────────────
 
 @app.get("/admin/users/{user_id}/students", response_model=list[schemas.StudentOut])
 def admin_list_students(
@@ -1316,7 +1444,6 @@ def admin_list_students(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Return all students for a given user. Admin only."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -1333,7 +1460,6 @@ def admin_create_student(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Create a student for a given user. Admin only."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -1355,7 +1481,6 @@ def admin_update_student(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Update a student belonging to a specific user. Admin only."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -1379,7 +1504,6 @@ def admin_delete_student(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Delete a student belonging to a specific user. Admin only."""
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -1392,3 +1516,41 @@ def admin_delete_student(
     db.delete(student)
     db.commit()
     return {"message": "Student deleted."}
+
+
+# ── Admin observer management ─────────────────────────────────────────────────
+
+@app.get("/admin/users/{user_id}/observers", response_model=list[schemas.ObserverOut])
+def admin_list_observers(user_id: int, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return db.query(models.Observer).filter(models.Observer.user_id == user_id).order_by(models.Observer.name).all()
+
+
+@app.post("/admin/users/{user_id}/observers", response_model=schemas.ObserverOut, status_code=201)
+def admin_create_observer(user_id: int, body: schemas.ObserverCreate, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    target = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    obs = models.Observer(user_id=user_id, name=body.name.strip())
+    db.add(obs)
+    db.commit()
+    db.refresh(obs)
+    return obs
+
+
+@app.delete("/admin/users/{user_id}/observers/{observer_id}", response_model=schemas.MessageOut)
+def admin_delete_observer(user_id: int, observer_id: int, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    obs = db.query(models.Observer).filter(models.Observer.id == observer_id, models.Observer.user_id == user_id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observer not found.")
+    db.delete(obs)
+    db.commit()
+    return {"message": "Observer deleted."}

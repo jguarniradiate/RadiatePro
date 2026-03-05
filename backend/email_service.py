@@ -178,6 +178,8 @@ def send_registration_confirmation(
     event_date: str,
     student_names: list[str],
     amount_paid: float,
+    observer_names: list[str] | None = None,
+    observer_amount: float = 0,
 ) -> None:
     """Send a registration confirmation / receipt email after finalizing."""
     display_name = studio_name or "Independent Dancer"
@@ -207,6 +209,29 @@ def send_registration_confirmation(
             </tr>"""
         for name in student_names
     )
+
+    observer_section = ""
+    if observer_names:
+        obs_amount_str = "Free" if observer_amount == 0 else f"${observer_amount:.2f}"
+        observer_rows_html = "".join(
+            f'<tr><td style="padding:9px 12px;color:{_TEXT};font-size:14px;border-bottom:1px solid {_BORDER};">'
+            f'<span style="color:#a78bfa;margin-right:8px;">&#8227;</span>{name}</td></tr>'
+            for name in observer_names
+        )
+        observer_section = f"""
+          <tr>
+            <td style="padding:0 32px 28px;">
+              <p style="margin:0 0 10px;color:{_MUTED};font-size:11px;font-weight:700;
+                         text-transform:uppercase;letter-spacing:.08em;">
+                Registered Observers &nbsp;
+                <span style="color:#a78bfa;font-size:11px;">({obs_amount_str})</span>
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                     style="background:{_CARD2};border:1px solid {_BORDER};border-radius:8px;">
+                {observer_rows_html}
+              </table>
+            </td>
+          </tr>"""
 
     body = f"""
           <!-- Green confirmation banner -->
@@ -246,19 +271,20 @@ def send_registration_confirmation(
             </td>
           </tr>
 
-          <!-- Students section -->
+          <!-- Dancers section -->
           <tr>
             <td style="padding:0 32px 28px;">
               <p style="margin:0 0 10px;color:{_MUTED};font-size:11px;font-weight:700;
                          text-transform:uppercase;letter-spacing:.08em;">
-                Registered Students
+                Registered Dancers
               </p>
               <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
                      style="background:{_CARD2};border:1px solid {_BORDER};border-radius:8px;">
                 {student_rows}
               </table>
             </td>
-          </tr>"""
+          </tr>
+          {observer_section}"""
 
     _send(
         to_email,

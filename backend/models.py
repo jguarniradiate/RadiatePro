@@ -32,6 +32,7 @@ class User(Base):
 
     # Relationships
     students = relationship("Student", back_populates="owner", cascade="all, delete-orphan")
+    observers = relationship("Observer", back_populates="user", cascade="all, delete-orphan")
     event_registrations = relationship("EventRegistration", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -57,10 +58,11 @@ class Event(Base):
     event_date = Column(DateTime(timezone=True), nullable=False)
     location = Column(String, nullable=True)
     event_type = Column(String, nullable=True)  # "convention" or "competition"
-    early_price = Column(Numeric(10, 2), nullable=True)          # early-bird price (conventions)
-    regular_price = Column(Numeric(10, 2), nullable=True)        # regular / at-door price
-    early_price_deadline = Column(DateTime(timezone=True), nullable=True)  # deadline for early price
-    max_students = Column(Integer, nullable=True)                 # student capacity cap (None = unlimited)
+    early_price = Column(Numeric(10, 2), nullable=True)
+    regular_price = Column(Numeric(10, 2), nullable=True)
+    early_price_deadline = Column(DateTime(timezone=True), nullable=True)
+    max_students = Column(Integer, nullable=True)
+    observer_price = Column(Numeric(10, 2), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     registrations = relationship("EventRegistration", back_populates="event", cascade="all, delete-orphan")
@@ -89,6 +91,7 @@ class EventRegistration(Base):
     event = relationship("Event", back_populates="registrations")
     user = relationship("User", back_populates="event_registrations")
     attending_students = relationship("EventRegistrationStudent", back_populates="registration", cascade="all, delete-orphan")
+    attending_observers = relationship("EventRegistrationObserver", back_populates="registration", cascade="all, delete-orphan")
 
 
 class EventRegistrationStudent(Base):
@@ -100,3 +103,22 @@ class EventRegistrationStudent(Base):
 
     registration = relationship("EventRegistration", back_populates="attending_students")
     student = relationship("Student")
+
+
+class Observer(Base):
+    __tablename__ = "observers"
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name       = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    user         = relationship("User", back_populates="observers")
+    registrations = relationship("EventRegistrationObserver", back_populates="observer", cascade="all, delete-orphan")
+
+
+class EventRegistrationObserver(Base):
+    __tablename__ = "event_registration_observers"
+    id              = Column(Integer, primary_key=True)
+    registration_id = Column(Integer, ForeignKey("event_registrations.id"), nullable=False)
+    observer_id     = Column(Integer, ForeignKey("observers.id"), nullable=False)
+    registration = relationship("EventRegistration", back_populates="attending_observers")
+    observer     = relationship("Observer", back_populates="registrations")

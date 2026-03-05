@@ -87,6 +87,19 @@ class StudentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Observer schemas ──────────────────────────────────────────────────────────
+
+class ObserverOut(BaseModel):
+    id: int
+    name: str
+    created_at: datetime | None = None
+    model_config = {"from_attributes": True}
+
+
+class ObserverCreate(BaseModel):
+    name: str
+
+
 # ── Event schemas ─────────────────────────────────────────────────────────────
 
 class EventCreate(BaseModel):
@@ -99,6 +112,7 @@ class EventCreate(BaseModel):
     regular_price: Decimal | None = None
     early_price_deadline: datetime | None = None
     max_students: int | None = None  # None = unlimited
+    observer_price: Decimal | None = None
 
 
 class EventUpdate(BaseModel):
@@ -111,6 +125,7 @@ class EventUpdate(BaseModel):
     regular_price: Decimal | None = None
     early_price_deadline: datetime | None = None
     max_students: int | None = None
+    observer_price: Decimal | None = None
 
 
 class EventOut(BaseModel):
@@ -125,7 +140,8 @@ class EventOut(BaseModel):
     early_price_deadline: datetime | None = None
     max_students: int | None = None
     registered_count: int = 0
-    total_revenue: Decimal | None = None  # registered_count × current effective price
+    total_revenue: Decimal | None = None
+    observer_price: Decimal | None = None
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -135,6 +151,7 @@ class EventOut(BaseModel):
 
 class EventRegistrationCreate(BaseModel):
     student_ids: list[int] = []
+    observer_ids: list[int] = []
 
 
 class EventRegistrationOut(BaseModel):
@@ -142,6 +159,7 @@ class EventRegistrationOut(BaseModel):
     event_id: int
     user_id: int
     student_ids: list[int] = []
+    observer_ids: list[int] = []
     created_at: datetime | None = None
     is_finalized: bool = False
     payment_status: str | None = None

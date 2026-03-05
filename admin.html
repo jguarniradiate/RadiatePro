@@ -439,6 +439,15 @@
                 <label class="form-label fw-semibold">Early Bird Deadline</label>
                 <input type="datetime-local" class="form-control" id="eventEarlyDeadline">
               </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold" style="color:#a78bfa;">Observer Price <span class="text-muted fw-normal" style="font-size:.8rem;">(leave blank if free)</span></label>
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text" style="background:#111;border-color:#333;color:#a78bfa;">$</span>
+                  <input type="number" class="form-control" id="eventObserverPrice" placeholder="0.00" min="0" step="0.01"
+                    style="background:#111;border-color:#333;color:#f0f0f0;">
+                </div>
+                <small class="text-muted" style="font-size:.72rem;">Per-observer admission fee</small>
+              </div>
             </div>
           </div>
         </div>
@@ -835,7 +844,7 @@
               </div>
               <div class="d-flex gap-2 ms-3 flex-shrink-0">
                 <button class="btn btn-sm btn-outline-secondary py-0 px-2"
-                  onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}','${esc(e.event_type||'')}',${e.early_price||'null'},${e.regular_price||'null'},'${e.early_price_deadline?toLocalInput(e.early_price_deadline):''}',${e.max_students||'null'})">Edit</button>
+                  onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}','${esc(e.event_type||'')}',${e.early_price||'null'},${e.regular_price||'null'},'${e.early_price_deadline?toLocalInput(e.early_price_deadline):''}',${e.max_students||'null'},${e.observer_price||'null'})">Edit</button>
                 <button class="btn btn-sm btn-outline-danger py-0 px-2"
                   onclick="deleteEvent(${e.id},'${esc(e.title)}')">Delete</button>
               </div>
@@ -886,16 +895,14 @@
         // Payment summary for the header
         const paidRegs = regs.filter(r => r.payment_status === 'paid');
         const freeRegs = regs.filter(r => r.payment_status === 'free');
-        const pendingRegs = regs.filter(r => r.payment_status === 'pending');
-        const unpaidRegs = regs.filter(r => !r.payment_status);
+        const pendingRegs = regs.filter(r => !r.is_finalized);
         const totalRevenue = paidRegs.reduce((s, r) => s + (r.amount_paid || 0), 0);
 
         let paymentSummary = '';
         const pills = [];
         if (paidRegs.length) pills.push(`<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${paidRegs.length} Paid &nbsp;·&nbsp; $${totalRevenue.toFixed(2)}</span>`);
         if (freeRegs.length) pills.push(`<span style="background:rgba(34,197,94,.08);color:#4ade80;border:1px solid #4ade80;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">${freeRegs.length} Free</span>`);
-        if (pendingRegs.length) pills.push(`<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9203; ${pendingRegs.length} Awaiting</span>`);
-        if (unpaidRegs.length) pills.push(`<span style="background:#1a1a1a;color:#666;border:1px solid #333;font-size:.68rem;padding:.1rem .4rem;border-radius:20px;">${unpaidRegs.length} Not Finalized</span>`);
+        if (pendingRegs.length) pills.push(`<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9203; ${pendingRegs.length} Pending</span>`);
         if (pills.length) paymentSummary = `<div class="d-flex flex-wrap gap-1 mt-1">${pills.join('')}</div>`;
 
         content.innerHTML = `
@@ -921,10 +928,7 @@
       if (reg.payment_status === 'free') {
         return `<span style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">Free</span>`;
       }
-      if (reg.payment_status === 'pending') {
-        return `<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">&#9203; Awaiting Payment</span>`;
-      }
-      return `<span style="background:#1a1a1a;color:#666;border:1px solid #333;font-size:.7rem;padding:.15rem .45rem;border-radius:20px;">Not Finalized</span>`;
+      return `<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">&#9203; Pending</span>`;
     }
 
     function renderRegCard(eventId, reg) {
@@ -934,6 +938,13 @@
           <button class="stu-badge-remove" title="Remove student"
             onclick="adminRemoveRegStudent(${eventId},${reg.id},${s.id},'${esc(s.name)}')">×</button>
         </span>`).join('');
+
+      const observers = reg.observers || [];
+      const obsBadges = observers.map(o =>
+        `<span class="stu-badge" style="background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid #6d5fa6;">
+          &#128065; ${esc(o.name)}
+        </span>`
+      ).join('');
 
       const paidOnHtml = reg.finalized_at
         ? `<span style="font-size:.72rem;color:#666;margin-left:.5rem;">on ${new Date(reg.finalized_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>`
@@ -960,6 +971,11 @@
               + Add Student
             </button>
           </div>
+          ${observers.length ? `
+          <div class="d-flex flex-wrap gap-1 align-items-center mt-2">
+            <span class="text-muted" style="font-size:.76rem;margin-right:.25rem;">Observers:</span>
+            ${obsBadges}
+          </div>` : ''}
         </div>`;
     }
 
@@ -1278,11 +1294,17 @@
       const type = document.getElementById('eventType').value;
       const section = document.getElementById('pricingSection');
       if (type === 'convention') section.classList.remove('d-none');
-      else { section.classList.add('d-none'); document.getElementById('eventEarlyPrice').value=''; document.getElementById('eventRegularPrice').value=''; document.getElementById('eventEarlyDeadline').value=''; }
+      else {
+        section.classList.add('d-none');
+        document.getElementById('eventEarlyPrice').value='';
+        document.getElementById('eventRegularPrice').value='';
+        document.getElementById('eventEarlyDeadline').value='';
+        document.getElementById('eventObserverPrice').value='';
+      }
     }
 
     function openAddEvent() {
-      ['eventId','eventTitle','eventDate','eventLocation','eventDesc','eventEarlyPrice','eventRegularPrice','eventEarlyDeadline','eventMaxStudents'].forEach(id => document.getElementById(id).value = '');
+      ['eventId','eventTitle','eventDate','eventLocation','eventDesc','eventEarlyPrice','eventRegularPrice','eventEarlyDeadline','eventMaxStudents','eventObserverPrice'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('eventType').value = '';
       document.getElementById('pricingSection').classList.add('d-none');
       document.getElementById('eventModalTitle').textContent = 'New Event';
@@ -1290,18 +1312,19 @@
       eventModal.show();
     }
 
-    function openEditEvent(id, title, date, location, desc, type, earlyPrice, regularPrice, earlyDeadline, maxStudents) {
+    function openEditEvent(id, title, date, location, desc, type, earlyPrice, regularPrice, earlyDeadline, maxStudents, observerPrice) {
       document.getElementById('eventModalTitle').textContent = 'Edit Event';
-      document.getElementById('eventId').value            = id;
-      document.getElementById('eventTitle').value         = title;
-      document.getElementById('eventType').value          = type;
-      document.getElementById('eventDate').value          = date;
-      document.getElementById('eventLocation').value      = location;
-      document.getElementById('eventDesc').value          = desc;
-      document.getElementById('eventEarlyPrice').value    = earlyPrice || '';
-      document.getElementById('eventRegularPrice').value  = regularPrice || '';
-      document.getElementById('eventEarlyDeadline').value = earlyDeadline || '';
-      document.getElementById('eventMaxStudents').value   = maxStudents || '';
+      document.getElementById('eventId').value              = id;
+      document.getElementById('eventTitle').value           = title;
+      document.getElementById('eventType').value            = type;
+      document.getElementById('eventDate').value            = date;
+      document.getElementById('eventLocation').value        = location;
+      document.getElementById('eventDesc').value            = desc;
+      document.getElementById('eventEarlyPrice').value      = earlyPrice || '';
+      document.getElementById('eventRegularPrice').value    = regularPrice || '';
+      document.getElementById('eventEarlyDeadline').value   = earlyDeadline || '';
+      document.getElementById('eventMaxStudents').value     = maxStudents || '';
+      document.getElementById('eventObserverPrice').value   = observerPrice || '';
       document.getElementById('pricingSection').classList.toggle('d-none', type !== 'convention');
       document.getElementById('eventAlert').classList.add('d-none');
       eventModal.show();
@@ -1319,10 +1342,11 @@
       alertEl.classList.add('d-none'); saveBtn.disabled = true;
       saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
 
-      const earlyPrice    = document.getElementById('eventEarlyPrice').value;
-      const regularPrice  = document.getElementById('eventRegularPrice').value;
-      const earlyDeadline = document.getElementById('eventEarlyDeadline').value;
-      const maxStudents   = document.getElementById('eventMaxStudents').value;
+      const earlyPrice     = document.getElementById('eventEarlyPrice').value;
+      const regularPrice   = document.getElementById('eventRegularPrice').value;
+      const earlyDeadline  = document.getElementById('eventEarlyDeadline').value;
+      const maxStudents    = document.getElementById('eventMaxStudents').value;
+      const observerPrice  = document.getElementById('eventObserverPrice').value;
 
       try {
         const res = await fetch(eventId ? `${API}/admin/events/${eventId}` : `${API}/admin/events`, {
@@ -1337,6 +1361,7 @@
             regular_price: (type === 'convention' && regularPrice) ? parseFloat(regularPrice) : null,
             early_price_deadline: (type === 'convention' && earlyDeadline) ? new Date(earlyDeadline).toISOString() : null,
             max_students: maxStudents ? parseInt(maxStudents) : null,
+            observer_price: (type === 'convention' && observerPrice) ? parseFloat(observerPrice) : null,
           }),
         });
         let data = {}; try { data = await res.json(); } catch {}

@@ -102,6 +102,28 @@
     }
     .stu-switch:disabled { opacity: .45; cursor: not-allowed; }
     .lock-icon { font-size: .75rem; color: #666; margin-left: .3rem; }
+    .dancer-badge-paid   { font-size: .65rem; font-weight: 700; padding: .1rem .4rem; border-radius: 20px;
+                           background: rgba(34,197,94,.15); color: #22c55e; border: 1px solid #22c55e;
+                           white-space: nowrap; margin-left: .4rem; vertical-align: middle; }
+    .dancer-badge-free   { font-size: .65rem; font-weight: 700; padding: .1rem .4rem; border-radius: 20px;
+                           background: rgba(34,197,94,.1); color: #4ade80; border: 1px solid #4ade80;
+                           white-space: nowrap; margin-left: .4rem; vertical-align: middle; }
+    .dancer-badge-unpaid { font-size: .65rem; font-weight: 700; padding: .1rem .4rem; border-radius: 20px;
+                           background: rgba(251,191,36,.1); color: #fbbf24; border: 1px solid #fbbf24;
+                           white-space: nowrap; margin-left: .4rem; vertical-align: middle; }
+    /* Observer toggle switch (purple) */
+    .form-check-input.obs-switch { background-color: #333; border-color: #555; cursor: pointer; }
+    .form-check-input.obs-switch:checked { background-color: #a78bfa; border-color: #a78bfa;
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23000'/%3e%3c/svg%3e"); }
+    .form-check-input.obs-switch:focus { box-shadow: 0 0 0 .2rem rgba(167,139,250,.25); border-color: #a78bfa; }
+    .obs-switch:disabled { opacity: .45; cursor: not-allowed; }
+    /* Observer payment badges */
+    .observer-badge-paid   { font-size: .65rem; font-weight: 700; padding: .1rem .4rem; border-radius: 20px;
+                             background: rgba(167,139,250,.15); color: #a78bfa; border: 1px solid #a78bfa;
+                             white-space: nowrap; margin-left: .4rem; vertical-align: middle; }
+    .observer-badge-unpaid { font-size: .65rem; font-weight: 700; padding: .1rem .4rem; border-radius: 20px;
+                             background: rgba(251,191,36,.1); color: #fbbf24; border: 1px solid #fbbf24;
+                             white-space: nowrap; margin-left: .4rem; vertical-align: middle; }
     .cap-bar-wrap   { background:#2a2a2a; border-radius:6px; height:9px; overflow:hidden; }
     .cap-bar        { height:100%; border-radius:6px; transition:width .3s; }
     .cap-label      { font-size:.68rem; color:#888; margin-bottom:.3rem; display:flex; justify-content:space-between; align-items:center; }
@@ -257,6 +279,26 @@
               </div>
             </div>
           </div>
+
+          <!-- Observer section -->
+          <div id="observerSection" class="mt-3 pt-3" style="border-top:1px solid #2a2a2a;">
+            <p class="small fw-semibold mb-2" style="color:#a78bfa;">&#128065; Observers</p>
+            <div id="observerTableWrap" class="d-none">
+              <table class="table table-sm stu-table mb-0">
+                <thead>
+                  <tr>
+                    <th style="width:56px;">Attending</th>
+                    <th>Name</th>
+                  </tr>
+                </thead>
+                <tbody id="observerTableBody"></tbody>
+              </table>
+            </div>
+            <p id="noObserversMsg" class="text-muted small mb-0 d-none">
+              No observers added yet.
+              <a href="dashboard.html#observers" style="color:#a78bfa;">Add observers in Dashboard</a>.
+            </p>
+          </div>
         </div>
         <div class="modal-footer flex-column align-items-stretch gap-2" style="padding:.75rem 1rem;">
           <div class="d-flex gap-2 flex-wrap">
@@ -265,7 +307,7 @@
             </button>
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
             <button type="button" class="btn btn-outline-secondary" id="regSaveDraftBtn" style="display:none;">Save</button>
-            <button type="button" class="btn btn-accent" id="regSaveBtn">Register</button>
+            <button type="button" class="btn btn-finalize" id="regSaveBtn">Register</button>
           </div>
         </div>
       </div>
@@ -276,7 +318,8 @@
   <script>
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
     let myStudents = [];
-    let myRegistrations = {}; // event_id (string) → {registration_id, student_ids}
+    let myObservers = [];
+    let myRegistrations = {}; // event_id (string) → {registration_id, student_ids, observer_ids}
     let eventsCache = {};     // event_id → full event object
     let regModal;
     let currentRegEvent = null; // full event object for the open modal
@@ -328,7 +371,6 @@
             const isPast = new Date(e.event_date) < now;
             const isFull = e.max_students && (e.registered_count || 0) >= e.max_students && !reg;
             const isFinalized = reg && reg.is_finalized;
-            const isPending   = reg && reg.payment_status === 'pending';
             const hasPricing  = !!(e.early_price || e.regular_price);
             return `
               <div class="event-card p-4 mb-3 d-flex gap-3 align-items-start ${reg ? 'registered' : ''} ${isFull ? 'full' : ''}" id="ecard-${e.id}">
@@ -345,8 +387,7 @@
                   ${!isPast ? `
                   <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
                     ${isFinalized ? `<span class="badge-finalized">&#10003; Finalized</span>` :
-                      isPending   ? `<span class="badge-pending-pay">&#9203; Awaiting Payment</span>` :
-                      reg         ? `<span class="reg-badge">&#10003; Registered</span>` : ''}
+                      reg         ? `<span class="badge-pending-pay">&#9203; Pending</span>` : ''}
                     <button id="reg-btn-${e.id}"
                       class="btn btn-sm ${isFinalized ? 'btn-outline-secondary' : reg ? 'btn-outline-secondary' : isFull ? 'btn-outline-secondary' : 'btn-accent'} py-1 px-3"
                       ${isFull && !reg ? 'disabled' : `onclick="openRegModal(eventsCache[${e.id}])"`}>
@@ -395,7 +436,9 @@
           myStudents.push(data);
           const currentSelected = getSelectedStudentIds();
           currentSelected.push(data.id);
-          renderStudentTable(currentSelected);
+          const qReg = myRegistrations[String(currentRegEvent?.id)];
+          const qLocked = (qReg && qReg.is_finalized) ? [...(qReg.student_ids || [])] : [];
+          renderStudentTable(currentSelected, qLocked, qReg ? qReg.payment_status : null);
           // Clear form and hide
           document.getElementById('qsName').value = '';
           document.getElementById('qsDob').value  = '';
@@ -438,27 +481,88 @@
     }
 
     function pricingBadge(e) {
-      if (!e.regular_price && !e.early_price) return '';
-      const now = new Date();
-      const earlyActive = e.early_price && e.early_price_deadline && new Date(e.early_price_deadline) > now;
-      if (earlyActive) {
-        const deadline = new Date(e.early_price_deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-        return `<div class="event-meta mt-1">
-          <span style="color:#E3FC02;font-weight:600;"><strong style="color:#22c55e;font-size:1.05em;">$</strong> ${fmtPrice(e.early_price)} Early Bird</span>
-          <span class="ms-2">/ ${fmtPrice(e.regular_price)} after ${deadline}</span>
-        </div>`;
+      const hasDancerPrice   = !!(e.regular_price || e.early_price);
+      const hasObserverPrice = !!e.observer_price;
+      if (!hasDancerPrice && !hasObserverPrice) return '';
+
+      let parts = [];
+
+      if (hasDancerPrice) {
+        const now = new Date();
+        const earlyActive = e.early_price && e.early_price_deadline && new Date(e.early_price_deadline) > now;
+        if (earlyActive) {
+          const deadline = new Date(e.early_price_deadline).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+          parts.push(
+            `<span style="color:#E3FC02;font-weight:600;"><strong style="color:#22c55e;font-size:1.05em;">$</strong> ${fmtPrice(e.early_price)} Early Bird</span>` +
+            `<span class="ms-2">/ ${fmtPrice(e.regular_price)} after ${deadline}</span>`
+          );
+        } else if (e.regular_price) {
+          parts.push(`<span style="color:#E3FC02;font-weight:600;"><strong style="color:#22c55e;font-size:1.05em;">$</strong> ${fmtPrice(e.regular_price)} per dancer</span>`);
+        }
       }
-      if (e.regular_price) {
-        return `<div class="event-meta mt-1"><span style="color:#E3FC02;font-weight:600;"><strong style="color:#22c55e;font-size:1.05em;">$</strong> ${fmtPrice(e.regular_price)} per student</span></div>`;
+
+      if (hasObserverPrice) {
+        parts.push(`<span style="color:#a78bfa;font-weight:600;"><strong style="color:#a78bfa;font-size:1.05em;">$</strong> ${fmtPrice(e.observer_price)} per observer</span>`);
       }
-      return '';
+
+      return `<div class="event-meta mt-1">${parts.join('<span class="mx-2" style="color:#444;">|</span>')}</div>`;
     }
 
     function getSelectedStudentIds() {
       return [...document.querySelectorAll('.stu-switch:checked')].map(i => parseInt(i.dataset.studentId));
     }
 
-    function renderStudentTable(selectedIds, lockedIds = []) {
+    function getSelectedObserverIds() {
+      return [...document.querySelectorAll('.obs-switch:checked')].map(i => parseInt(i.dataset.observerId));
+    }
+
+    function renderObserverTable(selectedIds, lockedIds = [], paymentStatus = null) {
+      const tbody   = document.getElementById('observerTableBody');
+      const wrap    = document.getElementById('observerTableWrap');
+      const noMsg   = document.getElementById('noObserversMsg');
+
+      if (myObservers.length === 0) {
+        wrap.classList.add('d-none');
+        noMsg.classList.remove('d-none');
+        return;
+      }
+
+      noMsg.classList.add('d-none');
+      wrap.classList.remove('d-none');
+      tbody.innerHTML = myObservers.map(o => {
+        const locked       = lockedIds.includes(o.id);
+        const inPendingReg = !locked && selectedIds.includes(o.id);
+
+        let payBadge = '';
+        if (locked) {
+          if (paymentStatus === 'free') {
+            payBadge = '<span class="observer-badge-paid">Free</span>';
+          } else {
+            payBadge = '<span class="observer-badge-paid">&#10003; Paid</span>';
+          }
+        } else if (inPendingReg) {
+          payBadge = '<span class="observer-badge-unpaid">&#9203; Unpaid</span>';
+        }
+
+        return `
+          <tr onclick="${locked ? '' : `document.getElementById('osw-${o.id}').click()`}" style="${locked ? 'cursor:default;' : ''}">
+            <td>
+              <div class="form-check form-switch mb-0 ms-1">
+                <input class="form-check-input obs-switch" type="checkbox" role="switch"
+                  id="osw-${o.id}" data-observer-id="${o.id}"
+                  ${selectedIds.includes(o.id) || locked ? 'checked' : ''}
+                  ${locked ? 'disabled' : ''}
+                  onclick="event.stopPropagation()">
+              </div>
+            </td>
+            <td class="fw-semibold" style="color:${locked ? '#888' : '#f0f0f0'};">
+              ${esc(o.name)}${locked ? ' <span class="lock-icon">&#128274;</span>' : ''}${payBadge}
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    function renderStudentTable(selectedIds, lockedIds = [], paymentStatus = null) {
       const tbody = document.getElementById('studentTableBody');
       const wrap  = document.getElementById('studentTableWrap');
       const noMsg = document.getElementById('noStudentsMsg');
@@ -472,7 +576,21 @@
       noMsg.classList.add('d-none');
       wrap.classList.remove('d-none');
       tbody.innerHTML = myStudents.map(s => {
-        const locked = lockedIds.includes(s.id);
+        const locked       = lockedIds.includes(s.id);
+        const inPendingReg = !locked && selectedIds.includes(s.id);
+
+        let payBadge = '';
+        if (locked) {
+          if (paymentStatus === 'free') {
+            payBadge = '<span class="dancer-badge-free">Free</span>';
+          } else {
+            // paid or finalized via webhook
+            payBadge = '<span class="dancer-badge-paid">&#10003; Paid</span>';
+          }
+        } else if (inPendingReg) {
+          payBadge = '<span class="dancer-badge-unpaid">&#9203; Unpaid</span>';
+        }
+
         return `
         <tr onclick="${locked ? '' : `document.getElementById('sw-${s.id}').click()`}" style="${locked ? 'cursor:default;' : ''}">
           <td>
@@ -485,7 +603,7 @@
             </div>
           </td>
           <td class="fw-semibold" style="color:${locked ? '#888' : '#f0f0f0'};">
-            ${esc(s.name)}${locked ? ' <span class="lock-icon">&#128274;</span>' : ''}
+            ${esc(s.name)}${locked ? ' <span class="lock-icon">&#128274;</span>' : ''}${payBadge}
           </td>
           <td>${fmtDob(s.date_of_birth)}</td>
           <td>${esc(s.gender || '—')}</td>
@@ -501,16 +619,20 @@
       document.getElementById('regAlert').classList.add('d-none');
       document.getElementById('quickAddStudentForm').classList.add('d-none');
 
-      const reg        = myRegistrations[String(event.id)];
-      const isFinalized = reg && reg.is_finalized;
-      const selectedIds = reg ? reg.student_ids : [];
-      const lockedIds   = isFinalized ? [...selectedIds] : [];
+      const reg              = myRegistrations[String(event.id)];
+      const isFinalized      = reg && reg.is_finalized;
+      const selectedIds      = reg ? (reg.student_ids || []) : [];
+      const lockedIds        = isFinalized ? [...selectedIds] : [];
+      const observerIds      = reg ? (reg.observer_ids || []) : [];
+      const lockedObserverIds = isFinalized ? [...observerIds] : [];
+      const paymentStatus    = reg ? reg.payment_status : null;
 
       document.getElementById('regModalTitle').textContent = isFinalized
         ? `Add Dancers — ${event.title}`
         : event.title;
 
-      renderStudentTable(selectedIds, lockedIds);
+      renderStudentTable(selectedIds, lockedIds, paymentStatus);
+      renderObserverTable(observerIds, lockedObserverIds, paymentStatus);
 
       const unregBtn  = document.getElementById('unregBtn');
       const saveBtn   = document.getElementById('regSaveBtn');
@@ -520,28 +642,20 @@
       const hasPricing = !!(event.early_price || event.regular_price);
 
       if (isFinalized) {
-        // Adding dancers to a locked registration
+        // Adding dancers to a locked registration — payment always required for priced events
         saveBtn.className = 'btn btn-finalize';
-        saveBtn.textContent = 'Add Dancers & Finalize';
+        saveBtn.textContent = hasPricing ? 'Add Dancers & Pay' : 'Add Dancers';
         saveBtn.onclick = () => checkoutRegistration(true);
-        if (hasPricing) {
-          draftBtn.style.display = 'inline-block';
-          draftBtn.textContent = 'Save';
-          draftBtn.onclick = () => saveDancersDraft();
-        } else {
-          draftBtn.style.display = 'none';
-        }
+        draftBtn.style.display = 'none';
       } else if (hasPricing) {
-        // Paid event — offer Save (draft) and Finalize Registration
+        // Paid event — must go through Stripe to register
         saveBtn.className = 'btn btn-finalize';
         saveBtn.textContent = '✓ Finalize Registration';
         saveBtn.onclick = () => checkoutRegistration(false);
-        draftBtn.style.display = 'inline-block';
-        draftBtn.textContent = 'Save';
-        draftBtn.onclick = () => saveDraftRegistration();
+        draftBtn.style.display = 'none';
       } else {
-        // Free event — single Register/Update button
-        saveBtn.className = 'btn btn-accent';
+        // Free event — single Register/Update button, auto-finalizes
+        saveBtn.className = 'btn btn-finalize';
         saveBtn.textContent = reg ? 'Update Registration' : 'Register';
         saveBtn.onclick = () => checkoutRegistration(false);
         draftBtn.style.display = 'none';
@@ -570,11 +684,13 @@
         ? `${API}/events/${eventId}/register/add-students`
         : `${API}/events/${eventId}/register/checkout`;
 
+      const observerIds = getSelectedObserverIds();
+
       try {
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ student_ids: studentIds }),
+          body: JSON.stringify({ student_ids: studentIds, observer_ids: observerIds }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -588,6 +704,7 @@
             ...myRegistrations[String(eventId)],
             registration_id: data.registration_id,
             student_ids: studentIds,
+            observer_ids: observerIds,
             is_finalized: true,
             payment_status: 'free',
           };
@@ -748,8 +865,8 @@
           const oldFin = parent.querySelector(`#finalize-btn-${eventId}`);
           if (oldFin) oldFin.remove();
           const badge = document.createElement('span');
-          badge.className = reg && reg.payment_status === 'pending' ? 'badge-pending-pay' : 'reg-badge';
-          badge.innerHTML = reg && reg.payment_status === 'pending' ? '&#9203; Awaiting Payment' : '&#10003; Registered';
+          badge.className = 'badge-pending-pay';
+          badge.innerHTML = '&#9203; Pending';
           parent.insertBefore(badge, btn);
           // Show Finalize Registration for any non-finalized registration on a priced event
           const ev = eventsCache[eventId];
@@ -784,9 +901,10 @@
       history.replaceState({}, '', 'events.html');
 
       try {
-        const [userRes, studRes, evtRes, regRes] = await Promise.all([
+        const [userRes, studRes, obsRes, evtRes, regRes] = await Promise.all([
           fetch(`${API}/auth/me`,               { headers: { 'Authorization': `Bearer ${token}` } }),
           fetch(`${API}/students`,               { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(`${API}/observers`,              { headers: { 'Authorization': `Bearer ${token}` } }),
           fetch(`${API}/events`),
           fetch(`${API}/events/my-registrations`,{ headers: { 'Authorization': `Bearer ${token}` } }),
         ]);
@@ -800,6 +918,7 @@
         if (user.is_admin) document.getElementById('adminLink').style.display = '';
 
         myStudents      = studRes.ok ? await studRes.json() : [];
+        myObservers     = obsRes.ok  ? await obsRes.json()  : [];
         const events    = evtRes.ok  ? await evtRes.json()  : [];
         myRegistrations = regRes.ok  ? await regRes.json()  : {};
 
@@ -816,6 +935,7 @@
               myRegistrations[String(payEventId)] = {
                 registration_id: vData.id,
                 student_ids: vData.student_ids,
+                observer_ids: vData.observer_ids || [],
                 is_finalized: vData.is_finalized,
                 payment_status: vData.payment_status,
                 amount_paid: vData.amount_paid,
