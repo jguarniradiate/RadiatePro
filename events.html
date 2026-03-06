@@ -459,7 +459,7 @@
                       ${isFinalized || hasPending ? 'Update Registration' : reg ? 'Edit Registration' : isFull ? '&#9940; Event Full' : 'Register'}
                     </button>
                     ${(reg && !isFinalized && hasPricing) ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="finalize-btn-${e.id}" onclick="resumeCheckout(${e.id})">Complete Registration</button>` : ''}
-                    ${hasPending ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="pay-pending-btn-${e.id}" onclick="payForPendingDancers(${e.id})">Pay Outstanding Balance</button>` : ''}
+                    ${hasPending ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="pay-pending-btn-${e.id}" onclick="payForPendingDancers(${e.id})">${(() => { const t = calcPendingTotal(e, reg); return t > 0 ? `Pay Outstanding Balance ($${t.toFixed(2)})` : 'Pay Outstanding Balance'; })()}</button>` : ''}
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
                 </div>
               </div>`;
@@ -529,6 +529,23 @@
 
     function fmtPrice(val) {
       return val != null ? `$${parseFloat(val).toFixed(2)}` : null;
+    }
+
+    // Calculate the outstanding balance for pending (admin-added unpaid) items.
+    function calcPendingTotal(event, reg) {
+      if (!reg || !(reg.pending_student_ids || []).length) return 0;
+      const pendingRaw    = reg.pending_student_ids || [];
+      const pendingStuCnt = pendingRaw.filter(x => !String(x).startsWith('o')).length;
+      const pendingObsCnt = pendingRaw.filter(x =>  String(x).startsWith('o')).length;
+      const now = new Date();
+      let dancerPrice = 0;
+      if (event && event.early_price && event.early_price_deadline && new Date(event.early_price_deadline) > now) {
+        dancerPrice = parseFloat(event.early_price);
+      } else if (event && event.regular_price) {
+        dancerPrice = parseFloat(event.regular_price);
+      }
+      const obsPrice = event && event.observer_price ? parseFloat(event.observer_price) : 0;
+      return pendingStuCnt * dancerPrice + pendingObsCnt * obsPrice;
     }
 
     function capacityBadge(e) {
@@ -619,11 +636,16 @@
       }
       const obsPrice = event.observer_price ? parseFloat(event.observer_price) : 0;
 
-      // Locked IDs (already paid) don't count towards new total
+      // Locked IDs (already paid) don't count towards new total.
+      // Pending IDs (admin-added, unpaid) DO count — they still have a balance owing.
       const reg = myRegistrations[String(event.id)];
       const isFinalized = reg && reg.is_finalized;
-      const lockedDancerIds = isFinalized ? (reg.student_ids  || []) : [];
-      const lockedObsIds    = isFinalized ? (reg.observer_ids || []) : [];
+      const pendingRaw    = reg ? (reg.pending_student_ids || []) : [];
+      const pendingStuIds = pendingRaw.filter(x => !String(x).startsWith('o')).map(x => parseInt(x));
+      const pendingObsIds = pendingRaw.filter(x =>  String(x).startsWith('o')).map(x => parseInt(String(x).slice(1)));
+      // Only truly paid/locked items (not pending) are excluded from the total
+      const lockedDancerIds = isFinalized ? (reg.student_ids  || []).filter(id => !pendingStuIds.includes(id)) : [];
+      const lockedObsIds    = isFinalized ? (reg.observer_ids || []).filter(id => !pendingObsIds.includes(id)) : [];
       const newDancers = getSelectedStudentIds().filter(id => !lockedDancerIds.includes(id));
       const newObs     = getSelectedObserverIds().filter(id => !lockedObsIds.includes(id));
 
@@ -867,12 +889,14 @@
       }
 
       // For finalized (update) registrations, require at least one new addition
+      // OR existing pending (unpaid) items to checkout.
       if (isAddDancers) {
         const lockedIds    = isFinalized ? (reg.student_ids  || []) : [];
         const lockedObsIds = isFinalized ? (reg.observer_ids || []) : [];
+        const pendingRaw   = reg ? (reg.pending_student_ids || []) : [];
         const newStudents  = studentIds.filter(id => !lockedIds.includes(id));
         const newObservers = observerIds.filter(id => !lockedObsIds.includes(id));
-        if (!newStudents.length && !newObservers.length) {
+        if (!newStudents.length && !newObservers.length && !pendingRaw.length) {
           alertEl.textContent = 'Please select at least one new dancer or observer to add.';
           alertEl.classList.remove('d-none');
           return;
@@ -1246,7 +1270,8 @@
           const payBtn = document.createElement('button');
           payBtn.id        = `pay-pending-btn-${eventId}`;
           payBtn.className = 'btn btn-sm btn-finalize py-1 px-3';
-          payBtn.innerHTML = 'Pay Outstanding Balance';
+          const _pendingTotal = calcPendingTotal(eventsCache[eventId], reg);
+          payBtn.innerHTML = _pendingTotal > 0 ? `Pay Outstanding Balance ($${_pendingTotal.toFixed(2)})` : 'Pay Outstanding Balance';
           payBtn.onclick   = () => payForPendingDancers(eventId);
           parent.appendChild(payBtn);
         } else if (isRegistered && reg && reg.is_finalized) {
