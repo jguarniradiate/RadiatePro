@@ -857,6 +857,8 @@ def create_checkout(
         models.EventRegistration.event_id == event_id,
         models.EventRegistration.user_id == user.id,
     ).first()
+    # Allow checkout on a previously-finalized registration that an admin has
+    # since un-finalized by adding an unpaid dancer/observer.
     if existing and existing.is_finalized:
         raise HTTPException(status_code=400, detail="Registration already finalized. Use Add Dancers.")
 
@@ -874,7 +876,12 @@ def create_checkout(
     dancer_total = price_per_student * len(body.student_ids)
     observer_total = observer_price * len(body.observer_ids)
     grand_total = dancer_total + observer_total
-    is_free = grand_total == D("0")
+
+    # If the user has already paid part of this registration (e.g. admin added
+    # an unpaid dancer to a previously-paid reg), only charge the delta.
+    amount_already_paid = existing.amount_paid if (existing and existing.amount_paid) else D("0")
+    amount_to_charge = max(D("0"), grand_total - amount_already_paid)
+    is_free = amount_to_charge == D("0")
 
     if existing:
         db.query(models.EventRegistrationStudent).filter(
@@ -929,25 +936,37 @@ def create_checkout(
         return schemas.CheckoutSessionOut(checkout_url="", session_id="free")
 
     user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email
+    is_delta = amount_already_paid > D("0")
     line_items = []
-    if dancer_total > 0:
+    if is_delta:
+        # Previously paid registration — charge only the remaining balance
         line_items.append({
             "price_data": {
                 "currency": "usd",
-                "product_data": {"name": f"{event.title} — {len(body.student_ids)} dancer(s)"},
-                "unit_amount": int(price_per_student * 100),
+                "product_data": {"name": f"{event.title} — balance due"},
+                "unit_amount": int(amount_to_charge * 100),
             },
-            "quantity": len(body.student_ids),
+            "quantity": 1,
         })
-    if observer_total > 0:
-        line_items.append({
-            "price_data": {
-                "currency": "usd",
-                "product_data": {"name": f"{event.title} — {len(body.observer_ids)} observer(s)"},
-                "unit_amount": int(observer_price * 100),
-            },
-            "quantity": len(body.observer_ids),
-        })
+    else:
+        if dancer_total > 0:
+            line_items.append({
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": f"{event.title} — {len(body.student_ids)} dancer(s)"},
+                    "unit_amount": int(price_per_student * 100),
+                },
+                "quantity": len(body.student_ids),
+            })
+        if observer_total > 0:
+            line_items.append({
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": f"{event.title} — {len(body.observer_ids)} observer(s)"},
+                    "unit_amount": int(observer_price * 100),
+                },
+                "quantity": len(body.observer_ids),
+            })
     meta = {
         "registration_id": str(reg.id),
         "event_id": str(event_id),
@@ -1055,11 +1074,12 @@ def verify_payment(
             db.commit()
             db.refresh(reg)
         else:
-            # Initial registration flow: finalize and record payment
+            # Initial registration flow (or delta payment for admin-added dancers):
+            # finalize and accumulate amount_paid so prior partial payments are preserved.
             reg.is_finalized = True
             reg.payment_status = "paid"
             amount = D(str(session.amount_total)) / 100
-            reg.amount_paid = amount
+            reg.amount_paid = (reg.amount_paid or D("0")) + amount
             reg.finalized_at = datetime.now(timezone.utc)
             db.commit()
             db.refresh(reg)
@@ -1577,6 +1597,12 @@ def admin_add_reg_student(
     if existing:
         raise HTTPException(status_code=400, detail="Student already in registration.")
     db.add(models.EventRegistrationStudent(registration_id=reg_id, student_id=student_id))
+    # Unfinalize the registration so the user is prompted to pay for the new
+    # dancer in the user portal.  admin-finalize (called next if admin selects
+    # "Paid") will flip it back to finalized.
+    reg.is_finalized = False
+    if reg.payment_status not in ("pending",):
+        reg.payment_status = "pending"
     db.commit()
     return {"message": "Student added to registration."}
 
@@ -1760,6 +1786,10 @@ def admin_add_reg_observer(
     if existing:
         raise HTTPException(status_code=400, detail="Observer already in registration.")
     db.add(models.EventRegistrationObserver(registration_id=reg_id, observer_id=observer_id))
+    # Unfinalize so the user is prompted to pay for the new observer.
+    reg.is_finalized = False
+    if reg.payment_status not in ("pending",):
+        reg.payment_status = "pending"
     db.commit()
     return {"message": "Observer added to registration."}
 

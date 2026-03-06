@@ -19,10 +19,10 @@
       overflow-y: auto;
     }
     .sidebar-brand {
-      padding: 1.5rem 1.25rem 1rem;
-      font-size: 1.2rem; font-weight: 800; color: #E3FC02;
-      letter-spacing: -.01em; border-bottom: 1px solid #2a2a2a;
-      cursor: pointer; text-decoration: none; display: block;
+      padding: .5rem 0;
+      border-bottom: 1px solid #2a2a2a;
+      cursor: pointer; text-decoration: none;
+      display: flex; align-items: center; justify-content: center;
     }
     .sidebar-user {
       padding: 1.1rem 1.25rem;
@@ -48,6 +48,12 @@
     .nav-item:hover { background: rgba(227,252,2,.07); color: #f0f0f0; }
     .nav-item.active { color: #E3FC02; background: rgba(227,252,2,.1); border-left-color: #E3FC02; font-weight: 600; }
     .nav-item .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+    .nav-item .nav-pending-badge {
+      margin-left: auto; background: #ff6b35; color: #fff;
+      font-size: .65rem; font-weight: 700; min-width: 18px; height: 18px;
+      padding: 0 5px; border-radius: 9px; display: inline-flex;
+      align-items: center; justify-content: center; line-height: 1;
+    }
     .sidebar-footer { padding: .75rem 1.25rem 1.25rem; border-top: 1px solid #2a2a2a; }
     .sidebar-footer button {
       background: #1a1a1a; border: 1px solid #2e2e2e; color: #bbb;
@@ -161,7 +167,9 @@
 
   <!-- ── Sidebar ── -->
   <nav class="sidebar" id="sidebar">
-    <a href="login.html" class="sidebar-brand">Radiate Portal</a>
+    <a href="login.html" class="sidebar-brand">
+      <img src="assets/logo.png" alt="Radiate Portal" style="width:90px;height:90px;object-fit:contain;border-radius:8px;">
+    </a>
 
     <div class="sidebar-user">
       <div class="avatar-sm" id="sidebarAvatar">?</div>
@@ -184,8 +192,9 @@
       <a class="nav-item" href="dashboard.html#observers">
         <span class="nav-icon"><i class="bi bi-eye-fill"></i></span> My Observers
       </a>
-      <a class="nav-item active" href="events.html">
+      <a class="nav-item active" href="events.html" id="eventsNavItem">
         <span class="nav-icon"><i class="bi bi-calendar-event-fill"></i></span> Events
+        <span class="nav-pending-badge d-none" id="eventsPendingBadge"></span>
       </a>
       <a class="nav-item" href="dashboard.html#transactions">
         <span class="nav-icon"><i class="bi bi-receipt-cutoff"></i></span> Transactions
@@ -273,7 +282,7 @@
                     style="background:#111;border-color:#333;color:#f0f0f0;width:180px;">
                 </div>
                 <div>
-                  <label class="form-label mb-1" style="font-size:.75rem;color:#aaa;">Date of Birth</label>
+                  <label class="form-label mb-1" style="font-size:.75rem;color:#aaa;">Date of Birth <span class="text-danger">*</span></label>
                   <input type="date" id="qsDob" class="form-control form-control-sm"
                     style="background:#111;border-color:#333;color:#f0f0f0;width:150px;">
                 </div>
@@ -462,7 +471,9 @@
       const name    = document.getElementById('qsName').value.trim();
       const alertEl = document.getElementById('quickAddAlert');
       const saveBtn = document.getElementById('qsSaveBtn');
+      const dob = document.getElementById('qsDob').value;
       if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      if (!dob) { alertEl.textContent = 'Date of birth is required.'; alertEl.classList.remove('d-none'); return; }
       alertEl.classList.add('d-none');
       saveBtn.disabled = true; saveBtn.innerHTML = '…';
       try {
@@ -1064,6 +1075,20 @@
       } catch { alert('Something went wrong.'); }
     }
 
+    // Update the orange badge on the sidebar "Events" nav item with the count
+    // of registrations that have an outstanding (unpaid) payment.
+    function updatePendingBadge() {
+      const pendingCount = Object.values(myRegistrations).filter(r => !r.is_finalized).length;
+      const badge = document.getElementById('eventsPendingBadge');
+      if (!badge) return;
+      if (pendingCount > 0) {
+        badge.textContent = pendingCount;
+        badge.classList.remove('d-none');
+      } else {
+        badge.classList.add('d-none');
+      }
+    }
+
     function updateEventCard(eventId, isRegistered) {
       const reg  = myRegistrations[String(eventId)];
       const card = document.getElementById(`ecard-${eventId}`);
@@ -1114,6 +1139,7 @@
           if (badge) badge.remove();
         }
       }
+      updatePendingBadge();
     }
 
     (async () => {
@@ -1170,6 +1196,7 @@
         myObservers     = obsRes.ok  ? await obsRes.json()  : [];
         const events    = evtRes.ok  ? await evtRes.json()  : [];
         myRegistrations = regRes.ok  ? await regRes.json()  : {};
+        updatePendingBadge();
 
         // If returning from successful payment, verify with backend
         if (payStatus === 'success' && payEventId && sessionId) {

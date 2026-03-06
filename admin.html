@@ -341,7 +341,7 @@
               </div>
               <div class="row g-2 mb-2">
                 <div class="col-6">
-                  <label class="form-label fw-semibold" style="font-size:.82rem;">Date of Birth</label>
+                  <label class="form-label fw-semibold" style="font-size:.82rem;">Date of Birth <span class="text-danger">*</span></label>
                   <input type="date" class="form-control form-control-sm" id="newStudentDob">
                 </div>
                 <div class="col-6">
@@ -449,7 +449,7 @@
                 <input type="text" class="form-control form-control-sm" id="newObserverName" placeholder="Observer's full name">
               </div>
               <div class="mb-2">
-                <label class="form-label fw-semibold" style="font-size:.82rem;">Linked Dancer <span class="text-muted fw-normal">(optional)</span></label>
+                <label class="form-label fw-semibold" style="font-size:.82rem;">Linked Dancer <span class="text-danger">*</span></label>
                 <select class="form-select form-select-sm" id="newObserverLinkedStudent">
                   <option value="">— None —</option>
                 </select>
@@ -1240,6 +1240,7 @@
       const alertEl = document.getElementById('newObserverAlert');
       const btn = document.getElementById('createNewObserverBtn');
       if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      if (!linkedRaw) { alertEl.textContent = 'A linked dancer is required.'; alertEl.classList.remove('d-none'); return; }
       alertEl.classList.add('d-none');
       btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating…';
       try {
@@ -1495,8 +1496,14 @@
       const createBtn = document.getElementById('createNewStudentBtn');
       const name     = document.getElementById('newStudentName').value.trim();
 
+      const dob = document.getElementById('newStudentDob').value;
       if (!name) {
         alertEl.textContent = 'Full name is required.';
+        alertEl.classList.remove('d-none');
+        return;
+      }
+      if (!dob) {
+        alertEl.textContent = 'Date of birth is required.';
         alertEl.classList.remove('d-none');
         return;
       }
