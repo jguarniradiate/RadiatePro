@@ -451,7 +451,7 @@
                       ${isFinalized || hasPending ? 'Update Registration' : reg ? 'Edit Registration' : isFull ? '&#9940; Event Full' : 'Register'}
                     </button>
                     ${(reg && !isFinalized && hasPricing) ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="finalize-btn-${e.id}" onclick="resumeCheckout(${e.id})">Complete Registration</button>` : ''}
-                    ${hasPending ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="pay-pending-btn-${e.id}" onclick="payForPendingDancers(${e.id})">Pay for ${pendingCount} Added Dancer${pendingCount !== 1 ? 's' : ''}</button>` : ''}
+                    ${hasPending ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="pay-pending-btn-${e.id}" onclick="payForPendingDancers(${e.id})">Pay Outstanding Balance</button>` : ''}
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
                 </div>
               </div>`;
@@ -1118,7 +1118,7 @@
       openRegModal(eventsCache[eventId]);
     }
 
-    // Called when user clicks "Pay for N Added Dancer(s)" — triggers Stripe hosted checkout
+    // Called when user clicks "Pay Outstanding Balance" — triggers Stripe hosted checkout
     // for only the admin-added pending dancers, without opening the registration modal.
     async function payForPendingDancers(eventId) {
       const token = localStorage.getItem('token');
@@ -1208,7 +1208,7 @@
           const payBtn = document.createElement('button');
           payBtn.id        = `pay-pending-btn-${eventId}`;
           payBtn.className = 'btn btn-sm btn-finalize py-1 px-3';
-          payBtn.innerHTML = `Pay for ${pendingCount} Added Dancer${pendingCount !== 1 ? 's' : ''}`;
+          payBtn.innerHTML = 'Pay Outstanding Balance';
           payBtn.onclick   = () => payForPendingDancers(eventId);
           parent.appendChild(payBtn);
         } else if (isRegistered && reg && reg.is_finalized) {
