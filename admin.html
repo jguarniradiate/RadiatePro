@@ -2455,6 +2455,21 @@
 
       let _eventsLoaded = false;
       let _loginsLoaded = false;
+      let _loginPollTimer = null;
+      const LOGIN_POLL_MS = 15000; // refresh every 15 seconds while tab is active
+
+      function _startLoginPoll() {
+        if (_loginPollTimer) return; // already running
+        _loginPollTimer = setInterval(() => {
+          // Silent refresh — don't show spinner, just re-fetch page 0
+          loadLoginLogs(0, true);
+        }, LOGIN_POLL_MS);
+      }
+
+      function _stopLoginPoll() {
+        if (_loginPollTimer) { clearInterval(_loginPollTimer); _loginPollTimer = null; }
+      }
+
       window.showAdminSection = function(section) {
         ['users','events','logins'].forEach(s => {
           document.getElementById(s + 'Pane').classList.toggle('d-none', s !== section);
@@ -2462,7 +2477,12 @@
           if (nav) nav.classList.toggle('active', s === section);
         });
         if (section === 'events' && !_eventsLoaded) { _eventsLoaded = true; loadEvents(); }
-        if (section === 'logins' && !_loginsLoaded) { _loginsLoaded = true; loadLoginLogs(); }
+        if (section === 'logins') {
+          if (!_loginsLoaded) { _loginsLoaded = true; loadLoginLogs(); }
+          _startLoginPoll();
+        } else {
+          _stopLoginPoll(); // pause polling when tab is not visible
+        }
       };
 
       // ── Login Logs ──────────────────────────────────────────────────────────
@@ -2477,7 +2497,9 @@
           btn.classList.toggle('active', parseInt(btn.dataset.hours) === hours);
         });
         _loginLogs = [];
+        _stopLoginPoll();
         loadLoginLogs(0);
+        _startLoginPoll();
       }
 
       function parseUA(ua) {
@@ -2566,14 +2588,14 @@
         }).join('');
       }
 
-      async function loadLoginLogs(offsetArg = 0) {
+      async function loadLoginLogs(offsetArg = 0, silent = false) {
         const token = localStorage.getItem('token');
         const loadingEl = document.getElementById('loginsLoading');
         const errorEl   = document.getElementById('loginsError');
         const summaryEl = document.getElementById('loginsSummary');
         const moreEl    = document.getElementById('loginsLoadMore');
 
-        loadingEl.classList.remove('d-none');
+        if (!silent) { loadingEl.classList.remove('d-none'); }
         errorEl.classList.add('d-none');
 
         try {
@@ -2591,7 +2613,8 @@
           const windowLabel = _loginTimeframeHours === 0 ? 'all time'
             : _loginTimeframeHours < 48  ? `last ${_loginTimeframeHours}h`
             : `last ${_loginTimeframeHours / 24}d`;
-          summaryEl.textContent = `${_loginLogsTotal.toLocaleString()} login${_loginLogsTotal !== 1 ? 's' : ''} — ${windowLabel}`;
+          const updatedAt = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+          summaryEl.innerHTML = `${_loginLogsTotal.toLocaleString()} login${_loginLogsTotal !== 1 ? 's' : ''} — ${windowLabel} &nbsp;·&nbsp; <span style="color:#444;">Updated ${updatedAt}</span>`;
           summaryEl.classList.remove('d-none');
 
           // Show "load more" if there are more rows on the server
@@ -2600,8 +2623,10 @@
 
           renderLoginLogs();
         } catch (e) {
-          errorEl.textContent = 'Failed to load login logs.';
-          errorEl.classList.remove('d-none');
+          if (!silent) {
+            errorEl.textContent = 'Failed to load login logs.';
+            errorEl.classList.remove('d-none');
+          }
         } finally {
           loadingEl.classList.add('d-none');
         }
