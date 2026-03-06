@@ -560,33 +560,33 @@
       if (!token) { window.location.href = 'login.html'; return; }
 
       try {
-        const [userRes, studRes, evtRes] = await Promise.all([
-          fetch(`${API}/auth/me`,  { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API}/students`, { headers: { Authorization: `Bearer ${token}` } }),
+        const [userRes, studRes, obsRes, evtRes] = await Promise.all([
+          fetch(`${API}/auth/me`,      { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API}/students`,     { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API}/observers`,    { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${API}/events`),
         ]);
 
         if (userRes.status === 401) { localStorage.removeItem('token'); window.location.href = 'login.html'; return; }
 
         currentUser = await userRes.json();
-        const students = studRes.ok  ? await studRes.json() : [];
-        const events   = evtRes.ok   ? await evtRes.json()  : [];
-        myStudents = students;
+        const students  = studRes.ok ? await studRes.json() : [];
+        const observers = obsRes.ok  ? await obsRes.json()  : [];
+        const events    = evtRes.ok  ? await evtRes.json()  : [];
+        myStudents  = students;
+        myObservers = observers;
 
         renderUser(currentUser);
 
-        // Home stats — shared helper handles count + step lock/unlock
+        // Home stats — counts and step lock/unlock (uses myStudents + myObservers)
         updateStudentHomeStats();
-        // Step 3 sub-text needs the events list (upcoming count), set it once on init
+        document.getElementById('homeObserverCount').textContent = myObservers.length;
+        // Step 3 sub-text needs the events list (upcoming count), set once on init
         if (students.length > 0) {
           const now = new Date();
           const upcomingCount = events.filter(e => new Date(e.event_date) >= now).length;
           document.getElementById('homeStep3Sub').textContent =
             `${upcomingCount} upcoming event${upcomingCount !== 1 ? 's' : ''} available. Browse and register your dancers.`;
-        }
-        // Observer count is populated after observers load
-        if (typeof myObservers !== 'undefined') {
-          document.getElementById('homeObserverCount').textContent = myObservers.length;
         }
 
         if (currentUser.is_admin) { window.location.href = 'admin.html'; return; }

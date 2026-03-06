@@ -2636,6 +2636,12 @@
         loadLoginLogs(_loginLogs.length);
       }
 
+      // Expose login log functions to global scope so HTML onclick handlers can reach them
+      window.setLoginTimeframe  = setLoginTimeframe;
+      window.renderLoginLogs    = renderLoginLogs;
+      window.loadLoginLogs      = loadLoginLogs;
+      window.loadMoreLoginLogs  = loadMoreLoginLogs;
+
       // ── Payments ────────────────────────────────────────────────────────────
 
 
