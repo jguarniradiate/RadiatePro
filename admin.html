@@ -1243,9 +1243,14 @@
 
       // Determine label + amount for each attendee token
       function attendeeLabel(token, unitPrice) {
+        // Balance due always wins — checked first
         if (pendingSet.has(token)) return ['Balance Due', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'];
+        // Individually cash-paid by admin
         if (cashSet.has(token))    return ['Paid', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
-        if (reg.payment_status === 'paid')       return ['Paid', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
+        // Stripe-paid registration — only mark as Paid if the reg is actually finalized;
+        // guards against unfinalized regs whose payment_status was pre-set to 'paid'
+        if (reg.payment_status === 'paid' && reg.is_finalized) return ['Paid', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
+        // Admin-finalized (whole-reg complimentary or mixed)
         if (reg.payment_status === 'admin-paid') return ['Complimentary', '$0.00'];
         if (reg.payment_status === 'free')       return ['Free', '$0.00'];
         if (reg.is_finalized)                    return ['Complimentary', '$0.00'];
@@ -2159,11 +2164,15 @@
             const paidOn = p.finalized_at
               ? new Date(p.finalized_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
               : '—';
+            // admin-paid with amount > 0 = cash/offline — show real dollar amount;
+            // admin-paid with amount = 0 = complimentary — show purple label
             const amtStr = p.payment_status === 'free'
               ? '<span style="color:#4ade80;font-weight:600;">Free</span>'
-              : p.payment_status === 'admin-paid'
-                ? '<span style="color:#a78bfa;font-weight:600;">Complimentary</span>'
-                : `<span style="font-weight:600;">$${Number(p.amount_paid).toFixed(2)}</span>`;
+              : p.payment_status === 'admin-paid' && (p.amount_paid || 0) > 0
+                ? `<span style="font-weight:600;">$${Number(p.amount_paid).toFixed(2)}</span>`
+                : p.payment_status === 'admin-paid'
+                  ? '<span style="color:#a78bfa;font-weight:600;">Complimentary</span>'
+                  : `<span style="font-weight:600;">$${Number(p.amount_paid).toFixed(2)}</span>`;
             const statusBadge = p.payment_status === 'free'
               ? '<span class="badge" style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;">Free</span>'
               : p.payment_status === 'admin-paid'
