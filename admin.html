@@ -1082,7 +1082,7 @@
         return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid${amt}</span>${dueBadge}`;
       }
       if (reg.payment_status === 'admin-paid') {
-        return `<span style="background:rgba(99,102,241,.15);color:#818cf8;border:1px solid #818cf8;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Admin Paid</span>${dueBadge}`;
+        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid</span>${dueBadge}`;
       }
       if (reg.payment_status === 'free') {
         return `<span style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">Free</span>${dueBadge}`;
@@ -1205,7 +1205,7 @@
             : tx.payment_status === 'free'
               ? `<span style="color:#4ade80;font-size:.75rem;font-weight:600;">Free</span>`
               : tx.payment_status === 'admin-paid'
-                ? `<span style="color:#818cf8;font-size:.75rem;font-weight:600;">&#10003; Admin Paid</span>`
+                ? `<span style="color:#a78bfa;font-size:.75rem;font-weight:600;">Complimentary</span>`
                 : `<span style="color:#fbbf24;font-size:.75rem;font-weight:600;">Pending</span>`;
 
           const detail = tx.description
@@ -2005,12 +2005,12 @@
             const amtStr = p.payment_status === 'free'
               ? '<span style="color:#4ade80;font-weight:600;">Free</span>'
               : p.payment_status === 'admin-paid'
-                ? '<span style="color:#a78bfa;font-weight:600;">Admin</span>'
+                ? '<span style="color:#a78bfa;font-weight:600;">Complimentary</span>'
                 : `<span style="font-weight:600;">$${Number(p.amount_paid).toFixed(2)}</span>`;
             const statusBadge = p.payment_status === 'free'
               ? '<span class="badge" style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;">Free</span>'
               : p.payment_status === 'admin-paid'
-                ? '<span class="badge" style="background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid #a78bfa;font-size:.7rem;">Admin</span>'
+                ? '<span class="badge" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;">&#10003; Paid</span>'
                 : '<span class="badge" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;">&#10003; Paid</span>';
             const eName = (p.user_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
             const eStudio = (p.studio_name||'Independent').replace(/</g,'&lt;').replace(/>/g,'&gt;');
