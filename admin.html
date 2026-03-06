@@ -1422,14 +1422,19 @@
                 if (tx.attendee_name) {
                   attendee = `${tx.attendee_type === 'observer' ? '👁 ' : ''}${tx.attendee_name.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`;
                 } else {
-                  // Whole-registration transaction (e.g. Stripe) — derive names from cached reg
+                  // Whole-registration transaction (e.g. Stripe) — derive names from cached reg,
+                  // split into separate lines for students vs observers.
                   const cachedReg = _regData[regId];
-                  const parts = [];
+                  const lines = [];
                   if (cachedReg) {
-                    (cachedReg.students  || []).forEach(s => parts.push(s.name.replace(/</g,'&lt;').replace(/>/g,'&gt;')));
-                    (cachedReg.observers || []).forEach(o => parts.push('👁 ' + o.name.replace(/</g,'&lt;').replace(/>/g,'&gt;')));
+                    const showStu = !tx.student_count  || tx.student_count  > 0;
+                    const showObs = !tx.observer_count || tx.observer_count > 0;
+                    const stuNames = (cachedReg.students  || []).map(s => s.name.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+                    const obsNames = (cachedReg.observers || []).map(o => o.name.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+                    if (showStu && stuNames.length) lines.push(`<span style="color:#ccc;">&#128100; ${stuNames.join(', ')}</span>`);
+                    if (showObs && obsNames.length) lines.push(`<span style="color:#ccc;">&#128065; ${obsNames.join(', ')}</span>`);
                   }
-                  attendee = parts.length ? parts.join(', ') : '<span style="color:#444;">—</span>';
+                  attendee = lines.length ? lines.join('<br>') : '<span style="color:#444;">—</span>';
                 }
                 return `<tr style="border-bottom:1px solid #111;">
                   <td style="padding:.3rem .4rem;color:#bbb;">${desc}</td>
