@@ -1051,7 +1051,14 @@
         const pendingRegs    = regs.filter(r => !r.is_finalized && !['paid', 'free', 'admin-paid'].includes(r.payment_status));
         const freeRegs       = regs.filter(r => r.payment_status === 'free');
         const balanceDueRegs = regs.filter(r => (r.pending_student_ids || []).length > 0);
-        const totalRevenue   = regs.filter(r => r.payment_status === 'paid').reduce((s, r) => s + (r.amount_paid || 0), 0);
+        // totalRevenue = Stripe payments (amount_paid) + per-token cash amounts
+        const totalRevenue = regs.reduce((sum, r) => {
+          if (r.payment_status === 'paid') return sum + (r.amount_paid || 0);
+          for (const tok of (r.cash_student_ids || [])) {
+            sum += tok.startsWith('o') ? (r.observer_price || 0) : (r.price_per_student || 0);
+          }
+          return sum;
+        }, 0);
         const totalPending   = balanceDueRegs.reduce((s, r) => s + (r.pending_amount || 0), 0);
 
         // Count individual paid / complimentary attendees (students + observers separately)
@@ -1323,10 +1330,15 @@
       }
 
       // ── Summary line ───────────────────────────────────────
+      // Total paid = Stripe amount_paid + sum of individually cash-paid tokens
+      const cashPaidTotal = [...cashSet].reduce((s, tok) =>
+        s + (tok.startsWith('o') ? obsvPrice : pricePerStu), 0);
+      const totalPaidAmount = (reg.amount_paid || 0) + cashPaidTotal;
+
       doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-      if (reg.amount_paid) {
+      if (totalPaidAmount > 0) {
         doc.setTextColor(34, 197, 94);
-        doc.text(`Total Paid: $${Number(reg.amount_paid).toFixed(2)}`, 14, y); y += 7;
+        doc.text(`Total Paid: $${totalPaidAmount.toFixed(2)}`, 14, y); y += 7;
       }
       if (reg.pending_amount > 0) {
         doc.setTextColor(239, 68, 68);
