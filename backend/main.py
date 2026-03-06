@@ -1983,23 +1983,55 @@ def admin_finalize_registration(
         raise HTTPException(status_code=404, detail="Registration not found.")
     from decimal import Decimal as D
 
-    if reg.is_finalized and (student_id is not None or observer_id is not None):
-        # Targeted admin-pay: only remove the one dancer from pending so the
-        # rest of the registration remains open for normal user-portal payment.
-        pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
-        if student_id is not None:
-            pending = [x for x in pending if x != str(student_id)]
-            _sc, _oc = 1, 0
-            _desc = "1 dancer (admin paid)"
+    if student_id is not None or observer_id is not None:
+        # Targeted admin-pay: mark exactly one dancer as admin-paid.
+        # payment_status on the registration is intentionally NOT set to
+        # 'admin-paid' here — that label is reserved for whole-registration
+        # manual finalization. The badge will show "✓ Finalized ⚡ $X due"
+        # while the remaining dancers are tracked in pending_student_ids.
+        if not reg.is_finalized:
+            # Registration not yet finalized — finalize it now and put every
+            # OTHER dancer into pending_student_ids so they pay via user portal.
+            event = db.query(models.Event).filter(models.Event.id == event_id).first()
+            price_per_student, _ = _effective_price(event) if event else (D("0"), None)
+            observer_price = D(str(event.observer_price)) if event and event.observer_price else D("0")
+            pending = []
+            if student_id is not None:
+                if price_per_student > D("0"):
+                    for ers in reg.attending_students:
+                        if ers.student_id != student_id:
+                            pending.append(str(ers.student_id))
+                if observer_price > D("0"):
+                    for ero in reg.attending_observers:
+                        pending.append(f"o{ero.observer_id}")
+            else:
+                if price_per_student > D("0"):
+                    for ers in reg.attending_students:
+                        pending.append(str(ers.student_id))
+                if observer_price > D("0"):
+                    for ero in reg.attending_observers:
+                        if ero.observer_id != observer_id:
+                            pending.append(f"o{ero.observer_id}")
+            reg.is_finalized = True
+            reg.finalized_at = datetime.now(timezone.utc)
+            reg.pending_student_ids = ",".join(pending) if pending else None
         else:
-            pending = [x for x in pending if x != f"o{observer_id}"]
-            _sc, _oc = 0, 1
-            _desc = "1 observer (admin paid)"
-        reg.pending_student_ids = ",".join(pending) if pending else None
+            # Already finalized — just remove this dancer from pending_student_ids.
+            pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+            if student_id is not None:
+                pending = [x for x in pending if x != str(student_id)]
+            else:
+                pending = [x for x in pending if x != f"o{observer_id}"]
+            reg.pending_student_ids = ",".join(pending) if pending else None
+
+        _sc   = 1 if student_id  is not None else 0
+        _oc   = 1 if observer_id is not None else 0
+        _desc = "1 dancer (admin paid)" if student_id is not None else "1 observer (admin paid)"
         _record_transaction(db, reg, D("0"), "admin-paid",
                             description=_desc, student_count=_sc, observer_count=_oc)
     else:
-        # Whole-registration finalize (non-finalized reg or explicit full approval).
+        # Whole-registration finalize (no specific dancer ID supplied).
+        # This is the only path that sets payment_status = 'admin-paid'.
         _sc = len(reg.attending_students)
         _oc = len(reg.attending_observers)
         _desc = f"{_sc} dancer(s)"
@@ -2008,7 +2040,7 @@ def admin_finalize_registration(
         reg.is_finalized        = True
         reg.payment_status      = "admin-paid"
         reg.finalized_at        = datetime.now(timezone.utc)
-        reg.pending_student_ids = None   # Admin confirmed payment — clear all pending
+        reg.pending_student_ids = None
         _record_transaction(db, reg, D("0"), "admin-paid",
                             description=_desc, student_count=_sc, observer_count=_oc)
     db.commit()
