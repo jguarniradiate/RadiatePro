@@ -836,20 +836,28 @@
             </tbody>
           </table>` : `<p class="text-muted small mb-0">No students yet.</p>`;
 
+        const stuMap = Object.fromEntries(students.map(s => [s.id, s.name]));
+
         const obsSection = observers.length ? `
           <table class="table table-sm mb-0" style="--bs-table-bg:transparent;--bs-table-color:#ccc;--bs-table-border-color:#2a2a2a;font-size:.85rem;">
-            <thead><tr style="color:#888;"><th>Name</th><th></th></tr></thead>
+            <thead><tr style="color:#888;"><th>Name</th><th>Linked Student</th><th></th></tr></thead>
             <tbody id="admin-observers-${userId}">
-              ${observers.map(o => `
+              ${observers.map(o => {
+                const linkedName = o.linked_student_id && stuMap[o.linked_student_id]
+                  ? `<span style="color:#a78bfa;">&#128100; ${esc(stuMap[o.linked_student_id])}</span>`
+                  : `<span style="color:#444;">—</span>`;
+                return `
                 <tr id="aobr-${o.id}">
                   <td>${esc(o.name)}</td>
+                  <td>${linkedName}</td>
                   <td class="text-nowrap">
                     <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
                       onclick="openAdminEditObserver(${userId},${o.id},'${esc(o.name)}')">Edit</button>
                     <button class="btn btn-sm btn-outline-danger py-0 px-2"
                       onclick="adminDeleteObserver(${userId},${o.id},'${esc(o.name)}')">Remove</button>
                   </td>
-                </tr>`).join('')}
+                </tr>`;
+              }).join('')}
             </tbody>
           </table>` : `<p class="text-muted small mb-0">No observers yet.</p>`;
 
