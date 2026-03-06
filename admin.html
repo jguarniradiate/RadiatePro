@@ -1622,14 +1622,23 @@
             const stuPrice  = cachedReg?.price_per_student || 0;
             const obsPrice  = cachedReg?.observer_price    || 0;
 
-            const stuNames = (cachedReg?.students  || []).map(s => s.name.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
-            const obsNames = (cachedReg?.observers || []).map(o => o.name.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+            const allStudents = cachedReg?.students  || [];
+            const allObservers = cachedReg?.observers || [];
+
+            // Only show names when the count on this transaction matches the total on
+            // the registration — otherwise we can't know which specific attendees were
+            // included and would show incorrect names.
+            const stuNames = stuCount === allStudents.length && allStudents.length > 0
+              ? allStudents.map(s => s.name.replace(/</g,'&lt;').replace(/>/g,'&gt;'))
+              : [];
+            const obsNames = obsCount === allObservers.length && allObservers.length > 0
+              ? allObservers.map(o => o.name.replace(/</g,'&lt;').replace(/>/g,'&gt;'))
+              : [];
 
             // Compute split amounts — fall back to proportional share of tx.amount
             let stuAmt = stuCount * stuPrice;
             let obsAmt = obsCount * obsPrice;
             if (stuAmt + obsAmt === 0 && tx.amount > 0) {
-              // No unit prices stored — show total on students row, zero on observers
               stuAmt = tx.amount;
               obsAmt = 0;
             }
@@ -1648,7 +1657,7 @@
             if (stuCount > 0) {
               const stuAttendee = stuNames.length
                 ? `<span style="color:#ccc;">&#128100; ${stuNames.join(', ')}</span>`
-                : `<span style="color:#666;">${stuCount} dancer${stuCount !== 1 ? 's' : ''}</span>`;
+                : `<span style="color:#666;">&#128100; ${stuCount} dancer${stuCount !== 1 ? 's' : ''}</span>`;
               expandedRows.push({
                 desc: `${stuCount} dancer${stuCount !== 1 ? 's' : ''}`,
                 attendee: stuAttendee,
@@ -1659,7 +1668,7 @@
             if (obsCount > 0) {
               const obsAttendee = obsNames.length
                 ? `<span style="color:#ccc;">&#128065; ${obsNames.join(', ')}</span>`
-                : `<span style="color:#666;">${obsCount} observer${obsCount !== 1 ? 's' : ''}</span>`;
+                : `<span style="color:#666;">&#128065; ${obsCount} observer${obsCount !== 1 ? 's' : ''}</span>`;
               expandedRows.push({
                 desc: `${obsCount} observer${obsCount !== 1 ? 's' : ''}`,
                 attendee: obsAttendee,
