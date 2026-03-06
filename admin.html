@@ -1364,9 +1364,19 @@
                   ? new Date(tx.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                   : '—';
                 const desc = (tx.description || `${tx.student_count} dancer(s)${tx.observer_count ? `, ${tx.observer_count} observer(s)` : ''}`).replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                const attendee = tx.attendee_name
-                  ? `${tx.attendee_type === 'observer' ? '👁 ' : ''}${tx.attendee_name.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`
-                  : '<span style="color:#444;">—</span>';
+                let attendee;
+                if (tx.attendee_name) {
+                  attendee = `${tx.attendee_type === 'observer' ? '👁 ' : ''}${tx.attendee_name.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`;
+                } else {
+                  // Whole-registration transaction (e.g. Stripe) — derive names from cached reg
+                  const cachedReg = _regData[regId];
+                  const parts = [];
+                  if (cachedReg) {
+                    (cachedReg.students  || []).forEach(s => parts.push(s.name.replace(/</g,'&lt;').replace(/>/g,'&gt;')));
+                    (cachedReg.observers || []).forEach(o => parts.push('👁 ' + o.name.replace(/</g,'&lt;').replace(/>/g,'&gt;')));
+                  }
+                  attendee = parts.length ? parts.join(', ') : '<span style="color:#444;">—</span>';
+                }
                 return `<tr style="border-bottom:1px solid #111;">
                   <td style="padding:.3rem .4rem;color:#bbb;">${desc}</td>
                   <td style="padding:.3rem .4rem;color:#ccc;">${attendee}</td>
