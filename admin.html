@@ -1000,9 +1000,13 @@
       const arrow = document.getElementById(`ereg-arrow-${eventId}`);
       if (!panel.classList.contains('d-none')) { panel.classList.add('d-none'); arrow.textContent = '▶'; return; }
       panel.classList.remove('d-none'); arrow.textContent = '▼';
+      await refreshEventRegistrations(eventId);
+    }
 
+    async function refreshEventRegistrations(eventId) {
       const token = localStorage.getItem('token');
       const content = document.getElementById(`ereg-content-${eventId}`);
+      if (!content) return;
 
       try {
         const res = await fetch(`${API}/admin/events/${eventId}/registrations`, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -1019,17 +1023,19 @@
         }
 
         // Payment summary for the header
-        const paidRegs = regs.filter(r => r.payment_status === 'paid');
-        const freeRegs = regs.filter(r => r.payment_status === 'free');
+        const paidRegs    = regs.filter(r => r.payment_status === 'paid' || r.payment_status === 'admin-paid');
+        const freeRegs    = regs.filter(r => r.payment_status === 'free');
         const pendingRegs = regs.filter(r => !r.is_finalized);
-        const totalRevenue = paidRegs.reduce((s, r) => s + (r.amount_paid || 0), 0);
+        const balanceDueRegs = regs.filter(r => (r.pending_student_ids || []).length > 0);
+        const totalRevenue   = paidRegs.reduce((s, r) => s + (r.amount_paid || 0), 0);
+        const totalPending   = balanceDueRegs.reduce((s, r) => s + (r.pending_amount || 0), 0);
 
-        let paymentSummary = '';
         const pills = [];
-        if (paidRegs.length) pills.push(`<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${paidRegs.length} Paid &nbsp;·&nbsp; $${totalRevenue.toFixed(2)}</span>`);
-        if (freeRegs.length) pills.push(`<span style="background:rgba(34,197,94,.08);color:#4ade80;border:1px solid #4ade80;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">${freeRegs.length} Free</span>`);
+        if (paidRegs.length)    pills.push(`<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${paidRegs.length} Paid &nbsp;·&nbsp; $${totalRevenue.toFixed(2)}</span>`);
+        if (freeRegs.length)    pills.push(`<span style="background:rgba(34,197,94,.08);color:#4ade80;border:1px solid #4ade80;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">${freeRegs.length} Free</span>`);
         if (pendingRegs.length) pills.push(`<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9203; ${pendingRegs.length} Pending</span>`);
-        if (pills.length) paymentSummary = `<div class="d-flex flex-wrap gap-1 mt-1">${pills.join('')}</div>`;
+        if (balanceDueRegs.length) pills.push(`<span style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid #f87171;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9889; ${balanceDueRegs.length} Balance Due &nbsp;·&nbsp; $${totalPending.toFixed(2)}</span>`);
+        const paymentSummary = pills.length ? `<div class="d-flex flex-wrap gap-1 mt-1">${pills.join('')}</div>` : '';
 
         content.innerHTML = `
           <div class="d-flex align-items-start justify-content-between mb-3">
@@ -1047,15 +1053,21 @@
     }
 
     function paymentBadge(reg) {
+      const hasPending = (reg.pending_student_ids || []).length > 0;
+      const pendingAmt = reg.pending_amount || 0;
+      const dueBadge   = hasPending && pendingAmt > 0
+        ? ` <span style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid #f87171;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#9889; $${pendingAmt.toFixed(2)} due</span>`
+        : '';
+
       if (reg.payment_status === 'paid') {
         const amt = reg.amount_paid != null ? ` &nbsp;$${Number(reg.amount_paid).toFixed(2)}` : '';
-        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid${amt}</span>`;
+        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid${amt}</span>${dueBadge}`;
       }
       if (reg.payment_status === 'admin-paid') {
-        return `<span style="background:rgba(99,102,241,.15);color:#818cf8;border:1px solid #818cf8;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Admin Paid</span>`;
+        return `<span style="background:rgba(99,102,241,.15);color:#818cf8;border:1px solid #818cf8;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Admin Paid</span>${dueBadge}`;
       }
       if (reg.payment_status === 'free') {
-        return `<span style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">Free</span>`;
+        return `<span style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">Free</span>${dueBadge}`;
       }
       return `<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">&#9203; Pending</span>`;
     }
@@ -1157,7 +1169,7 @@
             || '—';
 
           const eventDate = tx.event_date
-            ? new Date(tx.event_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            ? new Date(tx.event_date.split('T')[0] + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
             : '—';
           const paidOn = tx.created_at
             ? new Date(tx.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -1223,7 +1235,7 @@
       const token = localStorage.getItem('token');
       try {
         const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/students/${studentId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-        if (res.ok) document.getElementById(`rst-${regId}-${studentId}`).remove();
+        if (res.ok) await refreshEventRegistrations(eventId);
         else alert('Failed to remove student.');
       } catch { alert('Something went wrong.'); }
     }
@@ -1233,7 +1245,7 @@
       const token = localStorage.getItem('token');
       try {
         const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/observers/${observerId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-        if (res.ok) document.getElementById(`robs-${regId}-${observerId}`).remove();
+        if (res.ok) await refreshEventRegistrations(eventId);
         else alert('Failed to remove observer.');
       } catch { alert('Something went wrong.'); }
     }
@@ -1371,6 +1383,8 @@
 
           // Handle payment status (admin-paid finalization)
           await maybeAdminFinalize(eventId, regId, token, 'addObsPayStatus');
+          // Refresh the registration panel so badges and totals update
+          await refreshEventRegistrations(eventId);
           // Reset selection state
           _selectedObserverId = null; _selectedObserverName = null;
           if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Save'; }
@@ -1652,20 +1666,10 @@
           // Remove from selectable list
           const listBtn = document.getElementById(`ars-${studentId}`);
           if (listBtn) listBtn.remove();
-          // Inject badge into the registration card
-          const container = document.getElementById(`reg-students-${regId}`);
-          if (container) {
-            const addBtn = container.querySelector(':scope > button');
-            // Remove "None selected" text if present
-            container.querySelectorAll('span.text-muted').forEach(el => { if(el.textContent.trim()==='None selected') el.remove(); });
-            const badge = document.createElement('span');
-            badge.id = `rst-${regId}-${studentId}`;
-            badge.className = 'stu-badge';
-            badge.innerHTML = `${esc(studentName)} <button class="stu-badge-remove" title="Remove student" onclick="adminRemoveRegStudent(${eventId},${regId},${studentId},'${esc(studentName)}')">×</button>`;
-            container.insertBefore(badge, addBtn);
-          }
           // Handle payment status (admin-paid finalization)
           await maybeAdminFinalize(eventId, regId, token, 'addStudentPayStatus');
+          // Refresh the registration panel so badges and totals update
+          await refreshEventRegistrations(eventId);
           // Reset selection state
           _selectedStudentId = null; _selectedStudentName = null;
           if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Save'; }

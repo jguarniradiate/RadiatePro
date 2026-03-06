@@ -1698,17 +1698,26 @@ def admin_list_registrations(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
+    from decimal import Decimal as D
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
     regs = db.query(models.EventRegistration).filter(
         models.EventRegistration.event_id == event_id
     ).all()
+    # Pre-compute event pricing once for pending amount calculation
+    price_per_student, _ = _effective_price(event) if event else (D("0"), None)
+    observer_price = D(str(event.observer_price)) if event and event.observer_price else D("0")
     result = []
     for reg in regs:
         students = [{"id": ers.student_id, "name": ers.student.name} for ers in reg.attending_students]
         observers = [{"id": ero.observer_id, "name": ero.observer.name} for ero in reg.attending_observers]
         name = f"{reg.user.first_name or ''} {reg.user.last_name or ''}".strip() or reg.user.email
+        pending_raw = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+        pending_stu_cnt = len([x for x in pending_raw if not x.startswith("o")])
+        pending_obs_cnt = len([x for x in pending_raw if x.startswith("o")])
+        pending_amount = float(price_per_student * pending_stu_cnt + observer_price * pending_obs_cnt)
         result.append({
             "id": reg.id,
             "user_id": reg.user_id,
@@ -1721,6 +1730,8 @@ def admin_list_registrations(
             "payment_status": reg.payment_status,
             "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else None,
             "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
+            "pending_student_ids": pending_raw,
+            "pending_amount": pending_amount,
         })
     return result
 
