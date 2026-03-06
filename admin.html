@@ -1017,9 +1017,12 @@
         const freeRegs       = regs.filter(r => r.payment_status === 'free');
         const balanceDueRegs = regs.filter(r => (r.pending_student_ids || []).length > 0);
         // totalRevenue = Stripe payments (amount_paid) + per-token cash amounts
+        // Exclude cash tokens that are also in pending_student_ids (balance-due overrides paid)
         const totalRevenue = regs.reduce((sum, r) => {
           if (r.payment_status === 'paid') return sum + (r.amount_paid || 0);
+          const pendingSet = new Set(r.pending_student_ids || []);
           for (const tok of (r.cash_student_ids || [])) {
+            if (pendingSet.has(tok)) continue;
             sum += tok.startsWith('o') ? (r.observer_price || 0) : (r.price_per_student || 0);
           }
           return sum;
