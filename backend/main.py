@@ -111,6 +111,8 @@ def run_migrations(eng):
             observer_id INTEGER NOT NULL REFERENCES observers(id) ON DELETE CASCADE
         )""",
         "ALTER TABLE observers ADD COLUMN IF NOT EXISTS linked_student_id INTEGER REFERENCES students(id) ON DELETE SET NULL",
+        # Pending payment tracking for admin-added unpaid dancers
+        "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS pending_student_ids TEXT",
     ]
     try:
         with eng.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
@@ -725,6 +727,8 @@ def get_my_registrations(
     for reg in regs:
         student_ids = [ers.student_id for ers in reg.attending_students]
         observer_ids = [ero.observer_id for ero in reg.attending_observers]
+        # Parse pending_student_ids into a list of raw tokens (e.g. "5", "o3")
+        pending_raw = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
         result[str(reg.event_id)] = {
             "registration_id": reg.id,
             "student_ids": student_ids,
@@ -733,6 +737,7 @@ def get_my_registrations(
             "payment_status": reg.payment_status,
             "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else None,
             "stripe_session_id": reg.stripe_session_id,
+            "pending_student_ids": pending_raw,   # list of "5", "o3"-style tokens
         }
     return result
 
@@ -857,64 +862,79 @@ def create_checkout(
         models.EventRegistration.event_id == event_id,
         models.EventRegistration.user_id == user.id,
     ).first()
-    # Allow checkout on a previously-finalized registration that an admin has
-    # since un-finalized by adding an unpaid dancer/observer.
-    if existing and existing.is_finalized:
-        raise HTTPException(status_code=400, detail="Registration already finalized. Use Add Dancers.")
 
-    if event.max_students is not None and body.student_ids:
-        current_total = sum(len(r.attending_students) for r in event.registrations)
-        if existing:
-            current_total -= len(existing.attending_students)
-        available = event.max_students - current_total
-        if len(body.student_ids) > available:
-            raise HTTPException(status_code=400, detail=f"Only {available} spot(s) remaining.")
+    # Check for pending payment mode: admin added unpaid dancers to a finalized reg.
+    pending_raw = [x for x in (existing.pending_student_ids or "").split(",") if x.strip()] if existing else []
+    pending_dancer_ids = [int(x) for x in pending_raw if not x.startswith("o")]
+    pending_observer_ids = [int(x[1:]) for x in pending_raw if x.startswith("o")]
+    is_pending_payment_mode = bool(pending_raw) and existing and existing.is_finalized
+
+    if existing and existing.is_finalized and not is_pending_payment_mode:
+        raise HTTPException(status_code=400, detail="Registration already finalized. Use Add Dancers.")
 
     price_per_student, _ = _effective_price(event)
     observer_price = D(str(event.observer_price)) if event.observer_price else D("0")
 
-    dancer_total = price_per_student * len(body.student_ids)
-    observer_total = observer_price * len(body.observer_ids)
-    grand_total = dancer_total + observer_total
-
-    # If the user has already paid part of this registration (e.g. admin added
-    # an unpaid dancer to a previously-paid reg), only charge the delta.
-    amount_already_paid = existing.amount_paid if (existing and existing.amount_paid) else D("0")
-    amount_to_charge = max(D("0"), grand_total - amount_already_paid)
-    is_free = amount_to_charge == D("0")
-
-    if existing:
-        db.query(models.EventRegistrationStudent).filter(
-            models.EventRegistrationStudent.registration_id == existing.id
-        ).delete()
-        db.query(models.EventRegistrationObserver).filter(
-            models.EventRegistrationObserver.registration_id == existing.id
-        ).delete()
+    if is_pending_payment_mode:
+        # Charge ONLY for the admin-added pending dancers/observers — not the whole reg.
+        dancer_total   = price_per_student * len(pending_dancer_ids)
+        observer_total = observer_price    * len(pending_observer_ids)
+        grand_total    = dancer_total + observer_total
+        amount_to_charge = grand_total
+        is_free = amount_to_charge == D("0")
         reg = existing
     else:
-        reg = models.EventRegistration(event_id=event_id, user_id=user.id)
-        db.add(reg)
-        db.flush()
+        if not body.student_ids and not body.observer_ids:
+            raise HTTPException(status_code=400, detail="Select at least one student or observer.")
+        if event.max_students is not None and body.student_ids:
+            current_total = sum(len(r.attending_students) for r in event.registrations)
+            if existing:
+                current_total -= len(existing.attending_students)
+            available = event.max_students - current_total
+            if len(body.student_ids) > available:
+                raise HTTPException(status_code=400, detail=f"Only {available} spot(s) remaining.")
+        dancer_total   = price_per_student * len(body.student_ids)
+        observer_total = observer_price    * len(body.observer_ids)
+        grand_total    = dancer_total + observer_total
+        amount_to_charge = grand_total
+        is_free = amount_to_charge == D("0")
 
-    for sid in body.student_ids:
-        s = db.query(models.Student).filter(
-            models.Student.id == sid, models.Student.user_id == user.id
-        ).first()
-        if s:
-            db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+    if not is_pending_payment_mode:
+        # Normal flow: replace student/observer associations from body selection.
+        if existing:
+            db.query(models.EventRegistrationStudent).filter(
+                models.EventRegistrationStudent.registration_id == existing.id
+            ).delete()
+            db.query(models.EventRegistrationObserver).filter(
+                models.EventRegistrationObserver.registration_id == existing.id
+            ).delete()
+            reg = existing
+        else:
+            reg = models.EventRegistration(event_id=event_id, user_id=user.id)
+            db.add(reg)
+            db.flush()
 
-    for oid in body.observer_ids:
-        o = db.query(models.Observer).filter(
-            models.Observer.id == oid, models.Observer.user_id == user.id
-        ).first()
-        if o:
-            db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
+        for sid in body.student_ids:
+            s = db.query(models.Student).filter(
+                models.Student.id == sid, models.Student.user_id == user.id
+            ).first()
+            if s:
+                db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+
+        for oid in body.observer_ids:
+            o = db.query(models.Observer).filter(
+                models.Observer.id == oid, models.Observer.user_id == user.id
+            ).first()
+            if o:
+                db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
+    # else: pending payment mode — student/observer associations are already correct in the DB.
 
     if is_free:
-        reg.is_finalized = True
-        reg.payment_status = "free"
-        reg.amount_paid = 0
-        reg.finalized_at = datetime.now(timezone.utc)
+        reg.is_finalized        = True
+        reg.payment_status      = "free" if not is_pending_payment_mode else reg.payment_status
+        reg.amount_paid         = (reg.amount_paid or D("0"))
+        reg.finalized_at        = datetime.now(timezone.utc)
+        reg.pending_student_ids = None   # clear pending — no charge needed
         db.commit()
         db.refresh(reg)
         try:
@@ -936,18 +956,27 @@ def create_checkout(
         return schemas.CheckoutSessionOut(checkout_url="", session_id="free")
 
     user_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email
-    is_delta = amount_already_paid > D("0")
     line_items = []
-    if is_delta:
-        # Previously paid registration — charge only the remaining balance
-        line_items.append({
-            "price_data": {
-                "currency": "usd",
-                "product_data": {"name": f"{event.title} — balance due"},
-                "unit_amount": int(amount_to_charge * 100),
-            },
-            "quantity": 1,
-        })
+    if is_pending_payment_mode:
+        # Charge only for the admin-added pending dancers/observers.
+        if dancer_total > 0:
+            line_items.append({
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": f"{event.title} — {len(pending_dancer_ids)} added dancer(s)"},
+                    "unit_amount": int(price_per_student * 100),
+                },
+                "quantity": len(pending_dancer_ids),
+            })
+        if observer_total > 0:
+            line_items.append({
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": f"{event.title} — {len(pending_observer_ids)} added observer(s)"},
+                    "unit_amount": int(observer_price * 100),
+                },
+                "quantity": len(pending_observer_ids),
+            })
     else:
         if dancer_total > 0:
             line_items.append({
@@ -972,6 +1001,7 @@ def create_checkout(
         "event_id": str(event_id),
         "user_name": user_name,
         "observer_ids": ",".join(str(i) for i in body.observer_ids),
+        "is_pending_payment": "true" if is_pending_payment_mode else "false",
     }
     return_url = (
         f"{FRONTEND_URL}/events.html"
@@ -1074,13 +1104,16 @@ def verify_payment(
             db.commit()
             db.refresh(reg)
         else:
-            # Initial registration flow (or delta payment for admin-added dancers):
+            # Initial registration flow or pending-payment flow (admin added unpaid dancers):
             # finalize and accumulate amount_paid so prior partial payments are preserved.
+            is_pending_mode = meta.get("is_pending_payment") == "true"
             reg.is_finalized = True
             reg.payment_status = "paid"
             amount = D(str(session.amount_total)) / 100
             reg.amount_paid = (reg.amount_paid or D("0")) + amount
             reg.finalized_at = datetime.now(timezone.utc)
+            if is_pending_mode:
+                reg.pending_student_ids = None   # payment received — clear pending
             db.commit()
             db.refresh(reg)
             try:
@@ -1323,10 +1356,13 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             amount_total = session.get("amount_total") or 0
             prev_paid = reg.amount_paid or D("0")
             new_amount = prev_paid + D(str(amount_total)) / 100
+            is_pending_mode = session.get("metadata", {}).get("is_pending_payment") == "true"
             reg.is_finalized = True
             reg.payment_status = "paid"
             reg.amount_paid = new_amount
             reg.finalized_at = datetime.now(timezone.utc)
+            if is_pending_mode:
+                reg.pending_student_ids = None   # payment received — clear pending
             db.commit()
             db.refresh(reg)
             try:
@@ -1597,12 +1633,17 @@ def admin_add_reg_student(
     if existing:
         raise HTTPException(status_code=400, detail="Student already in registration.")
     db.add(models.EventRegistrationStudent(registration_id=reg_id, student_id=student_id))
-    # Unfinalize the registration so the user is prompted to pay for the new
-    # dancer in the user portal.  admin-finalize (called next if admin selects
-    # "Paid") will flip it back to finalized.
-    reg.is_finalized = False
-    if reg.payment_status not in ("pending",):
-        reg.payment_status = "pending"
+    if reg.is_finalized:
+        # Registration was already paid/finalized — track this specific dancer as
+        # pending payment so only they are charged, not the whole registration.
+        existing_pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+        if str(student_id) not in existing_pending:
+            existing_pending.append(str(student_id))
+        reg.pending_student_ids = ",".join(existing_pending)
+        # Leave is_finalized = True so existing paid dancers stay locked in the UI.
+        # admin-finalize (called if admin selects "Paid") will clear pending_student_ids.
+    # If reg is not yet finalized, the whole registration is already pending —
+    # no need to track individually.
     db.commit()
     return {"message": "Student added to registration."}
 
@@ -1629,9 +1670,10 @@ def admin_finalize_registration(
     ).first()
     if not reg:
         raise HTTPException(status_code=404, detail="Registration not found.")
-    reg.is_finalized   = True
-    reg.payment_status = "admin-paid"
-    reg.finalized_at   = datetime.now(timezone.utc)
+    reg.is_finalized        = True
+    reg.payment_status      = "admin-paid"
+    reg.finalized_at        = datetime.now(timezone.utc)
+    reg.pending_student_ids = None   # Admin confirmed payment — clear any pending
     db.commit()
     return {"message": "Registration marked as paid by admin."}
 
@@ -1786,10 +1828,14 @@ def admin_add_reg_observer(
     if existing:
         raise HTTPException(status_code=400, detail="Observer already in registration.")
     db.add(models.EventRegistrationObserver(registration_id=reg_id, observer_id=observer_id))
-    # Unfinalize so the user is prompted to pay for the new observer.
-    reg.is_finalized = False
-    if reg.payment_status not in ("pending",):
-        reg.payment_status = "pending"
+    if reg.is_finalized:
+        # Track the observer in pending_student_ids using a negative ID convention
+        # (negative = observer, positive = dancer) so the frontend can distinguish.
+        existing_pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+        obs_key = f"o{observer_id}"
+        if obs_key not in existing_pending:
+            existing_pending.append(obs_key)
+        reg.pending_student_ids = ",".join(existing_pending)
     db.commit()
     return {"message": "Observer added to registration."}
 

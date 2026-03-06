@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date, ForeignKey, Numeric
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Date, ForeignKey, Numeric, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -82,11 +82,15 @@ class EventRegistration(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Payment / finalization
-    is_finalized      = Column(Boolean, default=False, nullable=False, server_default="false")
-    payment_status    = Column(String, nullable=True)   # 'pending' | 'paid' | 'free'
-    stripe_session_id = Column(String, nullable=True)
-    amount_paid       = Column(Numeric(10, 2), nullable=True)
-    finalized_at      = Column(DateTime(timezone=True), nullable=True)
+    is_finalized         = Column(Boolean, default=False, nullable=False, server_default="false")
+    payment_status       = Column(String, nullable=True)   # 'pending' | 'paid' | 'free' | 'admin-paid'
+    stripe_session_id    = Column(String, nullable=True)
+    amount_paid          = Column(Numeric(10, 2), nullable=True)
+    finalized_at         = Column(DateTime(timezone=True), nullable=True)
+    # Comma-separated IDs of admin-added dancers not yet paid for.
+    # Set when admin adds an unpaid dancer to a finalized registration.
+    # Cleared when the user completes payment or admin marks as paid.
+    pending_student_ids  = Column(Text, nullable=True)
 
     event = relationship("Event", back_populates="registrations")
     user = relationship("User", back_populates="event_registrations")

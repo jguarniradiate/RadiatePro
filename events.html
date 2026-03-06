@@ -424,8 +424,10 @@
             const reg = myRegistrations[String(e.id)];
             const isPast = new Date(e.event_date) < now;
             const isFull = e.max_students && (e.registered_count || 0) >= e.max_students && !reg;
-            const isFinalized = reg && reg.is_finalized;
-            const hasPricing  = !!(e.early_price || e.regular_price);
+            const isFinalized   = reg && reg.is_finalized;
+            const hasPending    = reg && (reg.pending_student_ids || []).length > 0;
+            const pendingCount  = hasPending ? (reg.pending_student_ids || []).filter(x => !String(x).startsWith('o')).length : 0;
+            const hasPricing    = !!(e.early_price || e.regular_price);
             return `
               <div class="event-card p-4 mb-3 d-flex gap-3 align-items-start ${reg ? 'registered' : ''} ${isFull ? 'full' : ''}" id="ecard-${e.id}">
                 <div class="event-date-badge flex-shrink-0">${dt.short}</div>
@@ -440,14 +442,16 @@
                   <div class="mt-1">${capacityBadge(e)}</div>
                   ${!isPast ? `
                   <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
-                    ${isFinalized ? `<span class="badge-finalized">&#10003; Finalized</span>` :
-                      reg         ? `<span class="badge-pending-pay">&#9203; Pending</span>` : ''}
+                    ${hasPending            ? `<span class="badge-pending-pay">&#9889; Balance Due</span>` :
+                      isFinalized          ? `<span class="badge-finalized">&#10003; Finalized</span>` :
+                      reg                  ? `<span class="badge-pending-pay">&#9203; Pending</span>` : ''}
                     <button id="reg-btn-${e.id}"
-                      class="btn btn-sm ${isFinalized ? 'btn-outline-secondary' : reg ? 'btn-outline-secondary' : isFull ? 'btn-outline-secondary' : 'btn-accent'} py-1 px-3"
+                      class="btn btn-sm ${isFinalized || hasPending ? 'btn-outline-secondary' : reg ? 'btn-outline-secondary' : isFull ? 'btn-outline-secondary' : 'btn-accent'} py-1 px-3"
                       ${isFull && !reg ? 'disabled' : `onclick="openRegModal(eventsCache[${e.id}])"`}>
-                      ${isFinalized ? 'Update Registration' : reg ? 'Edit Registration' : isFull ? '&#9940; Event Full' : 'Register'}
+                      ${isFinalized || hasPending ? 'Update Registration' : reg ? 'Edit Registration' : isFull ? '&#9940; Event Full' : 'Register'}
                     </button>
                     ${(reg && !isFinalized && hasPricing) ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="finalize-btn-${e.id}" onclick="resumeCheckout(${e.id})">Complete Registration</button>` : ''}
+                    ${hasPending ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="pay-pending-btn-${e.id}" onclick="payForPendingDancers(${e.id})">Pay for ${pendingCount} Added Dancer${pendingCount !== 1 ? 's' : ''}</button>` : ''}
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
                 </div>
               </div>`;
@@ -1064,6 +1068,39 @@
       openRegModal(eventsCache[eventId]);
     }
 
+    // Called when user clicks "Pay for N Added Dancer(s)" — triggers Stripe checkout
+    // for only the admin-added pending dancers, without opening the registration modal.
+    async function payForPendingDancers(eventId) {
+      const token = localStorage.getItem('token');
+      const btn   = document.getElementById(`pay-pending-btn-${eventId}`);
+      if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading…'; }
+      try {
+        const res = await fetch(`${API}/events/${eventId}/register/checkout?embedded=true`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ student_ids: [], observer_ids: [] }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert(data.detail || 'Failed to start checkout.');
+          if (btn) { btn.disabled = false; btn.textContent = btn.textContent.replace('Loading…', 'Pay'); }
+          return;
+        }
+        if (data.session_id === 'free') {
+          // No charge needed — backend cleared pending and finalized
+          myRegistrations[String(eventId)] = { ...myRegistrations[String(eventId)], is_finalized: true, pending_student_ids: [] };
+          updateEventCard(eventId, true);
+          return;
+        }
+        // Open Stripe embedded checkout in the existing modal
+        currentRegEvent = eventsCache[eventId];
+        openRegModal(eventsCache[eventId], { pendingCheckout: true, clientSecret: data.client_secret });
+      } catch {
+        alert('Something went wrong. Please try again.');
+        if (btn) { btn.disabled = false; }
+      }
+    }
+
     async function unregisterFromEvent() {
       const token   = localStorage.getItem('token');
       const eventId = document.getElementById('regEventId').value;
@@ -1078,7 +1115,9 @@
     // Update the orange badge on the sidebar "Events" nav item with the count
     // of registrations that have an outstanding (unpaid) payment.
     function updatePendingBadge() {
-      const pendingCount = Object.values(myRegistrations).filter(r => !r.is_finalized).length;
+      const pendingCount = Object.values(myRegistrations).filter(
+        r => !r.is_finalized || (r.pending_student_ids || []).length > 0
+      ).length;
       const badge = document.getElementById('eventsPendingBadge');
       if (!badge) return;
       if (pendingCount > 0) {
@@ -1090,53 +1129,66 @@
     }
 
     function updateEventCard(eventId, isRegistered) {
-      const reg  = myRegistrations[String(eventId)];
+      const reg        = myRegistrations[String(eventId)];
+      const hasPending = reg && (reg.pending_student_ids || []).length > 0;
+      const pendingCount = hasPending
+        ? (reg.pending_student_ids || []).filter(x => !String(x).startsWith('o')).length : 0;
       const card = document.getElementById(`ecard-${eventId}`);
       const btn  = document.getElementById(`reg-btn-${eventId}`);
       if (card) { if (isRegistered) card.classList.add('registered'); else card.classList.remove('registered'); }
       if (btn) {
-        if (isRegistered && reg && reg.is_finalized) {
-          btn.className = 'btn btn-sm btn-outline-secondary py-1 px-3';
+        const parent = btn.parentElement;
+        // Always clear stale badges and action buttons first
+        parent.querySelectorAll(
+          '.reg-badge,.badge-finalized,.badge-pending-pay,#finalize-btn-' + eventId + ',#pay-pending-btn-' + eventId
+        ).forEach(el => el.remove());
+
+        if (isRegistered && reg && hasPending) {
+          // Finalized registration with admin-added unpaid dancers
+          btn.className   = 'btn btn-sm btn-outline-secondary py-1 px-3';
           btn.textContent = 'Update Registration';
-          btn.onclick = () => openRegModal(eventsCache[eventId]);
-          const parent = btn.parentElement;
-          parent.querySelectorAll('.reg-badge,.badge-finalized,.badge-pending-pay').forEach(el => el.remove());
-          // Remove any stale obs-btn
-          const oldObs = parent.querySelector(`#obs-btn-${eventId}`);
-          if (oldObs) oldObs.remove();
+          btn.onclick     = () => openRegModal(eventsCache[eventId]);
+          const badge = document.createElement('span');
+          badge.className = 'badge-pending-pay';
+          badge.innerHTML = '&#9889; Balance Due';
+          parent.insertBefore(badge, btn);
+          const payBtn = document.createElement('button');
+          payBtn.id        = `pay-pending-btn-${eventId}`;
+          payBtn.className = 'btn btn-sm btn-finalize py-1 px-3';
+          payBtn.innerHTML = `Pay for ${pendingCount} Added Dancer${pendingCount !== 1 ? 's' : ''}`;
+          payBtn.onclick   = () => payForPendingDancers(eventId);
+          parent.appendChild(payBtn);
+        } else if (isRegistered && reg && reg.is_finalized) {
+          // Fully finalized — no pending
+          btn.className   = 'btn btn-sm btn-outline-secondary py-1 px-3';
+          btn.textContent = 'Update Registration';
+          btn.onclick     = () => openRegModal(eventsCache[eventId]);
           const badge = document.createElement('span');
           badge.className = 'badge-finalized';
           badge.innerHTML = '&#10003; Finalized';
           parent.insertBefore(badge, btn);
         } else if (isRegistered) {
-          btn.className = 'btn btn-sm btn-outline-secondary py-1 px-3';
+          // Pending (user hasn't paid yet)
+          btn.className   = 'btn btn-sm btn-outline-secondary py-1 px-3';
           btn.textContent = 'Edit Registration';
-          btn.onclick = () => openRegModal(eventsCache[eventId]);
-          const parent = btn.parentElement;
-          parent.querySelectorAll('.reg-badge,.badge-finalized,.badge-pending-pay').forEach(el => el.remove());
-          // Remove any stale finalize button
-          const oldFin = parent.querySelector(`#finalize-btn-${eventId}`);
-          if (oldFin) oldFin.remove();
+          btn.onclick     = () => openRegModal(eventsCache[eventId]);
           const badge = document.createElement('span');
           badge.className = 'badge-pending-pay';
           badge.innerHTML = '&#9203; Pending';
           parent.insertBefore(badge, btn);
-          // Show Finalize Registration for any non-finalized registration on a priced event
           const ev = eventsCache[eventId];
-          const eventHasPricing = ev && !!(ev.early_price || ev.regular_price);
-          if (eventHasPricing) {
+          if (ev && !!(ev.early_price || ev.regular_price)) {
             const finBtn = document.createElement('button');
-            finBtn.id = `finalize-btn-${eventId}`;
+            finBtn.id        = `finalize-btn-${eventId}`;
             finBtn.className = 'btn btn-sm btn-finalize py-1 px-3';
             finBtn.innerHTML = 'Complete Registration';
-            finBtn.onclick = () => resumeCheckout(eventId);
+            finBtn.onclick   = () => resumeCheckout(eventId);
             parent.appendChild(finBtn);
           }
         } else {
-          btn.className = 'btn btn-sm btn-accent py-1 px-3';
+          btn.className   = 'btn btn-sm btn-accent py-1 px-3';
           btn.textContent = 'Register';
-          const badge = btn.parentElement.querySelector('.reg-badge,.badge-finalized,.badge-pending-pay');
-          if (badge) badge.remove();
+          btn.onclick     = () => openRegModal(eventsCache[eventId]);
         }
       }
       updatePendingBadge();
@@ -1215,6 +1267,7 @@
                 is_finalized: vData.is_finalized,
                 payment_status: vData.payment_status,
                 amount_paid: vData.amount_paid,
+                pending_student_ids: [],   // payment complete — no pending
               };
             }
           } catch {}
