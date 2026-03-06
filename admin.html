@@ -53,6 +53,9 @@
     .section-divider { display: flex; align-items: center; gap: .75rem; margin: .25rem 0 .85rem; }
     .section-divider-label { color: #E3FC02; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
     .section-divider-line { flex: 1; height: 1px; background: #2a2a2a; }
+    .login-time-btn { background:#1a1a1a;border:1px solid #2a2a2a;color:#888;font-size:.78rem;padding:.2rem .6rem; }
+    .login-time-btn:hover { border-color:#444;color:#ccc; }
+    .login-time-btn.active { background:#E3FC02;border-color:#E3FC02;color:#000;font-weight:700; }
     /* Registration section */
     .reg-section { background: #0a0a0a; border-top: 1px solid #2a2a2a; padding: 1rem; }
     .reg-card { background: #141414; border: 1px solid #252525; border-radius: 8px; padding: .75rem; margin-bottom: .5rem; }
@@ -178,7 +181,17 @@
         <!-- Summary bar -->
         <div id="loginsSummary" class="d-none mb-3" style="font-size:.82rem;color:#888;"></div>
 
-        <!-- Filters -->
+        <!-- Timeframe selector -->
+        <div class="d-flex gap-1 mb-3 flex-wrap align-items-center">
+          <span style="color:#555;font-size:.78rem;margin-right:.25rem;">Timeframe:</span>
+          <button class="btn btn-sm login-time-btn active" data-hours="24"    onclick="setLoginTimeframe(24)">Last 24 h</button>
+          <button class="btn btn-sm login-time-btn"        data-hours="168"   onclick="setLoginTimeframe(168)">Last 7 d</button>
+          <button class="btn btn-sm login-time-btn"        data-hours="720"   onclick="setLoginTimeframe(720)">Last 30 d</button>
+          <button class="btn btn-sm login-time-btn"        data-hours="2160"  onclick="setLoginTimeframe(2160)">Last 90 d</button>
+          <button class="btn btn-sm login-time-btn"        data-hours="0"     onclick="setLoginTimeframe(0)">All time</button>
+        </div>
+
+        <!-- Search / filter row -->
         <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
           <input type="text" id="loginSearch" class="form-control form-control-sm"
             style="max-width:260px;background:#111;border-color:#2a2a2a;color:#f0f0f0;"
@@ -2453,9 +2466,19 @@
       };
 
       // ── Login Logs ──────────────────────────────────────────────────────────
-      let _loginLogs = [];      // full dataset from server
-      let _loginLogsTotal = 0;  // server-side total count
-      const LOGIN_PAGE = 200;   // rows per fetch
+      let _loginLogs = [];           // full dataset from server
+      let _loginLogsTotal = 0;       // server-side total count
+      let _loginTimeframeHours = 24; // default: last 24 hours
+      const LOGIN_PAGE = 200;        // rows per fetch
+
+      function setLoginTimeframe(hours) {
+        _loginTimeframeHours = hours;
+        document.querySelectorAll('.login-time-btn').forEach(btn => {
+          btn.classList.toggle('active', parseInt(btn.dataset.hours) === hours);
+        });
+        _loginLogs = [];
+        loadLoginLogs(0);
+      }
 
       function parseUA(ua) {
         if (!ua) return '—';
@@ -2554,7 +2577,8 @@
         errorEl.classList.add('d-none');
 
         try {
-          const res  = await fetch(`${API}/admin/login-logs?limit=${LOGIN_PAGE}&offset=${offsetArg}`, {
+          const timeParam = _loginTimeframeHours > 0 ? `&since_hours=${_loginTimeframeHours}` : '&since_hours=0';
+          const res  = await fetch(`${API}/admin/login-logs?limit=${LOGIN_PAGE}&offset=${offsetArg}${timeParam}`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           if (!res.ok) throw new Error(await res.text());
@@ -2564,7 +2588,10 @@
           else _loginLogs = _loginLogs.concat(data.logs);
           _loginLogsTotal = data.total;
 
-          summaryEl.textContent = `${_loginLogsTotal.toLocaleString()} total login${_loginLogsTotal !== 1 ? 's' : ''} recorded`;
+          const windowLabel = _loginTimeframeHours === 0 ? 'all time'
+            : _loginTimeframeHours < 48  ? `last ${_loginTimeframeHours}h`
+            : `last ${_loginTimeframeHours / 24}d`;
+          summaryEl.textContent = `${_loginLogsTotal.toLocaleString()} login${_loginLogsTotal !== 1 ? 's' : ''} — ${windowLabel}`;
           summaryEl.classList.remove('d-none');
 
           // Show "load more" if there are more rows on the server

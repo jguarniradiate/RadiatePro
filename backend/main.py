@@ -2715,6 +2715,7 @@ def admin_apply_credit(
 def admin_login_logs(
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    since_hours: int = Query(24, ge=0),   # 0 = all time; default = last 24 h
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
@@ -2723,9 +2724,19 @@ def admin_login_logs(
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
 
+    # Build optional time-window filter
+    time_clause = "WHERE l.logged_in_at >= :since" if since_hours > 0 else ""
+    since_dt = (
+        datetime.now(timezone.utc) - timedelta(hours=since_hours)
+        if since_hours > 0 else None
+    )
+    base_params: dict = {}
+    if since_dt:
+        base_params["since"] = since_dt
+
     rows = db.execute(
         text(
-            """
+            f"""
             SELECT
                 l.id,
                 l.user_id,
@@ -2739,14 +2750,18 @@ def admin_login_logs(
                 l.logged_in_at
             FROM user_login_logs l
             LEFT JOIN users u ON u.id = l.user_id
+            {time_clause}
             ORDER BY l.logged_in_at DESC
             LIMIT :limit OFFSET :offset
             """
         ),
-        {"limit": limit, "offset": offset},
+        {**base_params, "limit": limit, "offset": offset},
     ).fetchall()
 
-    total = db.execute(text("SELECT COUNT(*) FROM user_login_logs")).scalar() or 0
+    total = db.execute(
+        text(f"SELECT COUNT(*) FROM user_login_logs {time_clause}"),
+        base_params,
+    ).scalar() or 0
 
     return {
         "total": total,
