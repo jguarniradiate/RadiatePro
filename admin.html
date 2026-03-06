@@ -1501,14 +1501,24 @@
         return ''; // non-finalized, no status yet
       }
 
+      // Helper: is this attendee token "paid" (cash, Stripe, or credit-applied)?
+      function isPaid(tok) {
+        const isPending     = pendingSet.has(tok);
+        const isCreditApply = creditAppliedSet.has(tok);
+        const isCash        = cashSet.has(tok);
+        const isStripePaid  = reg.payment_status === 'paid' && reg.is_finalized && !isPending;
+        return isCash || isCreditApply || isStripePaid;
+      }
+
       const stuBadges = reg.students.map(s => {
         const tok   = String(s.id);
         const style = attendeeBadgeStyle(tok, false);
+        const paid  = isPaid(tok);
         return `
           <span class="stu-badge" id="rst-${reg.id}-${s.id}"${style ? ` style="${style}"` : ''}>
             ${esc(s.name)}
-            <button class="stu-badge-remove" title="Remove student"
-              onclick="adminRemoveRegStudent(${eventId},${reg.id},${s.id},'${esc(s.name)}')">×</button>
+            ${paid ? '' : `<button class="stu-badge-remove" title="Remove student"
+              onclick="adminRemoveRegStudent(${eventId},${reg.id},${s.id},'${esc(s.name)}')">×</button>`}
           </span>`;
       }).join('');
 
@@ -1516,6 +1526,7 @@
       const obsBadges = observers.map(o => {
         const tok   = `o${o.id}`;
         const style = attendeeBadgeStyle(tok, true);
+        const paid  = isPaid(tok);
         const isPending     = pendingSet.has(tok);
         const isCreditApply = creditAppliedSet.has(tok);
         const isCash        = cashSet.has(tok) && !isCreditApply;
@@ -1523,8 +1534,8 @@
         const removeBtnColor = isPending ? '#f87171' : isCreditApply ? '#fbbf24' : (isCash || isStripePaid) ? '#4ade80' : '#9d7ee0';
         return `<span class="stu-badge" id="robs-${reg.id}-${o.id}" style="${style}">
           &#128065; ${esc(o.name)}
-          <button class="stu-badge-remove" title="Remove observer" style="color:${removeBtnColor};"
-            onclick="adminRemoveRegObserver(${eventId},${reg.id},${o.id},'${esc(o.name)}')">×</button>
+          ${paid ? '' : `<button class="stu-badge-remove" title="Remove observer" style="color:${removeBtnColor};"
+            onclick="adminRemoveRegObserver(${eventId},${reg.id},${o.id},'${esc(o.name)}')">×</button>`}
         </span>`;
       }).join('');
 
@@ -1987,7 +1998,7 @@
       try {
         const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/students/${studentId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) await refreshEventRegistrations(eventId);
-        else alert('Failed to remove student.');
+        else { let d={}; try{d=await res.json();}catch{} alert(d.detail || 'Failed to remove student.'); }
       } catch { alert('Something went wrong.'); }
     }
 
@@ -2012,7 +2023,7 @@
       try {
         const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/observers/${observerId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) await refreshEventRegistrations(eventId);
-        else alert('Failed to remove observer.');
+        else { let d={}; try{d=await res.json();}catch{} alert(d.detail || 'Failed to remove observer.'); }
       } catch { alert('Something went wrong.'); }
     }
 

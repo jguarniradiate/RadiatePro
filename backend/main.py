@@ -2060,8 +2060,20 @@ def admin_remove_reg_student(
     ).first()
     if not ers:
         raise HTTPException(status_code=404, detail="Student not in registration.")
-    db.delete(ers)
     tok = str(student_id)
+    # Block deletion of paid students
+    pending_tokens      = [x for x in (reg.pending_student_ids  or "").split(",") if x.strip()]
+    cash_tokens_check   = [x for x in (reg.cash_student_ids     or "").split(",") if x.strip()]
+    credit_tokens_check = [x for x in (reg.credit_applied_ids   or "").split(",") if x.strip()]
+    is_stripe_paid = reg.payment_status == "paid" and reg.is_finalized
+    is_paid = (
+        tok in cash_tokens_check
+        or tok in credit_tokens_check
+        or (is_stripe_paid and tok not in pending_tokens)
+    )
+    if is_paid:
+        raise HTTPException(status_code=400, detail="This dancer has already been paid for and cannot be removed.")
+    db.delete(ers)
     # If this dancer was tracked as an unpaid pending item, remove them from the list.
     pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
     had_pending = bool(pending)
@@ -2603,8 +2615,20 @@ def admin_remove_reg_observer(
     ).first()
     if not ero:
         raise HTTPException(status_code=404, detail="Observer not in registration.")
-    db.delete(ero)
     tok = f"o{observer_id}"
+    # Block deletion of paid observers
+    pending_tokens_o      = [x for x in (reg.pending_student_ids  or "").split(",") if x.strip()]
+    cash_tokens_check_o   = [x for x in (reg.cash_student_ids     or "").split(",") if x.strip()]
+    credit_tokens_check_o = [x for x in (reg.credit_applied_ids   or "").split(",") if x.strip()]
+    is_stripe_paid_o = reg.payment_status == "paid" and reg.is_finalized
+    is_paid_o = (
+        tok in cash_tokens_check_o
+        or tok in credit_tokens_check_o
+        or (is_stripe_paid_o and tok not in pending_tokens_o)
+    )
+    if is_paid_o:
+        raise HTTPException(status_code=400, detail="This observer has already been paid for and cannot be removed.")
+    db.delete(ero)
     # If this observer was tracked as an unpaid pending item, remove them from the list.
     pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
     had_pending = bool(pending)
