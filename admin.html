@@ -758,7 +758,10 @@
             <td class="text-nowrap">
               <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
                 onclick="openEdit(${u.id},'${esc(u.first_name||'')}','${esc(u.last_name||'')}','${esc(u.studio_name||'')}','${esc(u.phone||'')}','${esc(u.email)}')">Edit</button>
-              ${u.is_admin ? '' : `<button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id},'${esc(u.email)}')">Delete</button>`}
+              ${u.is_admin ? '' : `
+                <button class="btn btn-sm py-0 px-2 me-1" style="border:1px solid #3b5bdb;color:#74c0fc;"
+                  onclick="loginAsUser(${u.id},'${esc((u.first_name||'')+' '+(u.last_name||''))}')">Login As</button>
+                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id},'${esc(u.email)}')">Delete</button>`}
             </td>
           </tr>
           <tr id="students-row-${u.id}" class="d-none">
@@ -785,7 +788,10 @@
             <td class="text-nowrap">
               <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
                 onclick="openEdit(${u.id},'${esc(u.first_name||'')}','${esc(u.last_name||'')}','','${esc(u.phone||'')}','${esc(u.email)}')">Edit</button>
-              ${u.is_admin ? '' : `<button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id},'${esc(u.email)}')">Delete</button>`}
+              ${u.is_admin ? '' : `
+                <button class="btn btn-sm py-0 px-2 me-1" style="border:1px solid #3b5bdb;color:#74c0fc;"
+                  onclick="loginAsUser(${u.id},'${esc((u.first_name||'')+' '+(u.last_name||''))}')">Login As</button>
+                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id},'${esc(u.email)}')">Delete</button>`}
             </td>
           </tr>
           <tr id="students-row-${u.id}" class="d-none">
@@ -1162,6 +1168,24 @@
         }
         else { let d={}; try{d=await res.json();}catch{}  alert(d.detail||`Error ${res.status}`); }
       } catch { alert('Failed to delete user.'); }
+    }
+
+    async function loginAsUser(userId, userName) {
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/users/${userId}/impersonate`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!res.ok) { let d={}; try{d=await res.json();}catch{}  alert(d.detail||`Error ${res.status}`); return; }
+        const data = await res.json();
+        // Stash the admin token so dashboard can offer "Return to Admin"
+        localStorage.setItem('admin_token', token);
+        localStorage.setItem('admin_name', 'Admin');
+        localStorage.setItem('impersonating_name', userName);
+        localStorage.setItem('token', data.access_token);
+        window.location.href = 'dashboard.html';
+      } catch { alert('Failed to log in as user.'); }
     }
 
     // ── Events ─────────────────────────────────────────────────────────────────

@@ -2724,6 +2724,30 @@ def admin_apply_credit(
     return {"message": f"Credit applied to {applied} attendee(s).", "credit_remaining": float(credit)}
 
 
+# ── Admin impersonate ──────────────────────────────────────────────────────────
+
+@app.post("/admin/users/{user_id}/impersonate")
+def impersonate_user(
+    user_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Generate a short-lived token scoped to a non-admin user, for admin use only."""
+    admin = get_current_user(authorization, db)
+    if not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    target = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if target.is_admin:
+        raise HTTPException(status_code=400, detail="Cannot impersonate another admin.")
+    token = auth.create_access_token(
+        {"sub": target.email, "user_id": target.id},
+        expires_delta=timedelta(hours=2),
+    )
+    return {"access_token": token, "token_type": "bearer"}
+
+
 # ── Admin login log ────────────────────────────────────────────────────────────
 
 @app.get("/admin/login-logs")

@@ -180,6 +180,22 @@
 
     <div class="content">
 
+      <!-- ── Impersonation Banner ── -->
+      <div id="impersonateBanner" class="d-none"
+        style="background:#1a1f3a;border:1px solid #3b5bdb;border-radius:8px;
+               padding:.6rem 1rem;margin-bottom:1.25rem;
+               display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+        <span style="font-size:.85rem;color:#74c0fc;">
+          👁 Viewing portal as <strong id="impersonateName"></strong>
+        </span>
+        <button onclick="returnToAdmin()"
+          style="margin-left:auto;background:#3b5bdb;border:none;color:#fff;
+                 font-size:.78rem;font-weight:600;padding:.25rem .75rem;
+                 border-radius:6px;cursor:pointer;">
+          ← Return to Admin
+        </button>
+      </div>
+
       <!-- ── Home Section ── -->
       <div id="sec-home">
         <div class="card-dark p-4 d-flex align-items-center gap-3 mb-4">
@@ -526,6 +542,28 @@
     let observersLoaded = false;
     let myObservers = [];
     let myStudents  = [];
+
+    // ── Impersonation banner ──────────────────────────────────────────────────
+
+    (function initImpersonationBanner() {
+      const adminToken = localStorage.getItem('admin_token');
+      const name       = localStorage.getItem('impersonating_name');
+      if (!adminToken) return;
+      const banner = document.getElementById('impersonateBanner');
+      document.getElementById('impersonateName').textContent = name || 'User';
+      banner.style.display = 'flex';
+      banner.classList.remove('d-none');
+    })();
+
+    function returnToAdmin() {
+      const adminToken = localStorage.getItem('admin_token');
+      if (!adminToken) { window.location.href = 'admin.html'; return; }
+      localStorage.setItem('token', adminToken);
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('impersonating_name');
+      localStorage.removeItem('admin_name');
+      window.location.href = 'admin.html';
+    }
 
     // ── Sidebar & mobile ──────────────────────────────────────────────────────
 
