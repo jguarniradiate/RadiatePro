@@ -1340,13 +1340,22 @@ def add_students_to_finalized(
     if not body.student_ids and not body.observer_ids:
         raise HTTPException(status_code=400, detail="Select at least one new student or observer.")
 
+    # Identify admin-added pending items (in DB but unpaid)
+    pending_raw = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+    pending_stu_ids = {int(x) for x in pending_raw if not x.startswith('o')}
+    pending_obs_ids = {int(x[1:]) for x in pending_raw if x.startswith('o')}
+
     existing_ids = {ers.student_id for ers in reg.attending_students}
-    new_ids = [sid for sid in body.student_ids if sid not in existing_ids]
+    new_ids = [sid for sid in body.student_ids if sid not in existing_ids]  # truly new (not in DB yet)
 
     existing_obs_ids = {ero.observer_id for ero in reg.attending_observers}
-    new_obs_ids = [oid for oid in body.observer_ids if oid not in existing_obs_ids]
+    new_obs_ids = [oid for oid in body.observer_ids if oid not in existing_obs_ids]  # truly new
 
-    if not new_ids and not new_obs_ids:
+    # Pending items the user is selecting to pay for now (already in DB, still unpaid)
+    pay_pending_stu = [sid for sid in body.student_ids if sid in pending_stu_ids]
+    pay_pending_obs = [oid for oid in body.observer_ids if oid in pending_obs_ids]
+
+    if not new_ids and not new_obs_ids and not pay_pending_stu and not pay_pending_obs:
         raise HTTPException(status_code=400, detail="All selected students/observers are already registered.")
 
     if event.max_students is not None and new_ids:
@@ -1358,10 +1367,14 @@ def add_students_to_finalized(
     price_per_student, _ = _effective_price(event)
     observer_price = D(str(event.observer_price)) if event.observer_price else D("0")
 
-    dancer_total = price_per_student * len(new_ids)
-    observer_total = observer_price * len(new_obs_ids)
+    # Charge for truly new items + pending items being paid now
+    charge_stu_count = len(new_ids) + len(pay_pending_stu)
+    charge_obs_count = len(new_obs_ids) + len(pay_pending_obs)
+    dancer_total = price_per_student * charge_stu_count
+    observer_total = observer_price * charge_obs_count
     grand_total = dancer_total + observer_total
     is_free = grand_total == D("0")
+    has_pending_payment = bool(pay_pending_stu or pay_pending_obs)
 
     if is_free:
         for sid in new_ids:
@@ -1376,6 +1389,8 @@ def add_students_to_finalized(
             ).first()
             if o:
                 db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
+        if has_pending_payment:
+            reg.pending_student_ids = None  # free event — clear pending
         db.commit()
         return schemas.CheckoutSessionOut(checkout_url="", session_id="free")
 
@@ -1385,25 +1400,28 @@ def add_students_to_finalized(
         line_items.append({
             "price_data": {
                 "currency": "usd",
-                "product_data": {"name": f"{event.title} — {len(new_ids)} additional dancer(s)"},
+                "product_data": {"name": f"{event.title} — {charge_stu_count} dancer(s)"},
                 "unit_amount": int(price_per_student * 100),
             },
-            "quantity": len(new_ids),
+            "quantity": charge_stu_count,
         })
     if observer_total > 0:
         line_items.append({
             "price_data": {
                 "currency": "usd",
-                "product_data": {"name": f"{event.title} — {len(new_obs_ids)} additional observer(s)"},
+                "product_data": {"name": f"{event.title} — {charge_obs_count} observer(s)"},
                 "unit_amount": int(observer_price * 100),
             },
-            "quantity": len(new_obs_ids),
+            "quantity": charge_obs_count,
         })
     meta2 = {
         "registration_id": str(reg.id),
         "event_id": str(event_id),
         "new_student_ids": ",".join(str(i) for i in new_ids),
         "observer_ids": ",".join(str(i) for i in new_obs_ids),
+        "is_pending_payment": "true" if has_pending_payment else "false",
+        "student_count": str(charge_stu_count),
+        "observer_count": str(charge_obs_count),
         "user_name": user_name,
     }
     return_url2 = (

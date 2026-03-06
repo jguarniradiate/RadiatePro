@@ -945,13 +945,14 @@
         }
 
         if (data.session_id === 'free') {
-          // Free event — immediately finalized
+          // Free event — immediately finalized; clear any pending unpaid state
           myRegistrations[String(eventId)] = {
             ...myRegistrations[String(eventId)],
             student_ids: studentIds,
             observer_ids: observerIds,
             is_finalized: true,
             payment_status: 'free',
+            pending_student_ids: [],
           };
           updateEventCard(eventId, true);
           regModal.hide();
