@@ -94,6 +94,9 @@ class EventRegistration(Base):
     # Comma-separated IDs of dancers individually paid cash/offline by admin.
     # Same token format as pending_student_ids ("5" for student, "o3" for observer).
     cash_student_ids     = Column(Text, nullable=True)
+    # Accumulated credit from paid attendees who were later removed by admin.
+    # Can be applied to offset pending balances on this registration.
+    credit_amount        = Column(Numeric(10, 2), nullable=True, default=0)
 
     event = relationship("Event", back_populates="registrations")
     user = relationship("User", back_populates="event_registrations")

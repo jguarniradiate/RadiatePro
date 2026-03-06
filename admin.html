@@ -1113,29 +1113,33 @@
     function paymentBadge(reg) {
       const hasPending = (reg.pending_student_ids || []).length > 0;
       const pendingAmt = reg.pending_amount || 0;
+      const creditAmt  = reg.credit_amount  || 0;
       const dueBadge   = hasPending && pendingAmt > 0
         ? ` <span style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid #f87171;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#9889; $${pendingAmt.toFixed(2)} due</span>`
+        : '';
+      const creditBadge = creditAmt > 0
+        ? ` <span style="background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">💳 $${creditAmt.toFixed(2)} credit</span>`
         : '';
 
       if (reg.payment_status === 'paid') {
         // Only show ✓ Paid once all balances are settled
-        if (hasPending) return dueBadge;
+        if (hasPending) return dueBadge + creditBadge;
         const amt = reg.amount_paid != null ? ` &nbsp;$${Number(reg.amount_paid).toFixed(2)}` : '';
-        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid${amt}</span>`;
+        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid${amt}</span>${creditBadge}`;
       }
       if (reg.payment_status === 'admin-paid') {
-        if (hasPending) return dueBadge;
-        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid</span>`;
+        if (hasPending) return dueBadge + creditBadge;
+        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid</span>${creditBadge}`;
       }
       if (reg.payment_status === 'free') {
-        return `<span style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">Free</span>${dueBadge}`;
+        return `<span style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">Free</span>${dueBadge}${creditBadge}`;
       }
       // is_finalized=true with no outstanding balance — fully settled
       if (reg.is_finalized && !hasPending) {
-        return `<span style="background:rgba(99,102,241,.15);color:#818cf8;border:1px solid #818cf8;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Finalized</span>`;
+        return `<span style="background:rgba(99,102,241,.15);color:#818cf8;border:1px solid #818cf8;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Finalized</span>${creditBadge}`;
       }
       // Pending — either not finalized yet, or finalized but balance still owed
-      return `<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">&#9203; Pending</span>${dueBadge}`;
+      return `<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">&#9203; Pending</span>${dueBadge}${creditBadge}`;
     }
 
     function renderRegCard(eventId, reg) {
@@ -1197,6 +1201,9 @@
               <div style="font-size:.78rem;color:#999;">${reg.studio_name ? esc(reg.studio_name) : '<span class="badge badge-independent" style="font-size:.7rem;">Independent</span>'}</div>
             </div>
             <div class="d-flex gap-1 ms-2 flex-shrink-0">
+              ${(reg.credit_amount > 0 && (reg.pending_student_ids || []).length > 0) ? `
+              <button class="btn btn-sm py-0 px-2" style="font-size:.78rem;background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid #fbbf24;"
+                onclick="adminApplyCredit(${eventId},${reg.id})">💳 Apply Credit</button>` : ''}
               <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.78rem;" id="txn-toggle-${reg.id}"
                 onclick="toggleRegTransactions(${eventId}, ${reg.id})">&#9776; Transactions</button>
               <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.78rem;"
@@ -1554,6 +1561,21 @@
         const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/students/${studentId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) await refreshEventRegistrations(eventId);
         else alert('Failed to remove student.');
+      } catch { alert('Something went wrong.'); }
+    }
+
+    async function adminApplyCredit(eventId, regId) {
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/apply-credit`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          await refreshEventRegistrations(eventId);
+        } else {
+          alert(data.detail || 'Failed to apply credit.');
+        }
       } catch { alert('Something went wrong.'); }
     }
 

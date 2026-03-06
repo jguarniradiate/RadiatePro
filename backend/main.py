@@ -115,6 +115,7 @@ def run_migrations(eng):
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS pending_student_ids TEXT",
         # Cash/offline payment tracking for individually admin-paid dancers
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS cash_student_ids TEXT",
+        "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS credit_amount NUMERIC(10, 2) DEFAULT 0",
         # Per-dancer references on transaction rows (null for batch/whole-reg transactions)
         "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS student_id INTEGER REFERENCES students(id) ON DELETE SET NULL",
         "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS observer_id INTEGER REFERENCES observers(id) ON DELETE SET NULL",
@@ -1783,6 +1784,7 @@ def admin_list_registrations(
             "event_location": event.location if event else None,
             "price_per_student": float(price_per_student),
             "observer_price": float(observer_price),
+            "credit_amount": float(reg.credit_amount) if reg.credit_amount else 0,
         })
     return result
 
@@ -1949,12 +1951,12 @@ def admin_remove_reg_student(
     if not ers:
         raise HTTPException(status_code=404, detail="Student not in registration.")
     db.delete(ers)
+    tok = str(student_id)
     # If this dancer was tracked as an unpaid pending item, remove them from the list.
-    # If no pending items remain, clear the field so the 'Pay Outstanding Balance'
-    # button and badge disappear from the user portal.
     pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
     had_pending = bool(pending)
-    pending = [x for x in pending if x != str(student_id)]
+    was_pending = tok in pending
+    pending = [x for x in pending if x != tok]
     reg.pending_student_ids = ",".join(pending) if pending else None
     # When the last unpaid dancer is removed, finalize the registration.
     if had_pending and not pending:
@@ -1963,6 +1965,22 @@ def admin_remove_reg_student(
             reg.payment_status = "admin-paid"
         if not reg.finalized_at:
             reg.finalized_at = datetime.now(timezone.utc)
+    # Credit: if this dancer had already been paid (cash or Stripe) and was NOT pending,
+    # accumulate their unit price as a credit on the registration.
+    if not was_pending:
+        cash_tokens = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
+        was_cash_paid   = tok in cash_tokens
+        was_stripe_paid = (reg.payment_status == "paid" and reg.is_finalized)
+        if was_cash_paid or was_stripe_paid:
+            from decimal import Decimal as D
+            event = db.query(models.Event).filter(models.Event.id == event_id).first()
+            price_per_student, _ = _effective_price(event) if event else (D("0"), None)
+            if price_per_student > D("0"):
+                reg.credit_amount = (reg.credit_amount or D("0")) + price_per_student
+        # Clean the token from cash_student_ids since attendee is gone
+        if tok in cash_tokens:
+            cash_tokens = [x for x in cash_tokens if x != tok]
+            reg.cash_student_ids = ",".join(cash_tokens) if cash_tokens else None
     db.commit()
     return {"message": "Student removed from registration."}
 
@@ -2443,12 +2461,12 @@ def admin_remove_reg_observer(
     if not ero:
         raise HTTPException(status_code=404, detail="Observer not in registration.")
     db.delete(ero)
+    tok = f"o{observer_id}"
     # If this observer was tracked as an unpaid pending item, remove them from the list.
-    # If no pending items remain, clear the field so the 'Pay Outstanding Balance'
-    # button and badge disappear from the user portal.
     pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
     had_pending = bool(pending)
-    pending = [x for x in pending if x != f"o{observer_id}"]
+    was_pending = tok in pending
+    pending = [x for x in pending if x != tok]
     reg.pending_student_ids = ",".join(pending) if pending else None
     # When the last unpaid item is removed, finalize the registration.
     if had_pending and not pending:
@@ -2457,5 +2475,99 @@ def admin_remove_reg_observer(
             reg.payment_status = "admin-paid"
         if not reg.finalized_at:
             reg.finalized_at = datetime.now(timezone.utc)
+    # Credit: if this observer had already been paid (cash or Stripe) and was NOT pending,
+    # accumulate their unit price as a credit on the registration.
+    if not was_pending:
+        cash_tokens = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
+        was_cash_paid   = tok in cash_tokens
+        was_stripe_paid = (reg.payment_status == "paid" and reg.is_finalized)
+        if was_cash_paid or was_stripe_paid:
+            from decimal import Decimal as D
+            event = db.query(models.Event).filter(models.Event.id == event_id).first()
+            observer_price = D(str(event.observer_price)) if event and event.observer_price else D("0")
+            if observer_price > D("0"):
+                reg.credit_amount = (reg.credit_amount or D("0")) + observer_price
+        # Clean the token from cash_student_ids since attendee is gone
+        if tok in cash_tokens:
+            cash_tokens = [x for x in cash_tokens if x != tok]
+            reg.cash_student_ids = ",".join(cash_tokens) if cash_tokens else None
     db.commit()
     return {"message": "Observer removed from registration."}
+
+
+@app.post("/admin/events/{event_id}/registrations/{reg_id}/apply-credit")
+def admin_apply_credit(
+    event_id: int,
+    reg_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Apply available credit on a registration to cover pending attendees (FIFO).
+
+    For each pending token (students then observers) in order, if the credit
+    balance covers their unit price, mark them as admin-paid from credit, remove
+    them from pending, add to cash_student_ids, and record a transaction.
+    """
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.id == reg_id,
+        models.EventRegistration.event_id == event_id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found.")
+
+    from decimal import Decimal as D
+    credit = D(str(reg.credit_amount or 0))
+    if credit <= D("0"):
+        raise HTTPException(status_code=400, detail="No credit available.")
+
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    price_per_student, _ = _effective_price(event) if event else (D("0"), None)
+    observer_price = D(str(event.observer_price)) if event and event.observer_price else D("0")
+
+    pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+    cash_tokens = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
+    applied = 0
+
+    for tok in list(pending):
+        if credit <= D("0"):
+            break
+        is_obs = tok.startswith("o")
+        unit_price = observer_price if is_obs else price_per_student
+        if unit_price <= D("0") or credit < unit_price:
+            continue
+        # Apply credit to this attendee
+        credit -= unit_price
+        pending.remove(tok)
+        if tok not in cash_tokens:
+            cash_tokens.append(tok)
+        # Resolve the attendee ID for the transaction
+        if is_obs:
+            obs_id = int(tok[1:])
+            _record_transaction(db, reg, unit_price, "admin-paid",
+                                description="1 observer (credit applied)",
+                                observer_count=1, observer_id=obs_id)
+        else:
+            stu_id = int(tok)
+            _record_transaction(db, reg, unit_price, "admin-paid",
+                                description="1 dancer (credit applied)",
+                                student_count=1, student_id=stu_id)
+        applied += 1
+
+    if applied == 0:
+        raise HTTPException(status_code=400, detail="Credit amount insufficient to cover any pending attendee.")
+
+    reg.pending_student_ids = ",".join(pending) if pending else None
+    reg.cash_student_ids    = ",".join(cash_tokens) if cash_tokens else None
+    reg.credit_amount       = credit if credit > D("0") else D("0")
+
+    # If all pending cleared, ensure registration stays finalized
+    if not pending:
+        reg.is_finalized = True
+        if not reg.finalized_at:
+            reg.finalized_at = datetime.now(timezone.utc)
+
+    db.commit()
+    return {"message": f"Credit applied to {applied} attendee(s).", "credit_remaining": float(credit)}
