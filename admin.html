@@ -1017,12 +1017,17 @@
         const freeRegs       = regs.filter(r => r.payment_status === 'free');
         const balanceDueRegs = regs.filter(r => (r.pending_student_ids || []).length > 0);
         // totalRevenue = Stripe payments (amount_paid) + per-token cash amounts
-        // Exclude cash tokens that are also in pending_student_ids (balance-due overrides paid)
+        // Only count cash tokens for attendees still present in the registration,
+        // and skip tokens that are balance-due (pending overrides paid).
         const totalRevenue = regs.reduce((sum, r) => {
           if (r.payment_status === 'paid') return sum + (r.amount_paid || 0);
-          const pendingSet = new Set(r.pending_student_ids || []);
+          const pendingSet  = new Set(r.pending_student_ids || []);
+          const activeToks  = new Set([
+            ...(r.students  || []).map(s => String(s.id)),
+            ...(r.observers || []).map(o => `o${o.id}`),
+          ]);
           for (const tok of (r.cash_student_ids || [])) {
-            if (pendingSet.has(tok)) continue;
+            if (pendingSet.has(tok) || !activeToks.has(tok)) continue;
             sum += tok.startsWith('o') ? (r.observer_price || 0) : (r.price_per_student || 0);
           }
           return sum;
@@ -1416,9 +1421,13 @@
 
       // ── Summary line ───────────────────────────────────────
       // Total paid = Stripe amount_paid + sum of individually cash-paid tokens
-      // Exclude tokens also in pendingSet — balance due overrides cash-paid status
+      // Skip tokens that are pending (balance due) or belong to removed attendees
+      const activeToks = new Set([
+        ...(reg.students  || []).map(s => String(s.id)),
+        ...(reg.observers || []).map(o => `o${o.id}`),
+      ]);
       const cashPaidTotal = [...cashSet].reduce((s, tok) =>
-        pendingSet.has(tok) ? s : s + (tok.startsWith('o') ? obsvPrice : pricePerStu), 0);
+        (pendingSet.has(tok) || !activeToks.has(tok)) ? s : s + (tok.startsWith('o') ? obsvPrice : pricePerStu), 0);
       const totalPaidAmount = (reg.amount_paid || 0) + cashPaidTotal;
 
       doc.setFontSize(10); doc.setFont('helvetica', 'bold');
