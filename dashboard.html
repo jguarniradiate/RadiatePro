@@ -861,7 +861,7 @@
           const amtStr = t.payment_status === 'free'
             ? '<span style="color:#4ade80;font-weight:600;">Free</span>'
             : t.payment_status === 'admin-paid'
-              ? '<span style="color:#4ade80;font-weight:600;">Paid</span>'
+              ? '<span style="color:#a78bfa;font-weight:600;">Complimentary</span>'
               : `<span style="font-weight:600;">$${Number(t.amount_paid).toFixed(2)}</span>`;
           const statusBadge = t.payment_status === 'free'
             ? '<span class="tx-status-free">Free</span>'
