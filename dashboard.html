@@ -156,6 +156,9 @@
         <span class="nav-icon"><i class="bi bi-calendar-event-fill"></i></span> Events
         <span class="nav-pending-badge d-none" id="eventsPendingBadge"></span>
       </a>
+      <a class="nav-item" href="events.html#registrations">
+        <span class="nav-icon"><i class="bi bi-journal-check"></i></span> My Registrations
+      </a>
       <button class="nav-item" id="nav-transactions" onclick="showSection('transactions')">
         <span class="nav-icon"><i class="bi bi-receipt-cutoff"></i></span> Transactions
       </button>
@@ -322,6 +325,18 @@
 
       <!-- ── Students Section ── -->
       <div id="sec-students" style="display:none;">
+        <!-- Workflow step context bar -->
+        <div class="d-flex align-items-center gap-2 mb-3 px-3 py-2" style="background:#111;border:1px solid #2a2a2a;border-left:3px solid #E3FC02;border-radius:9px;">
+          <button onclick="showSection('home')"
+            style="background:none;border:none;padding:0;color:#999;font-size:.8rem;cursor:pointer;display:flex;align-items:center;gap:.35rem;white-space:nowrap;transition:color .15s;"
+            onmouseover="this.style.color='#E3FC02'" onmouseout="this.style.color='#999'">
+            &#8592; Getting Started
+          </button>
+          <span style="color:#2a2a2a;font-size:1.1rem;line-height:1;user-select:none;">&#124;</span>
+          <div style="width:22px;height:22px;border-radius:50%;background:#E3FC02;color:#000;font-weight:800;font-size:.7rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+          <span style="color:#E3FC02;font-size:.8rem;font-weight:700;">Add Your Dancers</span>
+          <span style="color:#555;font-size:.75rem;">— Step 1 of 3</span>
+        </div>
         <div class="d-flex justify-content-between align-items-center mb-4">
           <h5 class="section-title mb-0">My Dancers</h5>
           <button class="btn btn-accent btn-sm" onclick="openAddStudent()">+ Add Dancer</button>
@@ -345,6 +360,18 @@
 
       <!-- ── Observers Section ── -->
       <div id="sec-observers" style="display:none;">
+        <!-- Workflow step context bar -->
+        <div class="d-flex align-items-center gap-2 mb-3 px-3 py-2" style="background:#111;border:1px solid #2a2a2a;border-left:3px solid #a78bfa;border-radius:9px;">
+          <button onclick="showSection('home')"
+            style="background:none;border:none;padding:0;color:#999;font-size:.8rem;cursor:pointer;display:flex;align-items:center;gap:.35rem;white-space:nowrap;transition:color .15s;"
+            onmouseover="this.style.color='#a78bfa'" onmouseout="this.style.color='#999'">
+            &#8592; Getting Started
+          </button>
+          <span style="color:#2a2a2a;font-size:1.1rem;line-height:1;user-select:none;">&#124;</span>
+          <div style="width:22px;height:22px;border-radius:50%;background:#a78bfa;color:#000;font-weight:800;font-size:.7rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+          <span style="color:#a78bfa;font-size:.8rem;font-weight:700;">Add Observers</span>
+          <span style="color:#555;font-size:.75rem;">— Step 2 of 3</span>
+        </div>
         <div class="d-flex justify-content-between align-items-center mb-4">
           <h5 class="section-title mb-0">My Observers</h5>
           <button class="btn btn-sm fw-bold" style="background:#a78bfa;color:#000;" onclick="openAddObserver()">+ Add Observer</button>
