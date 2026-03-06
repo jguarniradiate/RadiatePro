@@ -46,6 +46,12 @@
     .nav-item:hover { background: rgba(227,252,2,.07); color: #f0f0f0; }
     .nav-item.active { color: #E3FC02; background: rgba(227,252,2,.1); border-left-color: #E3FC02; font-weight: 600; }
     .nav-item .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+    .nav-item .nav-pending-badge {
+      margin-left: auto; background: #ff6b35; color: #fff;
+      font-size: .65rem; font-weight: 700; min-width: 18px; height: 18px;
+      padding: 0 5px; border-radius: 9px; display: inline-flex;
+      align-items: center; justify-content: center; line-height: 1;
+    }
     .sidebar-footer { padding: .75rem 1.25rem 1.25rem; border-top: 1px solid #2a2a2a; }
     .sidebar-footer button {
       background: #1a1a1a; border: 1px solid #2e2e2e; color: #bbb;
@@ -146,8 +152,9 @@
       <button class="nav-item" id="nav-observers" onclick="showSection('observers')">
         <span class="nav-icon"><i class="bi bi-eye-fill"></i></span> My Observers
       </button>
-      <a class="nav-item" href="events.html">
+      <a class="nav-item" href="events.html" id="eventsNavItem">
         <span class="nav-icon"><i class="bi bi-calendar-event-fill"></i></span> Events
+        <span class="nav-pending-badge d-none" id="eventsPendingBadge"></span>
       </a>
       <button class="nav-item" id="nav-transactions" onclick="showSection('transactions')">
         <span class="nav-icon"><i class="bi bi-receipt-cutoff"></i></span> Transactions
@@ -1012,6 +1019,27 @@
     const _hash = location.hash.replace('#','');
     if (['profile','students','observers','transactions'].includes(_hash)) showSection(_hash);
     loadUser();
+
+    // Show pending badge on Events nav item if there are unpaid/unfinalized registrations
+    (async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      try {
+        const res = await fetch(`${API}/events/my-registrations`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const regs = await res.json();
+        const pendingCount = Object.values(regs).filter(
+          r => !r.is_finalized || (r.pending_student_ids || []).length > 0
+        ).length;
+        const badge = document.getElementById('eventsPendingBadge');
+        if (badge && pendingCount > 0) {
+          badge.textContent = pendingCount;
+          badge.classList.remove('d-none');
+        }
+      } catch {}
+    })();
   </script>
 </body>
 </html>
