@@ -498,7 +498,9 @@
           currentSelected.push(data.id);
           const qReg = myRegistrations[String(currentRegEvent?.id)];
           const qLocked = (qReg && qReg.is_finalized) ? [...(qReg.student_ids || [])] : [];
-          renderStudentTable(currentSelected, qLocked, qReg ? qReg.payment_status : null);
+          const qPendingRaw = qReg ? (qReg.pending_student_ids || []) : [];
+          const qPendingIds = qPendingRaw.filter(x => !String(x).startsWith('o')).map(x => parseInt(x));
+          renderStudentTable(currentSelected, qLocked, qReg ? qReg.payment_status : null, qPendingIds);
           // Clear form and hide
           document.getElementById('qsName').value = '';
           document.getElementById('qsDob').value  = '';
@@ -637,7 +639,7 @@
       summaryDiv.classList.toggle('d-none', !rows && grandTotal === 0);
     }
 
-    function renderObserverTable(selectedIds, lockedIds = [], paymentStatus = null) {
+    function renderObserverTable(selectedIds, lockedIds = [], paymentStatus = null, pendingIds = []) {
       const tbody   = document.getElementById('observerTableBody');
       const wrap    = document.getElementById('observerTableWrap');
       const noMsg   = document.getElementById('noObserversMsg');
@@ -651,11 +653,16 @@
       noMsg.classList.add('d-none');
       wrap.classList.remove('d-none');
       tbody.innerHTML = myObservers.map(o => {
-        const locked       = lockedIds.includes(o.id);
+        const isPending    = pendingIds.includes(o.id);
+        // Pending observers are not yet paid — treat as unlocked so they can be toggled
+        const locked       = lockedIds.includes(o.id) && !isPending;
         const inPendingReg = !locked && selectedIds.includes(o.id);
 
         let payBadge = '';
-        if (locked) {
+        if (isPending) {
+          // Admin-added unpaid observer — balance still owed
+          payBadge = '<span class="observer-badge-unpaid">&#9889; Unpaid</span>';
+        } else if (locked) {
           if (paymentStatus === 'free') {
             payBadge = '<span class="observer-badge-paid">Free</span>';
           } else {
@@ -691,7 +698,7 @@
       }).join('');
     }
 
-    function renderStudentTable(selectedIds, lockedIds = [], paymentStatus = null) {
+    function renderStudentTable(selectedIds, lockedIds = [], paymentStatus = null, pendingIds = []) {
       const tbody = document.getElementById('studentTableBody');
       const wrap  = document.getElementById('studentTableWrap');
       const noMsg = document.getElementById('noStudentsMsg');
@@ -705,11 +712,16 @@
       noMsg.classList.add('d-none');
       wrap.classList.remove('d-none');
       tbody.innerHTML = myStudents.map(s => {
-        const locked       = lockedIds.includes(s.id);
+        const isPending    = pendingIds.includes(s.id);
+        // Pending dancers are not yet paid — treat as unlocked so they can be toggled
+        const locked       = lockedIds.includes(s.id) && !isPending;
         const inPendingReg = !locked && selectedIds.includes(s.id);
 
         let payBadge = '';
-        if (locked) {
+        if (isPending) {
+          // Admin-added unpaid dancer — balance still owed
+          payBadge = '<span class="dancer-badge-unpaid">&#9889; Unpaid</span>';
+        } else if (locked) {
           if (paymentStatus === 'free') {
             payBadge = '<span class="dancer-badge-free">Free</span>';
           } else {
@@ -757,6 +769,11 @@
       const lockedObserverIds = isFinalized ? [...observerIds] : [];
       const paymentStatus    = reg ? reg.payment_status : null;
 
+      // Parse pending_student_ids into dancer IDs and observer IDs
+      const pendingRaw         = reg ? (reg.pending_student_ids || []) : [];
+      const pendingStudentIds  = pendingRaw.filter(x => !String(x).startsWith('o')).map(x => parseInt(x));
+      const pendingObserverIds = pendingRaw.filter(x => String(x).startsWith('o')).map(x => parseInt(String(x).slice(1)));
+
       // Title is always just the event name; use badge to show action state
       document.getElementById('regModalTitle').textContent = event.title;
       const regBadge = document.getElementById('regModalBadge');
@@ -768,8 +785,8 @@
         regBadge.classList.add('d-none');
       }
 
-      renderStudentTable(selectedIds, lockedIds, paymentStatus);
-      renderObserverTable(observerIds, lockedObserverIds, paymentStatus);
+      renderStudentTable(selectedIds, lockedIds, paymentStatus, pendingStudentIds);
+      renderObserverTable(observerIds, lockedObserverIds, paymentStatus, pendingObserverIds);
       updateCostSummary();
 
       const unregBtn  = document.getElementById('unregBtn');
