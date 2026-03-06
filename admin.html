@@ -1138,6 +1138,9 @@
       document.getElementById('addRegObsLoading').classList.remove('d-none');
       document.getElementById('addRegObsEmpty').classList.add('d-none');
       document.getElementById('addRegObsList').innerHTML = '';
+      // Always reset payment radio to "Not Paid" so a previous "Paid" selection
+      // doesn't accidentally finalize the next add.
+      document.getElementById('addObsPayNo').checked = true;
       document.getElementById('newObserverForm').classList.add('d-none');
       document.getElementById('newObserverToggleIcon').textContent = '+';
       document.getElementById('newObserverName').value = '';
@@ -1391,6 +1394,9 @@
       document.getElementById('addRegStudentList').innerHTML = '';
       document.getElementById('addRegStudentEmpty').classList.add('d-none');
       document.getElementById('addRegStudentLoading').classList.remove('d-none');
+      // Always reset payment radio to "Not Paid" so a previous "Paid" selection
+      // doesn't accidentally finalize the next add.
+      document.getElementById('addStuPayNo').checked = true;
       // Reset new student form
       document.getElementById('newStudentForm').classList.add('d-none');
       document.getElementById('newStudentToggleIcon').textContent = '+';
