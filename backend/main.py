@@ -1797,7 +1797,9 @@ def admin_create_registration(
 
     user_id = body.get("user_id")
     student_ids = body.get("student_ids", [])
-    paid_student_ids = set(body.get("paid_student_ids", []))
+    paid_student_ids = set(body.get("paid_student_ids", []))   # cash / offline paid
+    comp_student_ids = set(body.get("comp_student_ids", []))   # complimentary (no charge)
+    all_finalized_ids = paid_student_ids | comp_student_ids
 
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not target_user:
@@ -1845,26 +1847,42 @@ def admin_create_registration(
         db.commit()
         db.refresh(reg)
 
-    # If any students were marked as paid by the admin, finalize the registration
-    # now and track the unpaid students in pending_student_ids so they pay via
-    # the user portal. Set payment_status='admin-paid' so the Complimentary badge
-    # renders correctly in the admin portal summary.
-    if paid_student_ids:
+    # If any students were marked as complimentary or paid (cash) by the admin,
+    # finalize the registration and track the truly unpaid students in
+    # pending_student_ids so they pay via the user portal.
+    if all_finalized_ids:
         from decimal import Decimal as D
         price_per_student, _ = _effective_price(event) if event else (D("0"), None)
         # Only track unpaid dancers as pending if the event actually has a price
         pending = []
         if price_per_student > D("0"):
             for ers in reg.attending_students:
-                if ers.student_id not in paid_student_ids:
+                if ers.student_id not in all_finalized_ids:
                     pending.append(str(ers.student_id))
         reg.is_finalized = True
         reg.payment_status = "admin-paid"
         reg.finalized_at = datetime.now(timezone.utc)
         reg.pending_student_ids = ",".join(pending) if pending else None
-        _record_transaction(db, reg, D("0"), "admin-paid",
-                            description=f"{len(paid_student_ids)} dancer(s) (admin paid)",
-                            student_count=len(paid_student_ids))
+
+        # Complimentary students — record $0 transaction
+        if comp_student_ids:
+            _record_transaction(db, reg, D("0"), "admin-paid",
+                                description=f"{len(comp_student_ids)} dancer(s) (complimentary)",
+                                student_count=len(comp_student_ids))
+
+        # Cash-paid students — record actual price transaction and track in cash_student_ids
+        if paid_student_ids:
+            existing_cash = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
+            for sid in paid_student_ids:
+                tok = str(sid)
+                if tok not in existing_cash:
+                    existing_cash.append(tok)
+            reg.cash_student_ids = ",".join(existing_cash) if existing_cash else None
+            total_amount = price_per_student * len(paid_student_ids)
+            _record_transaction(db, reg, total_amount, "admin-paid",
+                                description=f"{len(paid_student_ids)} dancer(s) (cash / offline)",
+                                student_count=len(paid_student_ids))
+
         db.commit()
         db.refresh(reg)
 
