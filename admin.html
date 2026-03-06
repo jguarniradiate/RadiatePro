@@ -1542,33 +1542,8 @@
         let data = {}; try { data = await res.json(); } catch {}
         if (res.ok) {
           adminCreateRegModal.hide();
-          // Inject or update the registration card in the registrations panel
-          const content = document.getElementById(`ereg-content-${eventId}`);
-          if (content) {
-            // Check if card already exists for this user
-            const existing = document.getElementById(`areg-${data.id}`);
-            const newCard = renderRegCard(parseInt(eventId), data);
-            if (existing) {
-              existing.outerHTML = newCard;
-            } else {
-              // Append new card; ensure header is present
-              const heading = content.querySelector('p[id^="ereg-heading"]');
-              if (heading) {
-                content.insertAdjacentHTML('beforeend', newCard);
-                const cnt = content.querySelectorAll('.reg-card').length;
-                heading.textContent = `Registrations (${cnt})`;
-              } else {
-                // Panel was showing "No registrations" — reinject
-                content.innerHTML = `
-                  <div class="d-flex align-items-center justify-content-between mb-3">
-                    <p class="small fw-bold mb-0" style="color:#E3FC02;" id="ereg-heading-${eventId}">Registrations (1)</p>
-                    <button class="btn btn-accent btn-sm py-0 px-2" style="font-size:.76rem;"
-                      onclick="openAdminCreateReg(${eventId})">+ Add Registration</button>
-                  </div>
-                  ${newCard}`;
-              }
-            }
-          }
+          // Re-fetch full registration data so badges/payment_status render correctly
+          await refreshEventRegistrations(parseInt(eventId));
         } else {
           alertEl.textContent = data.detail || `Error ${res.status}`;
           alertEl.classList.remove('d-none');

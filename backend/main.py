@@ -1276,6 +1276,7 @@ def add_students_save(
             new_obs_ids_added.append(oid)
 
     pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+    had_pending = bool(pending)  # track whether there were unpaid items before changes
 
     # Remove any pending students/observers the user explicitly deselected.
     # Security: only items currently tracked as pending may be removed this way —
@@ -1315,6 +1316,16 @@ def add_students_save(
                     pending.append(oid_str)
 
     reg.pending_student_ids = ",".join(pending) if pending else None
+
+    # When the last unpaid dancer is removed, finalize the registration so
+    # the UI no longer shows an outstanding balance badge.
+    if had_pending and not pending:
+        reg.is_finalized = True
+        if not reg.payment_status:
+            reg.payment_status = "admin-paid"
+        if not reg.finalized_at:
+            reg.finalized_at = datetime.now(timezone.utc)
+
     db.commit()
     db.refresh(reg)
     return _build_reg_out(reg)
@@ -1861,8 +1872,16 @@ def admin_remove_reg_student(
     # If no pending items remain, clear the field so the 'Pay Outstanding Balance'
     # button and badge disappear from the user portal.
     pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+    had_pending = bool(pending)
     pending = [x for x in pending if x != str(student_id)]
     reg.pending_student_ids = ",".join(pending) if pending else None
+    # When the last unpaid dancer is removed, finalize the registration.
+    if had_pending and not pending:
+        reg.is_finalized = True
+        if not reg.payment_status:
+            reg.payment_status = "admin-paid"
+        if not reg.finalized_at:
+            reg.finalized_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Student removed from registration."}
 
@@ -2232,7 +2251,15 @@ def admin_remove_reg_observer(
     # If no pending items remain, clear the field so the 'Pay Outstanding Balance'
     # button and badge disappear from the user portal.
     pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+    had_pending = bool(pending)
     pending = [x for x in pending if x != f"o{observer_id}"]
     reg.pending_student_ids = ",".join(pending) if pending else None
+    # When the last unpaid item is removed, finalize the registration.
+    if had_pending and not pending:
+        reg.is_finalized = True
+        if not reg.payment_status:
+            reg.payment_status = "admin-paid"
+        if not reg.finalized_at:
+            reg.finalized_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Observer removed from registration."}
