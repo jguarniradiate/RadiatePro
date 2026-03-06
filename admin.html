@@ -1244,34 +1244,8 @@
       try {
         const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) {
-          document.getElementById(`areg-${regId}`).remove();
-          // Update count in heading
-          const content = document.getElementById(`ereg-content-${eventId}`);
-          const heading = content.querySelector('p');
-          if (heading) {
-            const remaining = content.querySelectorAll('.reg-card').length;
-            if (remaining === 0) content.innerHTML = '<p class="text-muted small mb-0">No registrations yet.</p>';
-            else heading.textContent = `Registrations (${remaining})`;
-          }
-          // Refresh capacity totals by counting remaining student badges
-          const studentCount = content.querySelectorAll('[id^="rst-"]').length;
-          const eventRow     = document.getElementById(`erow-${eventId}`);
-          const maxStudents  = eventRow ? parseInt(eventRow.dataset.maxStudents || '0') : 0;
-          const capCountEl   = document.getElementById(`cap-count-${eventId}`);
-          const capBarEl     = document.getElementById(`cap-bar-${eventId}`);
-          if (capCountEl && maxStudents > 0) {
-            const pct      = Math.min(100, Math.round(studentCount / maxStudents * 100));
-            const barColor = pct >= 100 ? '#ff4444' : pct >= 80 ? '#ff9900' : '#E3FC02';
-            const fullTag  = pct >= 100 ? ' &nbsp;<span style="background:#ff4444;color:#fff;padding:1px 6px;border-radius:4px;font-size:.68rem;">FULL</span>' : '';
-            capCountEl.style.color = barColor;
-            capCountEl.innerHTML   = `${studentCount}/${maxStudents} students${fullTag}`;
-            if (capBarEl) { capBarEl.style.width = `${pct}%`; capBarEl.style.background = barColor; }
-          } else if (capCountEl && maxStudents === 0) {
-            // No cap — update free-form count text
-            capCountEl.textContent = studentCount > 0
-              ? `${studentCount} student${studentCount !== 1 ? 's' : ''} registered (no cap)`
-              : '';
-          }
+          // Full refresh so all badges (Paid, Complimentary, Balance Due) update correctly
+          await refreshEventRegistrations(eventId);
         } else alert('Failed to remove registration.');
       } catch { alert('Something went wrong.'); }
     }

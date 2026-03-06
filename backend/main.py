@@ -1837,8 +1837,8 @@ def admin_create_registration(
 
     # If any students were marked as paid by the admin, finalize the registration
     # now and track the unpaid students in pending_student_ids so they pay via
-    # the user portal. No payment_status is set on the registration itself —
-    # that is reserved for whole-reg admin-pay or Stripe payments.
+    # the user portal. Set payment_status='admin-paid' so the Complimentary badge
+    # renders correctly in the admin portal summary.
     if paid_student_ids:
         from decimal import Decimal as D
         price_per_student, _ = _effective_price(event) if event else (D("0"), None)
@@ -1849,6 +1849,7 @@ def admin_create_registration(
                 if ers.student_id not in paid_student_ids:
                     pending.append(str(ers.student_id))
         reg.is_finalized = True
+        reg.payment_status = "admin-paid"
         reg.finalized_at = datetime.now(timezone.utc)
         reg.pending_student_ids = ",".join(pending) if pending else None
         _record_transaction(db, reg, D("0"), "admin-paid",
