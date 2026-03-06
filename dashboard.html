@@ -443,9 +443,15 @@
         <div class="modal-body">
           <div id="studentAlert" class="alert alert-danger d-none mb-3"></div>
           <input type="hidden" id="studentId">
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="studentName" placeholder="Student's full name">
+          <div class="row g-3 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">First Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="studentFirstName" placeholder="First name">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Last Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="studentLastName" placeholder="Last name">
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Date of Birth <span class="text-danger">*</span></label>
@@ -481,9 +487,15 @@
         <div class="modal-body">
           <div id="observerAlert" class="alert alert-danger d-none mb-3"></div>
           <input type="hidden" id="observerId">
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="observerName" placeholder="Observer's full name">
+          <div class="row g-3 mb-3">
+            <div class="col-6">
+              <label class="form-label fw-semibold">First Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="observerFirstName" placeholder="First name">
+            </div>
+            <div class="col-6">
+              <label class="form-label fw-semibold">Last Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="observerLastName" placeholder="Last name">
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Linked Dancer <span class="text-danger">*</span></label>
@@ -796,20 +808,23 @@
 
     function openAddStudent() {
       document.getElementById('studentModalTitle').textContent = 'Add Dancer';
-      document.getElementById('studentId').value    = '';
-      document.getElementById('studentName').value  = '';
-      document.getElementById('studentDob').value   = '';
-      document.getElementById('studentGender').value = '';
+      document.getElementById('studentId').value        = '';
+      document.getElementById('studentFirstName').value = '';
+      document.getElementById('studentLastName').value  = '';
+      document.getElementById('studentDob').value       = '';
+      document.getElementById('studentGender').value    = '';
       document.getElementById('studentAlert').classList.add('d-none');
       studentModal.show();
     }
 
     function openEditStudent(id, name, dob, gender) {
       document.getElementById('studentModalTitle').textContent = 'Edit Dancer';
-      document.getElementById('studentId').value     = id;
-      document.getElementById('studentName').value   = name;
-      document.getElementById('studentDob').value    = dob;
-      document.getElementById('studentGender').value = gender;
+      document.getElementById('studentId').value        = id;
+      const parts = (name || '').split(' ');
+      document.getElementById('studentFirstName').value = parts[0] || '';
+      document.getElementById('studentLastName').value  = parts.slice(1).join(' ') || '';
+      document.getElementById('studentDob').value       = dob;
+      document.getElementById('studentGender').value    = gender;
       document.getElementById('studentAlert').classList.add('d-none');
       studentModal.show();
     }
@@ -819,10 +834,12 @@
       const studentId = document.getElementById('studentId').value;
       const alertEl   = document.getElementById('studentAlert');
       const saveBtn   = document.getElementById('studentSaveBtn');
-      const name      = document.getElementById('studentName').value.trim();
+      const firstName = document.getElementById('studentFirstName').value.trim();
+      const lastName  = document.getElementById('studentLastName').value.trim();
+      const name      = [firstName, lastName].filter(Boolean).join(' ');
 
       const dob = document.getElementById('studentDob').value;
-      if (!name) { alertEl.textContent = 'Dancer name is required.'; alertEl.classList.remove('d-none'); return; }
+      if (!firstName) { alertEl.textContent = 'First name is required.'; alertEl.classList.remove('d-none'); return; }
       if (!dob) { alertEl.textContent = 'Date of birth is required.'; alertEl.classList.remove('d-none'); return; }
 
       alertEl.classList.add('d-none');
@@ -1101,8 +1118,9 @@
 
     function openAddObserver() {
       document.getElementById('observerModalTitle').textContent = 'Add Observer';
-      document.getElementById('observerId').value = '';
-      document.getElementById('observerName').value = '';
+      document.getElementById('observerId').value           = '';
+      document.getElementById('observerFirstName').value    = '';
+      document.getElementById('observerLastName').value     = '';
       document.getElementById('observerAlert').classList.add('d-none');
       _populateObserverStudentDropdown();
       observerModal.show();
@@ -1113,22 +1131,26 @@
       if (!o) return;
       document.getElementById('observerModalTitle').textContent = 'Edit Observer';
       document.getElementById('observerId').value = id;
-      document.getElementById('observerName').value = o.name;
+      const parts = (o.name || '').split(' ');
+      document.getElementById('observerFirstName').value = parts[0] || '';
+      document.getElementById('observerLastName').value  = parts.slice(1).join(' ') || '';
       document.getElementById('observerAlert').classList.add('d-none');
       _populateObserverStudentDropdown(o.linked_student_id || null);
       observerModal.show();
     }
 
     async function saveObserver() {
-      const token   = localStorage.getItem('token');
-      const id      = document.getElementById('observerId').value;
-      const name    = document.getElementById('observerName').value.trim();
-      const alertEl = document.getElementById('observerAlert');
-      const saveBtn = document.getElementById('observerSaveBtn');
+      const token     = localStorage.getItem('token');
+      const id        = document.getElementById('observerId').value;
+      const firstName = document.getElementById('observerFirstName').value.trim();
+      const lastName  = document.getElementById('observerLastName').value.trim();
+      const name      = [firstName, lastName].filter(Boolean).join(' ');
+      const alertEl   = document.getElementById('observerAlert');
+      const saveBtn   = document.getElementById('observerSaveBtn');
       const linkedStudentRaw = document.getElementById('observerLinkedStudent').value;
       const linked_student_id = linkedStudentRaw ? parseInt(linkedStudentRaw) : null;
 
-      if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      if (!firstName) { alertEl.textContent = 'First name is required.'; alertEl.classList.remove('d-none'); return; }
       if (!linkedStudentRaw) { alertEl.textContent = 'A linked dancer is required.'; alertEl.classList.remove('d-none'); return; }
       alertEl.classList.add('d-none');
       saveBtn.disabled = true;

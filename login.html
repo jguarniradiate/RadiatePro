@@ -353,7 +353,7 @@
         const first = data.detail[0];
         if (!first) return fallback;
         const msg = typeof first === 'object' ? (first.msg || fallback) : String(first);
-        if (msg.toLowerCase().includes('email') || msg.toLowerCase().includes('pattern'))
+        if (msg.toLowerCase().includes('pattern'))
           return 'Please enter a valid email address.';
         return msg;
       }
@@ -479,7 +479,22 @@
         try { data = await res.json(); } catch {}
         if (!res.ok) throw new Error(extractError(data, `Error ${res.status}`));
 
-        showAlert('Account created! Check your email to verify before signing in.', 'success');
+        // Auto-login so the user lands on the dashboard immediately
+        try {
+          const loginRes = await fetch(`${API}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+          });
+          if (loginRes.ok) {
+            const loginData = await loginRes.json();
+            localStorage.setItem('token', loginData.access_token);
+            window.location.href = 'dashboard.html';
+            return;
+          }
+        } catch {}
+        // Fallback: show success and let user log in manually
+        showAlert('Account created! Please check your email for a verification link, then sign in.', 'success');
         form.reset();
         form.classList.remove('was-validated');
       } catch (err) {

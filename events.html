@@ -260,6 +260,36 @@
   <div id="sidebarOverlay" onclick="toggleSidebar()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:199;"></div>
 
   <!-- Registration Modal -->
+  <!-- Email Verification Required Modal -->
+  <div class="modal fade" id="verifyEmailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+      <div class="modal-content" style="background:#1a1a1a;border:1px solid #a16207;color:#f0f0f0;">
+        <div class="modal-header" style="border-bottom-color:#2a2a2a;padding:1.25rem 1.5rem .75rem;">
+          <div>
+            <div style="font-size:1.5rem;margin-bottom:.35rem;">&#9993;</div>
+            <h5 class="modal-title" style="color:#E3FC02;font-size:1.05rem;font-weight:700;">Verify Your Email</h5>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" style="filter:invert(1);"></button>
+        </div>
+        <div class="modal-body" style="padding:1rem 1.5rem 1.25rem;">
+          <p style="color:#ccc;font-size:.9rem;margin-bottom:1rem;">
+            You need to verify your email address before registering for events.<br>
+            <span style="color:#888;font-size:.82rem;">Check your inbox for the verification link, or request a new one below.</span>
+          </p>
+          <div id="verifyModalAlert" class="d-none" style="background:#0d2e18;border:1px solid #198754;color:#6fcf97;padding:.6rem .9rem;border-radius:6px;font-size:.85rem;margin-bottom:.75rem;"></div>
+        </div>
+        <div class="modal-footer" style="border-top-color:#2a2a2a;padding:.75rem 1.5rem;">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-sm py-1 px-4" id="verifyModalResendBtn"
+            style="background:#a16207;color:#fff;border:none;font-weight:600;"
+            onclick="resendFromModal()">
+            Resend Verification Email
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal fade" id="regModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -304,9 +334,14 @@
               <div id="quickAddAlert" class="alert alert-danger d-none mb-2" style="font-size:.8rem;padding:.4rem .75rem;"></div>
               <div class="d-flex gap-2 flex-wrap align-items-end">
                 <div>
-                  <label class="form-label mb-1" style="font-size:.75rem;color:#aaa;">Name *</label>
-                  <input type="text" id="qsName" class="form-control form-control-sm" placeholder="Full name"
-                    style="background:#111;border-color:#333;color:#f0f0f0;width:180px;">
+                  <label class="form-label mb-1" style="font-size:.75rem;color:#aaa;">First Name *</label>
+                  <input type="text" id="qsFirstName" class="form-control form-control-sm" placeholder="First"
+                    style="background:#111;border-color:#333;color:#f0f0f0;width:120px;">
+                </div>
+                <div>
+                  <label class="form-label mb-1" style="font-size:.75rem;color:#aaa;">Last Name *</label>
+                  <input type="text" id="qsLastName" class="form-control form-control-sm" placeholder="Last"
+                    style="background:#111;border-color:#333;color:#f0f0f0;width:120px;">
                 </div>
                 <div>
                   <label class="form-label mb-1" style="font-size:.75rem;color:#aaa;">Date of Birth <span class="text-danger">*</span></label>
@@ -411,6 +446,7 @@
     let allEvents   = [];     // full events list — kept so tab switching can re-filter without a re-fetch
     let currentEventsFilter = 'all'; // 'all' | 'mine'
     let regModal;
+    let verifyEmailModal;       // modal shown when email not verified
     let currentRegEvent = null; // full event object for the open modal
     let stripeInstance = null;
     let stripeCheckoutInstance = null;
@@ -558,16 +594,18 @@
     function toggleAddStudentForm() {
       const form = document.getElementById('quickAddStudentForm');
       form.classList.toggle('d-none');
-      if (!form.classList.contains('d-none')) document.getElementById('qsName').focus();
+      if (!form.classList.contains('d-none')) document.getElementById('qsFirstName').focus();
     }
 
     async function quickSaveStudent() {
-      const token   = localStorage.getItem('token');
-      const name    = document.getElementById('qsName').value.trim();
-      const alertEl = document.getElementById('quickAddAlert');
-      const saveBtn = document.getElementById('qsSaveBtn');
+      const token     = localStorage.getItem('token');
+      const firstName = document.getElementById('qsFirstName').value.trim();
+      const lastName  = document.getElementById('qsLastName').value.trim();
+      const name      = [firstName, lastName].filter(Boolean).join(' ');
+      const alertEl   = document.getElementById('quickAddAlert');
+      const saveBtn   = document.getElementById('qsSaveBtn');
       const dob = document.getElementById('qsDob').value;
-      if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      if (!firstName) { alertEl.textContent = 'First name is required.'; alertEl.classList.remove('d-none'); return; }
       if (!dob) { alertEl.textContent = 'Date of birth is required.'; alertEl.classList.remove('d-none'); return; }
       alertEl.classList.add('d-none');
       saveBtn.disabled = true; saveBtn.innerHTML = '…';
@@ -583,7 +621,6 @@
         });
         let data = {}; try { data = await res.json(); } catch {}
         if (res.ok) {
-          // Add to local list and re-render the table with new student pre-selected
           myStudents.push(data);
           const currentSelected = getSelectedStudentIds();
           currentSelected.push(data.id);
@@ -593,9 +630,10 @@
           const qPendingIds = qPendingRaw.filter(x => !String(x).startsWith('o')).map(x => parseInt(x));
           renderStudentTable(currentSelected, qLocked, qReg ? qReg.payment_status : null, qPendingIds);
           // Clear form and hide
-          document.getElementById('qsName').value = '';
-          document.getElementById('qsDob').value  = '';
-          document.getElementById('qsGender').value = '';
+          document.getElementById('qsFirstName').value = '';
+          document.getElementById('qsLastName').value  = '';
+          document.getElementById('qsDob').value        = '';
+          document.getElementById('qsGender').value     = '';
           document.getElementById('quickAddStudentForm').classList.add('d-none');
         } else { alertEl.textContent = data.detail || `Error ${res.status}`; alertEl.classList.remove('d-none'); }
       } catch { alertEl.textContent = 'Something went wrong.'; alertEl.classList.remove('d-none'); }
@@ -882,9 +920,12 @@
     // ── Registration modal ─────────────────────────────────────────────────────
 
     function openRegModal(event) {
-      // Block registration if email not verified
+      // Block registration if email not verified — show the verification modal
       if (currentUser && !currentUser.email_verified) {
-        showVerificationBanner();
+        document.getElementById('verifyModalAlert').classList.add('d-none');
+        const btn = document.getElementById('verifyModalResendBtn');
+        if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; btn.style.background = '#a16207'; }
+        verifyEmailModal.show();
         return;
       }
       const observersOnly = false; // kept for future use; modal always shows both
@@ -1368,27 +1409,22 @@
     // ── Email verification helpers ─────────────────────────────────────────────
     let _verificationBannerShown = false;
     function showVerificationBanner() {
-      if (_verificationBannerShown) {
-        // If already shown, just flash it
-        const b = document.getElementById('verificationBanner');
-        if (b) { b.style.animation = 'none'; b.offsetHeight; b.style.animation = ''; }
-        return;
-      }
+      if (_verificationBannerShown) return;
       _verificationBannerShown = true;
       const banner = document.createElement('div');
       banner.id = 'verificationBanner';
-      banner.style.cssText = 'background:#1a1200;border:1px solid #a16207;color:#fbbf24;padding:.75rem 1.25rem;border-radius:8px;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;';
+      banner.style.cssText = 'background:#1a1200;border:1px solid #a16207;color:#fbbf24;padding:.65rem 1.25rem;border-radius:8px;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;font-size:.85rem;';
       banner.innerHTML = `
-        <span>&#9888; Your email is not verified. Please verify your email to register for events.</span>
-        <button id="resendVerBtn" class="btn btn-sm py-1 px-3" style="background:#a16207;color:#fff;border:none;font-size:.82rem;" onclick="resendVerificationEmail()">
-          Resend Verification Email
+        <span>&#9888; Your email is not verified. Verify to register for events.</span>
+        <button id="resendVerBtn" class="btn btn-sm py-1 px-3" style="background:#a16207;color:#fff;border:none;font-size:.8rem;" onclick="resendVerificationEmail('resendVerBtn','verificationBanner')">
+          Resend Email
         </button>`;
       document.querySelector('.content').prepend(banner);
     }
 
-    async function resendVerificationEmail() {
+    async function resendVerificationEmail(btnId, bannerId) {
       const token = localStorage.getItem('token');
-      const btn = document.getElementById('resendVerBtn');
+      const btn = btnId ? document.getElementById(btnId) : null;
       if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
       try {
         const res = await fetch(`${API}/auth/resend-verification`, {
@@ -1396,16 +1432,40 @@
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          if (btn) { btn.textContent = '✓ Email Sent'; btn.style.background = '#166534'; }
-          const banner = document.getElementById('verificationBanner');
-          if (banner) banner.style.borderColor = '#166534';
+          if (btn) { btn.textContent = '✓ Sent'; btn.style.background = '#166534'; }
+          if (bannerId) { const b = document.getElementById(bannerId); if (b) b.style.borderColor = '#166534'; }
         } else {
-          if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }
+          if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
           alert(data.detail || 'Failed to send email. Please try again.');
         }
       } catch {
-        if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }
+        if (btn) { btn.disabled = false; btn.textContent = 'Resend Email'; }
         alert('Something went wrong. Please try again.');
+      }
+    }
+
+    async function resendFromModal() {
+      const token = localStorage.getItem('token');
+      const btn = document.getElementById('verifyModalResendBtn');
+      const alertEl = document.getElementById('verifyModalAlert');
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+      try {
+        const res = await fetch(`${API}/auth/resend-verification`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          if (btn) { btn.textContent = '✓ Email Sent!'; btn.style.background = '#166534'; }
+          alertEl.textContent = 'Verification email sent — check your inbox (and spam folder).';
+          alertEl.classList.remove('d-none');
+        } else {
+          if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }
+          alertEl.style.cssText = 'background:#2d0000;border:1px solid #dc2626;color:#f87171;padding:.6rem .9rem;border-radius:6px;font-size:.85rem;margin-bottom:.75rem;';
+          alertEl.textContent = data.detail || 'Failed to send email. Please try again.';
+          alertEl.classList.remove('d-none');
+        }
+      } catch {
+        if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }
       }
     }
 
@@ -1608,7 +1668,8 @@
     (async () => {
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html'; return; }
-      regModal = new bootstrap.Modal(document.getElementById('regModal'));
+      regModal          = new bootstrap.Modal(document.getElementById('regModal'));
+      verifyEmailModal  = new bootstrap.Modal(document.getElementById('verifyEmailModal'));
 
       // Clean up Stripe embedded checkout when modal is fully closed
       document.getElementById('regModal').addEventListener('hidden.bs.modal', async function() {

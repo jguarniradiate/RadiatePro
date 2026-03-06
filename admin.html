@@ -207,7 +207,10 @@
           <div id="adminStudentAlert" class="alert alert-danger d-none mb-3"></div>
           <input type="hidden" id="asUserId">
           <input type="hidden" id="asStudentId">
-          <div class="mb-3"><label class="form-label fw-semibold">Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="asName"></div>
+          <div class="row g-2 mb-3">
+            <div class="col-6"><label class="form-label fw-semibold">First Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="asFirstName" placeholder="First name"></div>
+            <div class="col-6"><label class="form-label fw-semibold">Last Name</label><input type="text" class="form-control" id="asLastName" placeholder="Last name"></div>
+          </div>
           <div class="mb-3"><label class="form-label fw-semibold">Date of Birth</label><input type="date" class="form-control" id="asDob"></div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Gender</label>
@@ -239,7 +242,10 @@
         <div class="modal-body">
           <div id="adminAddStudentAlert" class="alert alert-danger d-none mb-3"></div>
           <input type="hidden" id="aasUserId">
-          <div class="mb-3"><label class="form-label fw-semibold">Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="aasName" placeholder="Student's full name"></div>
+          <div class="row g-2 mb-3">
+            <div class="col-6"><label class="form-label fw-semibold">First Name <span class="text-danger">*</span></label><input type="text" class="form-control" id="aasFirstName" placeholder="First name"></div>
+            <div class="col-6"><label class="form-label fw-semibold">Last Name</label><input type="text" class="form-control" id="aasLastName" placeholder="Last name"></div>
+          </div>
           <div class="mb-3"><label class="form-label fw-semibold">Date of Birth</label><input type="date" class="form-control" id="aasDob"></div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Gender</label>
@@ -307,9 +313,15 @@
             </button>
             <div id="newStudentForm" class="d-none">
               <div id="newStudentAlert" class="alert alert-danger d-none mb-2 py-2" style="font-size:.85rem;"></div>
-              <div class="mb-2">
-                <label class="form-label fw-semibold" style="font-size:.82rem;">Full Name <span class="text-danger">*</span></label>
-                <input type="text" class="form-control form-control-sm" id="newStudentName" placeholder="Student's full name">
+              <div class="row g-2 mb-2">
+                <div class="col-6">
+                  <label class="form-label fw-semibold" style="font-size:.82rem;">First Name <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control form-control-sm" id="newStudentFirstName" placeholder="First name">
+                </div>
+                <div class="col-6">
+                  <label class="form-label fw-semibold" style="font-size:.82rem;">Last Name</label>
+                  <input type="text" class="form-control form-control-sm" id="newStudentLastName" placeholder="Last name">
+                </div>
               </div>
               <div class="row g-2 mb-2">
                 <div class="col-6">
@@ -732,7 +744,9 @@
     function openAdminEditStudent(userId, studentId, name, dob, gender) {
       document.getElementById('asUserId').value    = userId;
       document.getElementById('asStudentId').value = studentId;
-      document.getElementById('asName').value      = name;
+      const spaceIdx = name ? name.indexOf(' ') : -1;
+      document.getElementById('asFirstName').value = spaceIdx >= 0 ? name.slice(0, spaceIdx) : (name || '');
+      document.getElementById('asLastName').value  = spaceIdx >= 0 ? name.slice(spaceIdx + 1) : '';
       document.getElementById('asDob').value       = dob;
       document.getElementById('asGender').value    = gender;
       document.getElementById('adminStudentAlert').classList.add('d-none');
@@ -745,8 +759,10 @@
       const studentId = document.getElementById('asStudentId').value;
       const alertEl   = document.getElementById('adminStudentAlert');
       const saveBtn   = document.getElementById('adminStudentSaveBtn');
-      const name      = document.getElementById('asName').value.trim();
-      if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      const firstName = document.getElementById('asFirstName').value.trim();
+      const lastName  = document.getElementById('asLastName').value.trim();
+      const name      = lastName ? `${firstName} ${lastName}` : firstName;
+      if (!firstName) { alertEl.textContent = 'First name is required.'; alertEl.classList.remove('d-none'); return; }
       alertEl.classList.add('d-none');
       saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
       try {
@@ -780,22 +796,25 @@
     }
 
     function openAdminAddStudent(userId, userName) {
-      document.getElementById('aasUserId').value  = userId;
-      document.getElementById('aasName').value    = '';
-      document.getElementById('aasDob').value     = '';
-      document.getElementById('aasGender').value  = '';
+      document.getElementById('aasUserId').value    = userId;
+      document.getElementById('aasFirstName').value = '';
+      document.getElementById('aasLastName').value  = '';
+      document.getElementById('aasDob').value       = '';
+      document.getElementById('aasGender').value    = '';
       document.getElementById('adminAddStudentTitle').textContent = `Add Student — ${userName}`;
       document.getElementById('adminAddStudentAlert').classList.add('d-none');
       adminAddStudentModal.show();
     }
 
     async function saveAdminNewStudent() {
-      const token   = localStorage.getItem('token');
-      const userId  = document.getElementById('aasUserId').value;
-      const alertEl = document.getElementById('adminAddStudentAlert');
-      const saveBtn = document.getElementById('adminAddStudentSaveBtn');
-      const name    = document.getElementById('aasName').value.trim();
-      if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      const token     = localStorage.getItem('token');
+      const userId    = document.getElementById('aasUserId').value;
+      const alertEl   = document.getElementById('adminAddStudentAlert');
+      const saveBtn   = document.getElementById('adminAddStudentSaveBtn');
+      const firstName = document.getElementById('aasFirstName').value.trim();
+      const lastName  = document.getElementById('aasLastName').value.trim();
+      const name      = lastName ? `${firstName} ${lastName}` : firstName;
+      if (!firstName) { alertEl.textContent = 'First name is required.'; alertEl.classList.remove('d-none'); return; }
       alertEl.classList.add('d-none');
       saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
       try {
@@ -2066,9 +2085,10 @@
       // Reset new student form
       document.getElementById('newStudentForm').classList.add('d-none');
       document.getElementById('newStudentToggleIcon').textContent = '+';
-      document.getElementById('newStudentName').value = '';
-      document.getElementById('newStudentDob').value  = '';
-      document.getElementById('newStudentGender').value = '';
+      document.getElementById('newStudentFirstName').value = '';
+      document.getElementById('newStudentLastName').value  = '';
+      document.getElementById('newStudentDob').value       = '';
+      document.getElementById('newStudentGender').value    = '';
       document.getElementById('newStudentAlert').classList.add('d-none');
       addRegStudentModal.show();
 
@@ -2148,14 +2168,16 @@
 
     async function createAndAddStudent() {
       const { eventId, regId, userId } = _regCtx;
-      const token    = localStorage.getItem('token');
-      const alertEl  = document.getElementById('newStudentAlert');
+      const token     = localStorage.getItem('token');
+      const alertEl   = document.getElementById('newStudentAlert');
       const createBtn = document.getElementById('createNewStudentBtn');
-      const name     = document.getElementById('newStudentName').value.trim();
+      const firstName = document.getElementById('newStudentFirstName').value.trim();
+      const lastName  = document.getElementById('newStudentLastName').value.trim();
+      const name      = lastName ? `${firstName} ${lastName}` : firstName;
 
       const dob = document.getElementById('newStudentDob').value;
-      if (!name) {
-        alertEl.textContent = 'Full name is required.';
+      if (!firstName) {
+        alertEl.textContent = 'First name is required.';
         alertEl.classList.remove('d-none');
         return;
       }
@@ -2217,9 +2239,10 @@
         await maybeAdminFinalize(eventId, regId, token, 'addStudentPayStatus');
 
         // Reset and collapse the form
-        document.getElementById('newStudentName').value  = '';
-        document.getElementById('newStudentDob').value   = '';
-        document.getElementById('newStudentGender').value = '';
+        document.getElementById('newStudentFirstName').value = '';
+        document.getElementById('newStudentLastName').value  = '';
+        document.getElementById('newStudentDob').value       = '';
+        document.getElementById('newStudentGender').value    = '';
         document.getElementById('newStudentForm').classList.add('d-none');
         document.getElementById('newStudentToggleIcon').textContent = '+';
 
