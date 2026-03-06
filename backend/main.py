@@ -855,8 +855,6 @@ def create_checkout(
     event = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found.")
-    if not body.student_ids and not body.observer_ids:
-        raise HTTPException(status_code=400, detail="Select at least one student or observer.")
 
     existing = db.query(models.EventRegistration).filter(
         models.EventRegistration.event_id == event_id,

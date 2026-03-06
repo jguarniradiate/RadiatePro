@@ -835,6 +835,23 @@
         }
       }
 
+      // Validate: each selected observer's linked dancer must also be selected or already registered
+      const lockedStudentIds = reg ? (reg.student_ids || []) : [];
+      for (const obsId of observerIds) {
+        const obs = myObservers.find(o => o.id === obsId);
+        if (obs && obs.linked_student_id) {
+          const isSelected = studentIds.includes(obs.linked_student_id);
+          const isLocked   = lockedStudentIds.includes(obs.linked_student_id);
+          if (!isSelected && !isLocked) {
+            const linkedStudent = myStudents.find(s => s.id === obs.linked_student_id);
+            const linkedName = linkedStudent ? linkedStudent.name : 'their linked dancer';
+            alertEl.textContent = `Observer "${obs.name}" requires ${linkedName} to also be selected.`;
+            alertEl.classList.remove('d-none');
+            return;
+          }
+        }
+      }
+
       alertEl.classList.add('d-none');
       const origBtnText = saveBtn.textContent;
       saveBtn.disabled = true;
@@ -1030,6 +1047,22 @@
         return;
       }
 
+      // Validate: each selected observer's linked dancer must also be selected or already registered
+      for (const obsId of newObsIds) {
+        const obs = myObservers.find(o => o.id === obsId);
+        if (obs && obs.linked_student_id) {
+          const isNewlySelected = newIds.includes(obs.linked_student_id);
+          const isAlreadyLocked = lockedIds.includes(obs.linked_student_id);
+          if (!isNewlySelected && !isAlreadyLocked) {
+            const linkedStudent = myStudents.find(s => s.id === obs.linked_student_id);
+            const linkedName = linkedStudent ? linkedStudent.name : 'their linked dancer';
+            alertEl.textContent = `Observer "${obs.name}" requires ${linkedName} to also be selected.`;
+            alertEl.classList.remove('d-none');
+            return;
+          }
+        }
+      }
+
       alertEl.classList.add('d-none');
       draftBtn.disabled = true;
       draftBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
@@ -1068,14 +1101,16 @@
       openRegModal(eventsCache[eventId]);
     }
 
-    // Called when user clicks "Pay for N Added Dancer(s)" — triggers Stripe checkout
+    // Called when user clicks "Pay for N Added Dancer(s)" — triggers Stripe hosted checkout
     // for only the admin-added pending dancers, without opening the registration modal.
     async function payForPendingDancers(eventId) {
       const token = localStorage.getItem('token');
       const btn   = document.getElementById(`pay-pending-btn-${eventId}`);
+      const origLabel = btn ? btn.innerHTML : '';
       if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading…'; }
       try {
-        const res = await fetch(`${API}/events/${eventId}/register/checkout?embedded=true`, {
+        // Use hosted checkout (no embedded=true) so we can redirect directly to Stripe.
+        const res = await fetch(`${API}/events/${eventId}/register/checkout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ student_ids: [], observer_ids: [] }),
@@ -1083,7 +1118,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           alert(data.detail || 'Failed to start checkout.');
-          if (btn) { btn.disabled = false; btn.textContent = btn.textContent.replace('Loading…', 'Pay'); }
+          if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
           return;
         }
         if (data.session_id === 'free') {
@@ -1092,12 +1127,13 @@
           updateEventCard(eventId, true);
           return;
         }
-        // Open Stripe embedded checkout in the existing modal
-        currentRegEvent = eventsCache[eventId];
-        openRegModal(eventsCache[eventId], { pendingCheckout: true, clientSecret: data.client_secret });
+        if (data.checkout_url) {
+          // Redirect to hosted Stripe checkout page
+          window.location.href = data.checkout_url;
+        }
       } catch {
         alert('Something went wrong. Please try again.');
-        if (btn) { btn.disabled = false; }
+        if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
       }
     }
 
