@@ -1416,8 +1416,9 @@
 
       // ── Summary line ───────────────────────────────────────
       // Total paid = Stripe amount_paid + sum of individually cash-paid tokens
+      // Exclude tokens also in pendingSet — balance due overrides cash-paid status
       const cashPaidTotal = [...cashSet].reduce((s, tok) =>
-        s + (tok.startsWith('o') ? obsvPrice : pricePerStu), 0);
+        pendingSet.has(tok) ? s : s + (tok.startsWith('o') ? obsvPrice : pricePerStu), 0);
       const totalPaidAmount = (reg.amount_paid || 0) + cashPaidTotal;
 
       doc.setFontSize(10); doc.setFont('helvetica', 'bold');
