@@ -1022,11 +1022,12 @@
     }
 
     async function saveDraftRegistration() {
-      const token    = localStorage.getItem('token');
-      const eventId  = parseInt(document.getElementById('regEventId').value);
-      const alertEl  = document.getElementById('regAlert');
-      const draftBtn = document.getElementById('regSaveDraftBtn');
-      const studentIds = getSelectedStudentIds();
+      const token       = localStorage.getItem('token');
+      const eventId     = parseInt(document.getElementById('regEventId').value);
+      const alertEl     = document.getElementById('regAlert');
+      const draftBtn    = document.getElementById('regSaveDraftBtn');
+      const studentIds  = getSelectedStudentIds();
+      const observerIds = getSelectedObserverIds();
 
       if (!studentIds.length) {
         alertEl.textContent = 'Please select at least one student.';
@@ -1042,7 +1043,7 @@
         const res = await fetch(`${API}/events/${eventId}/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ student_ids: studentIds }),
+          body: JSON.stringify({ student_ids: studentIds, observer_ids: observerIds }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -1055,6 +1056,7 @@
           ...myRegistrations[String(eventId)],
           id: data.id,
           student_ids: studentIds,
+          observer_ids: observerIds,
           is_finalized: false,
           payment_status: null,
           stripe_session_id: null,
