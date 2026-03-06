@@ -1965,18 +1965,26 @@ def admin_remove_reg_student(
             reg.payment_status = "admin-paid"
         if not reg.finalized_at:
             reg.finalized_at = datetime.now(timezone.utc)
-    # Credit: if this dancer had already been paid (cash or Stripe) and was NOT pending,
-    # accumulate their unit price as a credit on the registration.
-    if not was_pending:
-        cash_tokens = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
-        was_cash_paid   = tok in cash_tokens
-        was_stripe_paid = (reg.payment_status == "paid" and reg.is_finalized)
-        if was_cash_paid or was_stripe_paid:
-            from decimal import Decimal as D
-            event = db.query(models.Event).filter(models.Event.id == event_id).first()
-            price_per_student, _ = _effective_price(event) if event else (D("0"), None)
-            if price_per_student > D("0"):
-                reg.credit_amount = (reg.credit_amount or D("0")) + price_per_student
+    # Record a transaction to reflect the removal in the ledger
+    from decimal import Decimal as D
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    price_per_student, _ = _effective_price(event) if event else (D("0"), None)
+    cash_tokens = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
+    was_cash_paid   = tok in cash_tokens
+    was_stripe_paid = (reg.payment_status == "paid" and reg.is_finalized)
+
+    if was_pending:
+        # Unpaid removal — audit trail entry
+        _record_transaction(db, reg, D("0"), "removed",
+                            description="1 dancer (removed — unpaid)",
+                            student_count=1, student_id=student_id)
+    elif was_cash_paid or was_stripe_paid:
+        # Paid removal — issue credit and record the reversal
+        if price_per_student > D("0"):
+            reg.credit_amount = (reg.credit_amount or D("0")) + price_per_student
+            _record_transaction(db, reg, price_per_student, "credit",
+                                description="1 dancer (removed — credit issued)",
+                                student_count=1, student_id=student_id)
         # Clean the token from cash_student_ids since attendee is gone
         if tok in cash_tokens:
             cash_tokens = [x for x in cash_tokens if x != tok]
@@ -2475,18 +2483,26 @@ def admin_remove_reg_observer(
             reg.payment_status = "admin-paid"
         if not reg.finalized_at:
             reg.finalized_at = datetime.now(timezone.utc)
-    # Credit: if this observer had already been paid (cash or Stripe) and was NOT pending,
-    # accumulate their unit price as a credit on the registration.
-    if not was_pending:
-        cash_tokens = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
-        was_cash_paid   = tok in cash_tokens
-        was_stripe_paid = (reg.payment_status == "paid" and reg.is_finalized)
-        if was_cash_paid or was_stripe_paid:
-            from decimal import Decimal as D
-            event = db.query(models.Event).filter(models.Event.id == event_id).first()
-            observer_price = D(str(event.observer_price)) if event and event.observer_price else D("0")
-            if observer_price > D("0"):
-                reg.credit_amount = (reg.credit_amount or D("0")) + observer_price
+    # Record a transaction to reflect the removal in the ledger
+    from decimal import Decimal as D
+    event = db.query(models.Event).filter(models.Event.id == event_id).first()
+    observer_price = D(str(event.observer_price)) if event and event.observer_price else D("0")
+    cash_tokens = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
+    was_cash_paid   = tok in cash_tokens
+    was_stripe_paid = (reg.payment_status == "paid" and reg.is_finalized)
+
+    if was_pending:
+        # Unpaid removal — audit trail entry
+        _record_transaction(db, reg, D("0"), "removed",
+                            description="1 observer (removed — unpaid)",
+                            observer_count=1, observer_id=observer_id)
+    elif was_cash_paid or was_stripe_paid:
+        # Paid removal — issue credit and record the reversal
+        if observer_price > D("0"):
+            reg.credit_amount = (reg.credit_amount or D("0")) + observer_price
+            _record_transaction(db, reg, observer_price, "credit",
+                                description="1 observer (removed — credit issued)",
+                                observer_count=1, observer_id=observer_id)
         # Clean the token from cash_student_ids since attendee is gone
         if tok in cash_tokens:
             cash_tokens = [x for x in cash_tokens if x != tok]

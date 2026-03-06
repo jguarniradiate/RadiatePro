@@ -1275,7 +1275,9 @@
         }
 
         const txAmt = tx => {
-          if (tx.payment_status === 'free') return '<span style="color:#4ade80;font-weight:600;">Free</span>';
+          if (tx.payment_status === 'free')    return '<span style="color:#4ade80;font-weight:600;">Free</span>';
+          if (tx.payment_status === 'removed') return '<span style="color:#6b7280;font-style:italic;">Removed</span>';
+          if (tx.payment_status === 'credit')  return `<span style="color:#fbbf24;font-weight:600;">💳 &#8722;$${tx.amount.toFixed(2)}</span>`;
           if (tx.payment_status === 'admin-paid' && tx.amount > 0) return `<span style="color:#22c55e;font-weight:600;">$${tx.amount.toFixed(2)}</span>`;
           if (tx.payment_status === 'admin-paid') return '<span style="color:#a78bfa;">Complimentary</span>';
           return `<span style="color:#22c55e;font-weight:600;">$${tx.amount.toFixed(2)}</span>`;
