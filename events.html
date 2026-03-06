@@ -414,9 +414,8 @@
                     <button id="reg-btn-${e.id}"
                       class="btn btn-sm ${isFinalized ? 'btn-outline-secondary' : reg ? 'btn-outline-secondary' : isFull ? 'btn-outline-secondary' : 'btn-accent'} py-1 px-3"
                       ${isFull && !reg ? 'disabled' : `onclick="openRegModal(eventsCache[${e.id}])"`}>
-                      ${isFinalized ? '+ Add Dancers' : reg ? 'Edit Registration' : isFull ? '&#9940; Event Full' : 'Register'}
+                      ${isFinalized ? 'Update Registration' : reg ? 'Edit Registration' : isFull ? '&#9940; Event Full' : 'Register'}
                     </button>
-                    ${isFinalized ? `<button class="btn btn-sm btn-outline-secondary py-1 px-3" id="obs-btn-${e.id}" onclick="openRegModal(eventsCache[${e.id}], true)">+ Add Observers</button>` : ''}
                     ${(reg && !isFinalized && hasPricing) ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="finalize-btn-${e.id}" onclick="resumeCheckout(${e.id})">Complete Registration</button>` : ''}
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
                 </div>
@@ -698,7 +697,8 @@
 
     // ── Registration modal ─────────────────────────────────────────────────────
 
-    function openRegModal(event, observersOnly = false) {
+    function openRegModal(event) {
+      const observersOnly = false; // kept for future use; modal always shows both
       currentRegEvent = event;
       document.getElementById('regEventId').value = event.id;
       document.getElementById('regAlert').classList.add('d-none');
@@ -716,7 +716,7 @@
       document.getElementById('regModalTitle').textContent = event.title;
       const regBadge = document.getElementById('regModalBadge');
       if (isFinalized) {
-        regBadge.textContent = observersOnly ? 'Add Observers' : 'Update Registration';
+        regBadge.textContent = 'Update Registration';
         regBadge.style.cssText = 'display:inline-block;background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.4);font-size:.7rem;font-weight:700;padding:.2rem .55rem;border-radius:20px;margin-top:.25rem;letter-spacing:.03em;text-transform:uppercase;';
         regBadge.classList.remove('d-none');
       } else {
@@ -948,23 +948,17 @@
       if (btn) {
         if (isRegistered && reg && reg.is_finalized) {
           btn.className = 'btn btn-sm btn-outline-secondary py-1 px-3';
-          btn.textContent = '+ Add Dancers';
+          btn.textContent = 'Update Registration';
           btn.onclick = () => openRegModal(eventsCache[eventId]);
           const parent = btn.parentElement;
           parent.querySelectorAll('.reg-badge,.badge-finalized,.badge-pending-pay').forEach(el => el.remove());
+          // Remove any stale obs-btn
+          const oldObs = parent.querySelector(`#obs-btn-${eventId}`);
+          if (oldObs) oldObs.remove();
           const badge = document.createElement('span');
           badge.className = 'badge-finalized';
           badge.innerHTML = '&#10003; Finalized';
           parent.insertBefore(badge, btn);
-          // Add "Add Observers" button if not already there
-          if (!parent.querySelector(`#obs-btn-${eventId}`)) {
-            const obsBtn = document.createElement('button');
-            obsBtn.id = `obs-btn-${eventId}`;
-            obsBtn.className = 'btn btn-sm btn-outline-secondary py-1 px-3';
-            obsBtn.textContent = '+ Add Observers';
-            obsBtn.onclick = () => openRegModal(eventsCache[eventId], true);
-            parent.appendChild(obsBtn);
-          }
         } else if (isRegistered) {
           btn.className = 'btn btn-sm btn-outline-secondary py-1 px-3';
           btn.textContent = 'Edit Registration';
