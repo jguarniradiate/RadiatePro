@@ -433,6 +433,48 @@ def _effective_price(event: models.Event):
     return D(str(price)), False
 
 
+def _auto_apply_credit(db, reg, event, tok: str, student_id: int = None, observer_id: int = None) -> bool:
+    """If reg has enough credit to cover one pending attendee token, apply it immediately.
+
+    Removes the token from pending_student_ids, adds it to cash_student_ids,
+    deducts from credit_amount, and records a 'credit applied' transaction.
+    Returns True if credit was applied, False if credit was insufficient or token not pending.
+    """
+    from decimal import Decimal as D
+    credit = D(str(reg.credit_amount or 0))
+    if credit <= D("0"):
+        return False
+    is_obs = tok.startswith("o")
+    obs_price = D(str(event.observer_price)) if event and event.observer_price else D("0")
+    stu_price, _ = _effective_price(event) if event else (D("0"), None)
+    unit_price = obs_price if is_obs else stu_price
+    if unit_price <= D("0") or credit < unit_price:
+        return False
+    # Remove from pending
+    pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+    if tok not in pending:
+        return False
+    pending.remove(tok)
+    reg.pending_student_ids = ",".join(pending) if pending else None
+    # Add to cash_student_ids (marks as individually paid)
+    cash_tokens = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
+    if tok not in cash_tokens:
+        cash_tokens.append(tok)
+    reg.cash_student_ids = ",".join(cash_tokens)
+    # Deduct credit
+    reg.credit_amount = credit - unit_price
+    # Record transaction
+    if is_obs:
+        _record_transaction(db, reg, unit_price, "admin-paid",
+                            description="1 observer (credit applied)",
+                            observer_count=1, observer_id=observer_id or int(tok[1:]))
+    else:
+        _record_transaction(db, reg, unit_price, "admin-paid",
+                            description="1 dancer (credit applied)",
+                            student_count=1, student_id=student_id or int(tok))
+    return True
+
+
 def _record_transaction(
     db,
     reg: models.EventRegistration,
@@ -2031,7 +2073,9 @@ def admin_add_reg_student(
             existing_pending.append(str(student_id))
         reg.pending_student_ids = ",".join(existing_pending)
         # Leave is_finalized = True so existing paid dancers stay locked in the UI.
-        # admin-finalize (called if admin selects "Paid") will clear pending_student_ids.
+        # Auto-apply any available credit before leaving the student as balance-due.
+        event = db.query(models.Event).filter(models.Event.id == event_id).first()
+        _auto_apply_credit(db, reg, event, str(student_id), student_id=student_id)
     # If reg is not yet finalized, the whole registration is already pending —
     # no need to track individually.
     db.commit()
@@ -2437,6 +2481,14 @@ def admin_add_reg_observer(
                 linked_student_name = linked.name
 
     reg.pending_student_ids = ",".join(pending) if pending else None
+
+    # Auto-apply any available credit before leaving new attendees as balance-due.
+    if reg.is_finalized:
+        event = db.query(models.Event).filter(models.Event.id == event_id).first()
+        _auto_apply_credit(db, reg, event, f"o{observer_id}", observer_id=observer_id)
+        if linked_student_id:
+            _auto_apply_credit(db, reg, event, str(obs.linked_student_id), student_id=obs.linked_student_id)
+
     db.commit()
     return {
         "message": "Observer added to registration.",
