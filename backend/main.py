@@ -562,6 +562,12 @@ def delete_student(
             ),
         )
 
+    # Remove student from any pending (non-finalized) registration association rows
+    # to avoid FK constraint violations on delete.
+    db.query(models.EventRegistrationStudent).filter(
+        models.EventRegistrationStudent.student_id == student_id
+    ).delete()
+
     db.delete(student)
     db.commit()
     return {"message": "Student deleted."}
@@ -997,42 +1003,85 @@ def verify_payment(
     ).first()
     if not reg:
         raise HTTPException(status_code=404, detail="Registration not found.")
-    if reg.is_finalized:
-        return _build_reg_out(reg)
 
+    # Always retrieve the Stripe session to get metadata for add-students flows
     try:
         session = stripe.checkout.Session.retrieve(body.session_id)
     except stripe.StripeError as e:
+        # If reg is already finalized (e.g. webhook beat us here), just return current state
+        if reg.is_finalized:
+            return _build_reg_out(reg)
         raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message}")
 
     if session.payment_status == "paid":
         from decimal import Decimal as D
-        reg.is_finalized = True
-        reg.payment_status = "paid"
-        amount = D(str(session.amount_total)) / 100
-        reg.amount_paid = amount
-        reg.finalized_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(reg)
-        try:
-            event = db.query(models.Event).filter(models.Event.id == event_id).first()
-            student_names = [ers.student.name for ers in reg.attending_students]
-            observer_names = [ero.observer.name for ero in reg.attending_observers]
-            ev_date_str = event.event_date.strftime("%B %d, %Y") if event and event.event_date else ""
-            observer_price_val = float(event.observer_price) if event and event.observer_price else 0
-            observer_amount = observer_price_val * len(observer_names)
-            email_service.send_registration_confirmation(
-                to_email=user.email,
-                studio_name=user.studio_name,
-                event_title=event.title if event else "Event",
-                event_date=ev_date_str,
-                student_names=student_names,
-                amount_paid=float(amount),
-                observer_names=observer_names,
-                observer_amount=observer_amount,
-            )
-        except Exception:
-            logger.exception("Failed to send confirmation to %s", user.email)
+        meta = session.get("metadata", {}) if hasattr(session, "get") else {}
+        new_student_ids_raw = meta.get("new_student_ids", "")
+        observer_ids_raw = meta.get("observer_ids", "")
+        is_add_students_flow = bool(new_student_ids_raw or observer_ids_raw)
+
+        if is_add_students_flow:
+            # Add-students flow: reg already finalized, add new students from metadata
+            existing_ids = {ers.student_id for ers in reg.attending_students}
+            for sid_str in (new_student_ids_raw.split(",") if new_student_ids_raw else []):
+                try:
+                    sid = int(sid_str.strip())
+                    if sid not in existing_ids:
+                        s = db.query(models.Student).filter(
+                            models.Student.id == sid, models.Student.user_id == user.id
+                        ).first()
+                        if s:
+                            db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+                            existing_ids.add(sid)
+                except ValueError:
+                    pass
+            existing_obs_ids = {ero.observer_id for ero in reg.attending_observers}
+            for oid_str in (observer_ids_raw.split(",") if observer_ids_raw else []):
+                try:
+                    oid = int(oid_str.strip())
+                    if oid not in existing_obs_ids:
+                        o = db.query(models.Observer).filter(
+                            models.Observer.id == oid, models.Observer.user_id == user.id
+                        ).first()
+                        if o:
+                            db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
+                            existing_obs_ids.add(oid)
+                except ValueError:
+                    pass
+            # Update amount_paid to include new payment
+            prev_paid = reg.amount_paid or D("0")
+            reg.amount_paid = prev_paid + D(str(session.amount_total)) / 100
+            reg.finalized_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(reg)
+        else:
+            # Initial registration flow: finalize and record payment
+            reg.is_finalized = True
+            reg.payment_status = "paid"
+            amount = D(str(session.amount_total)) / 100
+            reg.amount_paid = amount
+            reg.finalized_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(reg)
+            try:
+                event = db.query(models.Event).filter(models.Event.id == event_id).first()
+                student_names = [ers.student.name for ers in reg.attending_students]
+                observer_names = [ero.observer.name for ero in reg.attending_observers]
+                ev_date_str = event.event_date.strftime("%B %d, %Y") if event and event.event_date else ""
+                observer_price_val = float(event.observer_price) if event and event.observer_price else 0
+                observer_amount = observer_price_val * len(observer_names)
+                email_service.send_registration_confirmation(
+                    to_email=user.email,
+                    studio_name=user.studio_name,
+                    event_title=event.title if event else "Event",
+                    event_date=ev_date_str,
+                    student_names=student_names,
+                    amount_paid=float(amount),
+                    observer_names=observer_names,
+                    observer_amount=observer_amount,
+                )
+            except Exception:
+                logger.exception("Failed to send confirmation to %s", user.email)
 
     return _build_reg_out(reg)
 

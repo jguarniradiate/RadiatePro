@@ -1198,7 +1198,7 @@
           const container = document.getElementById(`reg-observers-${regId}`);
           if (container) {
             container.querySelectorAll('span.text-muted').forEach(el => { if(el.textContent.trim()==='None') el.remove(); });
-            const addBtn = container.querySelector('button:last-child');
+            const addBtn = container.querySelector(':scope > button');
             const badge = document.createElement('span');
             badge.id = `robs-${regId}-${observerId}`;
             badge.className = 'stu-badge';
@@ -1451,7 +1451,7 @@
           // Inject badge into the registration card
           const container = document.getElementById(`reg-students-${regId}`);
           if (container) {
-            const addBtn = container.querySelector('button:last-child');
+            const addBtn = container.querySelector(':scope > button');
             // Remove "None selected" text if present
             container.querySelectorAll('span.text-muted').forEach(el => { if(el.textContent.trim()==='None selected') el.remove(); });
             const badge = document.createElement('span');
@@ -1531,7 +1531,7 @@
         // Inject badge into the registration card
         const container = document.getElementById(`reg-students-${regId}`);
         if (container) {
-          const addBtn = container.querySelector('button:last-child');
+          const addBtn = container.querySelector(':scope > button');
           container.querySelectorAll('span.text-muted').forEach(el => {
             if (el.textContent.trim() === 'None selected') el.remove();
           });
