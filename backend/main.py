@@ -113,6 +113,8 @@ def run_migrations(eng):
         "ALTER TABLE observers ADD COLUMN IF NOT EXISTS linked_student_id INTEGER REFERENCES students(id) ON DELETE SET NULL",
         # Pending payment tracking for admin-added unpaid dancers
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS pending_student_ids TEXT",
+        # Back-fill: ensure every paid registration is also marked finalized
+        "UPDATE event_registrations SET is_finalized = TRUE WHERE payment_status IN ('paid', 'free', 'admin-paid') AND is_finalized = FALSE",
         # Immutable transaction ledger — one row per payment event
         """CREATE TABLE IF NOT EXISTS transactions (
             id SERIAL PRIMARY KEY,
@@ -1956,14 +1958,19 @@ def admin_add_reg_student(
 def admin_finalize_registration(
     event_id: int,
     reg_id: int,
+    student_id: Optional[int] = Query(None, description="Mark only this student as admin-paid"),
+    observer_id: Optional[int] = Query(None, description="Mark only this observer as admin-paid"),
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
-    """Admin manually marks a registration as paid (cash / offline payment).
+    """Admin manually marks a registration (or a single pending dancer) as paid.
 
-    Sets payment_status = 'admin-paid', is_finalized = True, and records
-    finalized_at so the frontend can distinguish admin approvals from
-    Stripe payments.
+    When student_id or observer_id is provided and the registration is already
+    finalized, only that specific dancer is removed from pending_student_ids so
+    the rest of the pending dancers can still pay via the user portal.
+
+    When called without student_id/observer_id (whole-registration finalize),
+    the entire registration is marked admin-paid and all pending cleared.
     """
     current = get_current_user(authorization, db)
     if not current.is_admin:
@@ -1975,18 +1982,35 @@ def admin_finalize_registration(
     if not reg:
         raise HTTPException(status_code=404, detail="Registration not found.")
     from decimal import Decimal as D
-    _sc = len(reg.attending_students)
-    _oc = len(reg.attending_observers)
-    _desc = f"{_sc} dancer(s)"
-    if _oc:
-        _desc += f", {_oc} observer(s)"
-    reg.is_finalized        = True
-    reg.payment_status      = "admin-paid"
-    reg.finalized_at        = datetime.now(timezone.utc)
-    reg.pending_student_ids = None   # Admin confirmed payment — clear any pending
-    _record_transaction(db, reg, D("0"), "admin-paid",
-                        description=_desc,
-                        student_count=_sc, observer_count=_oc)
+
+    if reg.is_finalized and (student_id is not None or observer_id is not None):
+        # Targeted admin-pay: only remove the one dancer from pending so the
+        # rest of the registration remains open for normal user-portal payment.
+        pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+        if student_id is not None:
+            pending = [x for x in pending if x != str(student_id)]
+            _sc, _oc = 1, 0
+            _desc = "1 dancer (admin paid)"
+        else:
+            pending = [x for x in pending if x != f"o{observer_id}"]
+            _sc, _oc = 0, 1
+            _desc = "1 observer (admin paid)"
+        reg.pending_student_ids = ",".join(pending) if pending else None
+        _record_transaction(db, reg, D("0"), "admin-paid",
+                            description=_desc, student_count=_sc, observer_count=_oc)
+    else:
+        # Whole-registration finalize (non-finalized reg or explicit full approval).
+        _sc = len(reg.attending_students)
+        _oc = len(reg.attending_observers)
+        _desc = f"{_sc} dancer(s)"
+        if _oc:
+            _desc += f", {_oc} observer(s)"
+        reg.is_finalized        = True
+        reg.payment_status      = "admin-paid"
+        reg.finalized_at        = datetime.now(timezone.utc)
+        reg.pending_student_ids = None   # Admin confirmed payment — clear all pending
+        _record_transaction(db, reg, D("0"), "admin-paid",
+                            description=_desc, student_count=_sc, observer_count=_oc)
     db.commit()
     return {"message": "Registration marked as paid by admin."}
 

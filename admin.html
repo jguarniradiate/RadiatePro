@@ -1037,7 +1037,9 @@
         // Payment summary for the header
         const paidRegs    = regs.filter(r => r.payment_status === 'paid' || r.payment_status === 'admin-paid');
         const freeRegs    = regs.filter(r => r.payment_status === 'free');
-        const pendingRegs = regs.filter(r => !r.is_finalized);
+        // Treat any registration with a paid payment_status as finalized even if the
+        // is_finalized flag was not back-filled (defensive guard for legacy data).
+        const pendingRegs = regs.filter(r => !r.is_finalized && !['paid', 'free', 'admin-paid'].includes(r.payment_status));
         const balanceDueRegs = regs.filter(r => (r.pending_student_ids || []).length > 0);
         const totalRevenue   = paidRegs.reduce((s, r) => s + (r.amount_paid || 0), 0);
         const totalPending   = balanceDueRegs.reduce((s, r) => s + (r.pending_amount || 0), 0);
@@ -1422,8 +1424,9 @@
             }
           }
 
-          // Handle payment status (admin-paid finalization)
-          await maybeAdminFinalize(eventId, regId, token, 'addObsPayStatus');
+          // Handle payment status — only mark THIS observer as admin-paid so
+          // other pending dancers still pay via the user portal.
+          await maybeAdminFinalize(eventId, regId, token, 'addObsPayStatus', { observerId });
           // Refresh the registration panel so badges and totals update
           await refreshEventRegistrations(eventId);
           // Reset selection state
@@ -1648,12 +1651,18 @@
       }
     }
 
-    // Helper: read payment-status radio and optionally call admin-finalize
-    async function maybeAdminFinalize(eventId, regId, token, payStatusRadioName) {
+    // Helper: read payment-status radio and optionally call admin-finalize.
+    // Pass { studentId } or { observerId } to target a single pending dancer;
+    // omit both to finalize the whole registration (for non-finalized regs).
+    async function maybeAdminFinalize(eventId, regId, token, payStatusRadioName, { studentId = null, observerId = null } = {}) {
       const isPaid = document.querySelector(`input[name="${payStatusRadioName}"]:checked`)?.value === 'yes';
       if (!isPaid) return false;
       try {
-        const fRes = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/admin-finalize`, {
+        const qs = new URLSearchParams();
+        if (studentId  != null) qs.set('student_id',  studentId);
+        if (observerId != null) qs.set('observer_id', observerId);
+        const url = `${API}/admin/events/${eventId}/registrations/${regId}/admin-finalize${qs.toString() ? '?' + qs : ''}`;
+        const fRes = await fetch(url, {
           method: 'POST', headers: { 'Authorization': `Bearer ${token}` },
         });
         if (fRes.ok) {
@@ -1682,8 +1691,9 @@
           // Remove from selectable list
           const listBtn = document.getElementById(`ars-${studentId}`);
           if (listBtn) listBtn.remove();
-          // Handle payment status (admin-paid finalization)
-          await maybeAdminFinalize(eventId, regId, token, 'addStudentPayStatus');
+          // Handle payment status — only mark THIS student as admin-paid so
+          // other pending dancers still pay via the user portal.
+          await maybeAdminFinalize(eventId, regId, token, 'addStudentPayStatus', { studentId });
           // Refresh the registration panel so badges and totals update
           await refreshEventRegistrations(eventId);
           // Reset selection state
