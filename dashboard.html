@@ -389,10 +389,10 @@
               <tr>
                 <th>Event</th>
                 <th>Event Date</th>
-                <th>Dancers</th>
+                <th>Details</th>
                 <th>Amount</th>
                 <th>Status</th>
-                <th>Paid On</th>
+                <th>Date</th>
               </tr>
             </thead>
             <tbody id="txBody"></tbody>
@@ -849,14 +849,22 @@
             : '—';
           const amtStr = t.payment_status === 'free'
             ? '<span style="color:#4ade80;font-weight:600;">Free</span>'
-            : `<span style="font-weight:600;">$${Number(t.amount_paid).toFixed(2)}</span>`;
+            : t.payment_status === 'admin-paid'
+              ? '<span style="color:#a78bfa;font-weight:600;">Admin</span>'
+              : `<span style="font-weight:600;">$${Number(t.amount_paid).toFixed(2)}</span>`;
           const statusBadge = t.payment_status === 'free'
             ? '<span class="tx-status-free">Free</span>'
-            : '<span class="tx-status-paid">Paid</span>';
+            : t.payment_status === 'admin-paid'
+              ? '<span class="tx-status-paid" style="background:rgba(167,139,250,.15);color:#a78bfa;border-color:#a78bfa;">Admin</span>'
+              : '<span class="tx-status-paid">&#10003; Paid</span>';
+          // Details: use description if present, otherwise fall back to dancer count
+          const details = t.description
+            ? esc(t.description)
+            : `${t.student_count} dancer${t.student_count !== 1 ? 's' : ''}${t.observer_count ? `, ${t.observer_count} observer${t.observer_count !== 1 ? 's' : ''}` : ''}`;
           return `<tr>
             <td class="fw-semibold">${esc(t.event_title)}</td>
             <td style="white-space:nowrap;">${evDate}</td>
-            <td>${t.student_count}</td>
+            <td style="color:#aaa;font-size:.85rem;">${details}</td>
             <td style="white-space:nowrap;">${amtStr}</td>
             <td style="white-space:nowrap;">${statusBadge}</td>
             <td style="color:#888;font-size:.85rem;white-space:nowrap;">${paidOn}</td>

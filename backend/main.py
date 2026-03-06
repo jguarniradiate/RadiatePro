@@ -113,6 +113,20 @@ def run_migrations(eng):
         "ALTER TABLE observers ADD COLUMN IF NOT EXISTS linked_student_id INTEGER REFERENCES students(id) ON DELETE SET NULL",
         # Pending payment tracking for admin-added unpaid dancers
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS pending_student_ids TEXT",
+        # Immutable transaction ledger — one row per payment event
+        """CREATE TABLE IF NOT EXISTS transactions (
+            id SERIAL PRIMARY KEY,
+            registration_id INTEGER NOT NULL REFERENCES event_registrations(id) ON DELETE CASCADE,
+            event_id INTEGER NOT NULL REFERENCES events(id),
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+            payment_status VARCHAR NOT NULL,
+            stripe_session_id VARCHAR,
+            description VARCHAR,
+            student_count INTEGER DEFAULT 0,
+            observer_count INTEGER DEFAULT 0,
+            created_at TIMESTAMPTZ DEFAULT now()
+        )""",
     ]
     try:
         with eng.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
@@ -409,6 +423,42 @@ def _effective_price(event: models.Event):
     if price is None:
         return D("0"), True
     return D(str(price)), False
+
+
+def _record_transaction(
+    db,
+    reg: models.EventRegistration,
+    amount,
+    payment_status: str,
+    stripe_session_id: str = None,
+    description: str = None,
+    student_count: int = 0,
+    observer_count: int = 0,
+) -> models.Transaction:
+    """Insert a Transaction row unless one with this stripe_session_id already exists.
+    Stripe may fire both the webhook and the verify-payment response; the second
+    caller simply gets the existing row back without a duplicate insert.
+    """
+    from decimal import Decimal as D
+    if stripe_session_id:
+        existing = db.query(models.Transaction).filter(
+            models.Transaction.stripe_session_id == stripe_session_id
+        ).first()
+        if existing:
+            return existing
+    tx = models.Transaction(
+        registration_id=reg.id,
+        event_id=reg.event_id,
+        user_id=reg.user_id,
+        amount=D(str(amount)),
+        payment_status=payment_status,
+        stripe_session_id=stripe_session_id,
+        description=description,
+        student_count=student_count,
+        observer_count=observer_count,
+    )
+    db.add(tx)
+    return tx
 
 
 def _build_reg_out(reg: models.EventRegistration) -> schemas.EventRegistrationOut:
@@ -933,6 +983,13 @@ def create_checkout(
         reg.amount_paid         = (reg.amount_paid or D("0"))
         reg.finalized_at        = datetime.now(timezone.utc)
         reg.pending_student_ids = None   # clear pending — no charge needed
+        # Record immutable transaction line
+        _sc = len(pending_dancer_ids) if is_pending_payment_mode else len(body.student_ids)
+        _oc = len(pending_observer_ids) if is_pending_payment_mode else len(body.observer_ids)
+        _desc = f"Added {_sc} dancer(s)" if is_pending_payment_mode else f"{_sc} dancer(s)"
+        if _oc:
+            _desc += f", {_oc} observer(s)"
+        _record_transaction(db, reg, D("0"), "free", description=_desc, student_count=_sc, observer_count=_oc)
         db.commit()
         db.refresh(reg)
         try:
@@ -994,12 +1051,16 @@ def create_checkout(
                 },
                 "quantity": len(body.observer_ids),
             })
+    _meta_sc = len(pending_dancer_ids) if is_pending_payment_mode else len(body.student_ids)
+    _meta_oc = len(pending_observer_ids) if is_pending_payment_mode else len(body.observer_ids)
     meta = {
         "registration_id": str(reg.id),
         "event_id": str(event_id),
         "user_name": user_name,
         "observer_ids": ",".join(str(i) for i in body.observer_ids),
         "is_pending_payment": "true" if is_pending_payment_mode else "false",
+        "student_count": str(_meta_sc),
+        "observer_count": str(_meta_oc),
     }
     return_url = (
         f"{FRONTEND_URL}/events.html"
@@ -1070,6 +1131,7 @@ def verify_payment(
         if is_add_students_flow:
             # Add-students flow: reg already finalized, add new students from metadata
             existing_ids = {ers.student_id for ers in reg.attending_students}
+            new_sids_added = []
             for sid_str in (new_student_ids_raw.split(",") if new_student_ids_raw else []):
                 try:
                     sid = int(sid_str.strip())
@@ -1080,9 +1142,11 @@ def verify_payment(
                         if s:
                             db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
                             existing_ids.add(sid)
+                            new_sids_added.append(sid)
                 except ValueError:
                     pass
             existing_obs_ids = {ero.observer_id for ero in reg.attending_observers}
+            new_oids_added = []
             for oid_str in (observer_ids_raw.split(",") if observer_ids_raw else []):
                 try:
                     oid = int(oid_str.strip())
@@ -1093,12 +1157,23 @@ def verify_payment(
                         if o:
                             db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
                             existing_obs_ids.add(oid)
+                            new_oids_added.append(oid)
                 except ValueError:
                     pass
             # Update amount_paid to include new payment
-            prev_paid = reg.amount_paid or D("0")
-            reg.amount_paid = prev_paid + D(str(session.amount_total)) / 100
+            add_amount = D(str(session.amount_total)) / 100
+            reg.amount_paid = (reg.amount_paid or D("0")) + add_amount
             reg.finalized_at = datetime.now(timezone.utc)
+            # Record immutable transaction line for this add-students payment
+            _sc = len(new_sids_added)
+            _oc = len(new_oids_added)
+            _desc = f"Added {_sc} dancer(s)" if _sc else ""
+            if _oc:
+                _desc += f"{', ' if _desc else 'Added '}{_oc} observer(s)"
+            _record_transaction(db, reg, add_amount, "paid",
+                                stripe_session_id=body.session_id,
+                                description=_desc or "Added dancers/observers",
+                                student_count=_sc, observer_count=_oc)
             db.commit()
             db.refresh(reg)
         else:
@@ -1112,6 +1187,15 @@ def verify_payment(
             reg.finalized_at = datetime.now(timezone.utc)
             if is_pending_mode:
                 reg.pending_student_ids = None   # payment received — clear pending
+            # Record immutable transaction line
+            _sc = int(meta.get("student_count", "0") or "0")
+            _oc = int(meta.get("observer_count", "0") or "0")
+            _desc = f"Added {_sc} dancer(s)" if is_pending_mode else f"{_sc} dancer(s)"
+            if _oc:
+                _desc += f", {_oc} observer(s)"
+            _record_transaction(db, reg, amount, "paid",
+                                stripe_session_id=body.session_id,
+                                description=_desc, student_count=_sc, observer_count=_oc)
             db.commit()
             db.refresh(reg)
             try:
@@ -1352,15 +1436,38 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                     except ValueError:
                         pass
             amount_total = session.get("amount_total") or 0
+            paid_amount = D(str(amount_total)) / 100
             prev_paid = reg.amount_paid or D("0")
-            new_amount = prev_paid + D(str(amount_total)) / 100
-            is_pending_mode = session.get("metadata", {}).get("is_pending_payment") == "true"
+            new_amount = prev_paid + paid_amount
+            meta_wh = session.get("metadata", {})
+            is_pending_mode = meta_wh.get("is_pending_payment") == "true"
             reg.is_finalized = True
             reg.payment_status = "paid"
             reg.amount_paid = new_amount
             reg.finalized_at = datetime.now(timezone.utc)
             if is_pending_mode:
                 reg.pending_student_ids = None   # payment received — clear pending
+            # Record immutable transaction — _record_transaction deduplicates if
+            # verify-payment already created a row for this session.
+            _wh_sc = int(meta_wh.get("student_count", "0") or "0")
+            _wh_oc = int(meta_wh.get("observer_count", "0") or "0")
+            _wh_is_add = bool(meta_wh.get("new_student_ids", ""))
+            if _wh_is_add:
+                _wh_desc = f"Added {_wh_sc} dancer(s)" if _wh_sc else ""
+                if _wh_oc:
+                    _wh_desc += f"{', ' if _wh_desc else 'Added '}{_wh_oc} observer(s)"
+            elif is_pending_mode:
+                _wh_desc = f"Added {_wh_sc} dancer(s)"
+                if _wh_oc:
+                    _wh_desc += f", {_wh_oc} observer(s)"
+            else:
+                _wh_desc = f"{_wh_sc} dancer(s)"
+                if _wh_oc:
+                    _wh_desc += f", {_wh_oc} observer(s)"
+            _record_transaction(db, reg, paid_amount, "paid",
+                                stripe_session_id=session.get("id"),
+                                description=_wh_desc or "Payment",
+                                student_count=_wh_sc, observer_count=_wh_oc)
             db.commit()
             db.refresh(reg)
             try:
@@ -1394,25 +1501,56 @@ def get_my_payments(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
+    """Return one row per Transaction (immutable ledger).
+    For old registrations that pre-date the Transaction table, fall back to
+    the EventRegistration record so history is not lost.
+    """
     user = get_current_user(authorization, db)
-    regs = db.query(models.EventRegistration).filter(
-        models.EventRegistration.user_id == user.id,
-        models.EventRegistration.payment_status.in_(["paid", "free"]),
-    ).order_by(models.EventRegistration.finalized_at.desc()).all()
     result = []
-    for reg in regs:
+
+    # Primary: one row per Transaction record
+    txs = db.query(models.Transaction).filter(
+        models.Transaction.user_id == user.id,
+    ).order_by(models.Transaction.created_at.desc()).all()
+    reg_ids_with_txs = {tx.registration_id for tx in txs}
+    for tx in txs:
+        ev = tx.event
         result.append({
+            "transaction_id": tx.id,
+            "registration_id": tx.registration_id,
+            "event_id": tx.event_id,
+            "event_title": ev.title if ev else "—",
+            "event_date": ev.event_date.isoformat() if ev and ev.event_date else None,
+            "student_count": tx.student_count or 0,
+            "observer_count": tx.observer_count or 0,
+            "description": tx.description,
+            "amount_paid": float(tx.amount),
+            "payment_status": tx.payment_status,
+            "finalized_at": tx.created_at.isoformat(),
+        })
+
+    # Fallback: old registrations with no Transaction rows
+    old_regs = db.query(models.EventRegistration).filter(
+        models.EventRegistration.user_id == user.id,
+        models.EventRegistration.payment_status.in_(["paid", "free", "admin-paid"]),
+        ~models.EventRegistration.id.in_(reg_ids_with_txs) if reg_ids_with_txs else True,
+    ).order_by(models.EventRegistration.finalized_at.desc()).all()
+    for reg in old_regs:
+        result.append({
+            "transaction_id": None,
             "registration_id": reg.id,
             "event_id": reg.event_id,
-            "event_title": reg.event.title,
-            "event_date": reg.event.event_date.isoformat() if reg.event.event_date else None,
+            "event_title": reg.event.title if reg.event else "—",
+            "event_date": reg.event.event_date.isoformat() if reg.event and reg.event.event_date else None,
             "student_count": len(reg.attending_students),
             "observer_count": len(reg.attending_observers),
-            "observer_names": [ero.observer.name for ero in reg.attending_observers],
+            "description": None,
             "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else 0,
             "payment_status": reg.payment_status,
             "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
         })
+
+    result.sort(key=lambda x: x["finalized_at"] or "", reverse=True)
     return result
 
 
@@ -1421,29 +1559,65 @@ def admin_list_payments(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
+    """Return one row per Transaction (immutable ledger).
+    For old registrations that pre-date the Transaction table, fall back to
+    the EventRegistration record so history is not lost.
+    """
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
-    regs = db.query(models.EventRegistration).filter(
-        models.EventRegistration.payment_status.in_(["paid", "free"]),
-    ).order_by(models.EventRegistration.finalized_at.desc()).all()
     result = []
-    for reg in regs:
-        user_name = f"{reg.user.first_name or ''} {reg.user.last_name or ''}".strip() or reg.user.email
+
+    # Primary: one row per Transaction record
+    txs = db.query(models.Transaction).order_by(models.Transaction.created_at.desc()).all()
+    reg_ids_with_txs = {tx.registration_id for tx in txs}
+    for tx in txs:
+        ev = tx.event
+        u = tx.user
+        user_name = f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email if u else "—"
         result.append({
+            "transaction_id": tx.id,
+            "registration_id": tx.registration_id,
+            "event_id": tx.event_id,
+            "event_title": ev.title if ev else "—",
+            "event_date": ev.event_date.isoformat() if ev and ev.event_date else None,
+            "user_id": tx.user_id,
+            "user_name": user_name,
+            "studio_name": u.studio_name if u else None,
+            "student_count": tx.student_count or 0,
+            "observer_count": tx.observer_count or 0,
+            "description": tx.description,
+            "amount_paid": float(tx.amount),
+            "payment_status": tx.payment_status,
+            "finalized_at": tx.created_at.isoformat(),
+        })
+
+    # Fallback: old registrations with no Transaction rows
+    old_regs = db.query(models.EventRegistration).filter(
+        models.EventRegistration.payment_status.in_(["paid", "free", "admin-paid"]),
+        ~models.EventRegistration.id.in_(reg_ids_with_txs) if reg_ids_with_txs else True,
+    ).order_by(models.EventRegistration.finalized_at.desc()).all()
+    for reg in old_regs:
+        u = reg.user
+        user_name = f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email if u else "—"
+        result.append({
+            "transaction_id": None,
             "registration_id": reg.id,
             "event_id": reg.event_id,
-            "event_title": reg.event.title,
+            "event_title": reg.event.title if reg.event else "—",
+            "event_date": reg.event.event_date.isoformat() if reg.event and reg.event.event_date else None,
             "user_id": reg.user_id,
             "user_name": user_name,
-            "studio_name": reg.user.studio_name,
+            "studio_name": u.studio_name if u else None,
             "student_count": len(reg.attending_students),
             "observer_count": len(reg.attending_observers),
-            "observer_names": [ero.observer.name for ero in reg.attending_observers],
+            "description": None,
             "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else 0,
             "payment_status": reg.payment_status,
             "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
         })
+
+    result.sort(key=lambda x: x["finalized_at"] or "", reverse=True)
     return result
 
 
@@ -1668,10 +1842,19 @@ def admin_finalize_registration(
     ).first()
     if not reg:
         raise HTTPException(status_code=404, detail="Registration not found.")
+    from decimal import Decimal as D
+    _sc = len(reg.attending_students)
+    _oc = len(reg.attending_observers)
+    _desc = f"{_sc} dancer(s)"
+    if _oc:
+        _desc += f", {_oc} observer(s)"
     reg.is_finalized        = True
     reg.payment_status      = "admin-paid"
     reg.finalized_at        = datetime.now(timezone.utc)
     reg.pending_student_ids = None   # Admin confirmed payment — clear any pending
+    _record_transaction(db, reg, D("0"), "admin-paid",
+                        description=_desc,
+                        student_count=_sc, observer_count=_oc)
     db.commit()
     return {"message": "Registration marked as paid by admin."}
 

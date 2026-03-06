@@ -186,7 +186,7 @@
                 <th>User</th>
                 <th>Studio</th>
                 <th>Event</th>
-                <th>Students</th>
+                <th>Details</th>
                 <th>Amount</th>
                 <th>Status</th>
                 <th>Date</th>
@@ -1736,18 +1736,26 @@
               : '—';
             const amtStr = p.payment_status === 'free'
               ? '<span style="color:#4ade80;font-weight:600;">Free</span>'
-              : `<span style="font-weight:600;">$${Number(p.amount_paid).toFixed(2)}</span>`;
+              : p.payment_status === 'admin-paid'
+                ? '<span style="color:#a78bfa;font-weight:600;">Admin</span>'
+                : `<span style="font-weight:600;">$${Number(p.amount_paid).toFixed(2)}</span>`;
             const statusBadge = p.payment_status === 'free'
               ? '<span class="badge" style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;">Free</span>'
-              : '<span class="badge" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;">&#10003; Paid</span>';
+              : p.payment_status === 'admin-paid'
+                ? '<span class="badge" style="background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid #a78bfa;font-size:.7rem;">Admin</span>'
+                : '<span class="badge" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;">&#10003; Paid</span>';
             const eName = (p.user_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
             const eStudio = (p.studio_name||'Independent').replace(/</g,'&lt;').replace(/>/g,'&gt;');
             const eEvent = (p.event_title||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            // Details: use description if available, otherwise fall back to dancer count
+            const details = p.description
+              ? p.description.replace(/</g,'&lt;').replace(/>/g,'&gt;')
+              : `${p.student_count} dancer${p.student_count !== 1 ? 's' : ''}${p.observer_count ? `, ${p.observer_count} observer${p.observer_count !== 1 ? 's' : ''}` : ''}`;
             return `<tr>
               <td class="fw-semibold">${eName}</td>
               <td style="color:#aaa;font-size:.88rem;">${eStudio}</td>
               <td>${eEvent}</td>
-              <td>${p.student_count}</td>
+              <td style="color:#aaa;font-size:.85rem;">${details}</td>
               <td>${amtStr}</td>
               <td>${statusBadge}</td>
               <td style="color:#888;font-size:.85rem;white-space:nowrap;">${paidOn}</td>

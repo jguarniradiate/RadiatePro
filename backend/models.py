@@ -96,6 +96,7 @@ class EventRegistration(Base):
     user = relationship("User", back_populates="event_registrations")
     attending_students = relationship("EventRegistrationStudent", back_populates="registration", cascade="all, delete-orphan")
     attending_observers = relationship("EventRegistrationObserver", back_populates="registration", cascade="all, delete-orphan")
+    transactions = relationship("Transaction", back_populates="registration", cascade="all, delete-orphan")
 
 
 class EventRegistrationStudent(Base):
@@ -127,3 +128,24 @@ class EventRegistrationObserver(Base):
     observer_id     = Column(Integer, ForeignKey("observers.id"), nullable=False)
     registration = relationship("EventRegistration", back_populates="attending_observers")
     observer     = relationship("Observer", back_populates="registrations")
+
+
+class Transaction(Base):
+    """Immutable record of a single payment event. One row per payment — never updated."""
+    __tablename__ = "transactions"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    registration_id = Column(Integer, ForeignKey("event_registrations.id"), nullable=False, index=True)
+    event_id        = Column(Integer, ForeignKey("events.id"), nullable=False)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    amount          = Column(Numeric(10, 2), nullable=False, default=0)
+    payment_status  = Column(String, nullable=False)   # 'paid' | 'free' | 'admin-paid'
+    stripe_session_id = Column(String, nullable=True)  # used to deduplicate webhook vs verify-payment
+    description     = Column(String, nullable=True)    # e.g. "3 dancer(s)", "1 added dancer"
+    student_count   = Column(Integer, nullable=True, default=0)
+    observer_count  = Column(Integer, nullable=True, default=0)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+
+    registration = relationship("EventRegistration", back_populates="transactions")
+    event        = relationship("Event")
+    user         = relationship("User")
