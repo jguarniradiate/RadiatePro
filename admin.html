@@ -124,8 +124,9 @@
         </div>
 
         <!-- User type filter -->
-        <div class="d-flex gap-2 mb-3" id="userFilterBar">
+        <div class="d-flex gap-2 mb-3 flex-wrap" id="userFilterBar">
           <button class="btn btn-accent btn-sm px-3" id="filter-all" onclick="filterUsers('all')">All</button>
+          <button class="btn btn-outline-secondary btn-sm px-3" id="filter-admins" onclick="filterUsers('admins')">&#128081; Admins</button>
           <button class="btn btn-outline-secondary btn-sm px-3" id="filter-studio" onclick="filterUsers('studio')">&#127960; Studio Users</button>
           <button class="btn btn-outline-secondary btn-sm px-3" id="filter-independent" onclick="filterUsers('independent')">&#9733; Independent</button>
         </div>
@@ -133,6 +134,20 @@
         <div id="loadingSpinner" class="text-center py-5"><div class="spinner-border" role="status"></div></div>
         <div id="errorMsg" class="alert alert-danger d-none"></div>
         <div id="tableWrapper" class="d-none">
+
+          <!-- Admins section -->
+          <div id="adminSection">
+            <div class="d-flex align-items-center gap-2 mb-2 mt-1">
+              <span style="color:#E3FC02;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;">&#128081; Admins</span>
+              <span class="badge" style="background:#2a2a2a;color:#ccc;font-size:.7rem;" id="adminCount">0</span>
+            </div>
+            <div class="table-responsive mb-4">
+              <table class="table table-striped table-hover align-middle" style="color:#f0f0f0;">
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Studio</th><th>Phone</th><th>Registered</th><th>Verified</th><th></th></tr></thead>
+                <tbody id="adminTableBody"></tbody>
+              </table>
+            </div>
+          </div>
 
           <!-- Studio Users section -->
           <div id="studioSection">
@@ -142,7 +157,7 @@
             </div>
             <div class="table-responsive mb-4">
               <table class="table table-striped table-hover align-middle" style="color:#f0f0f0;">
-                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Studio</th><th>Phone</th><th>Registered</th><th>Verified</th><th>Role</th><th></th></tr></thead>
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Studio</th><th>Phone</th><th>Registered</th><th>Verified</th><th></th></tr></thead>
                 <tbody id="studioTableBody"></tbody>
               </table>
             </div>
@@ -156,7 +171,7 @@
             </div>
             <div class="table-responsive">
               <table class="table table-striped table-hover align-middle" style="color:#f0f0f0;">
-                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Registered</th><th>Verified</th><th>Role</th><th></th></tr></thead>
+                <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Registered</th><th>Verified</th><th></th></tr></thead>
                 <tbody id="independentTableBody"></tbody>
               </table>
             </div>
@@ -688,15 +703,13 @@
     function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
 
     function filterUsers(type) {
-      // Update active button style
-      ['all','studio','independent'].forEach(t => {
+      ['all','admins','studio','independent'].forEach(t => {
         const btn = document.getElementById(`filter-${t}`);
-        btn.className = t === type ? 'btn btn-accent btn-sm px-3' : 'btn btn-outline-secondary btn-sm px-3';
+        if (btn) btn.className = t === type ? 'btn btn-accent btn-sm px-3' : 'btn btn-outline-secondary btn-sm px-3';
       });
-      const studioSec = document.getElementById('studioSection');
-      const indepSec  = document.getElementById('independentSection');
-      studioSec.style.display = (type === 'independent') ? 'none' : '';
-      indepSec.style.display  = (type === 'studio')      ? 'none' : '';
+      document.getElementById('adminSection').style.display      = (type === 'studio' || type === 'independent') ? 'none' : '';
+      document.getElementById('studioSection').style.display     = (type === 'independent' || type === 'admins')  ? 'none' : '';
+      document.getElementById('independentSection').style.display = (type === 'studio' || type === 'admins')       ? 'none' : '';
     }
 
     function fmtDate(iso) {
@@ -729,15 +742,47 @@
         }
         let users = []; try { users = await res.json(); } catch {}
 
-        const studioUsers      = users.filter(u => u.studio_name);
-        const independentUsers = users.filter(u => !u.studio_name);
+        const adminUsers       = users.filter(u =>  u.is_admin);
+        const studioUsers      = users.filter(u => !u.is_admin &&  u.studio_name);
+        const independentUsers = users.filter(u => !u.is_admin && !u.studio_name);
 
-        document.getElementById('statTotal').textContent       = users.length;
-        document.getElementById('statVerified').textContent    = users.filter(u => u.email_verified).length;
-        document.getElementById('statIndependent').textContent = independentUsers.length;
-        document.getElementById('statAdmins').textContent      = users.filter(u => u.is_admin).length;
-        document.getElementById('studioCount').textContent     = studioUsers.length;
+        document.getElementById('statTotal').textContent        = users.length;
+        document.getElementById('statVerified').textContent     = users.filter(u => u.email_verified).length;
+        document.getElementById('statIndependent').textContent  = independentUsers.length;
+        document.getElementById('statAdmins').textContent       = adminUsers.length;
+        document.getElementById('adminCount').textContent       = adminUsers.length;
+        document.getElementById('studioCount').textContent      = studioUsers.length;
         document.getElementById('independentCount').textContent = independentUsers.length;
+
+        // Shared expand row (students + observers)
+        const expandRow = (u, colspan) => `
+          <tr id="students-row-${u.id}" class="d-none">
+            <td colspan="${colspan}" style="background:#0d0d0d;padding:0;">
+              <div class="p-3" id="students-content-${u.id}"></div>
+            </td>
+          </tr>`;
+
+        const adminRow = u => `
+          <tr id="row-${u.id}" data-utype="admin">
+            <td class="text-muted small">${u.id}</td>
+            <td>
+              <button class="btn btn-link p-0 fw-semibold text-decoration-none" style="color:#f0f0f0;"
+                onclick="toggleStudents(${u.id},'${esc((u.first_name||'')+' '+(u.last_name||''))}','${esc(u.studio_name||'')}')">
+                ${esc(u.first_name||'')} ${esc(u.last_name||'')}
+                <span class="text-muted ms-1" style="font-size:.7rem;" id="arrow-${u.id}">▼</span>
+              </button>
+            </td>
+            <td>${esc(u.email)}</td>
+            <td>${esc(u.studio_name||'—')}</td>
+            <td>${esc(u.phone||'—')}</td>
+            <td>${fmtDate(u.created_at)}</td>
+            <td><span class="badge ${u.email_verified?'badge-verified':'badge-unverified'}">${u.email_verified?'Verified':'Unverified'}</span></td>
+            <td class="text-nowrap">
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                onclick="openEdit(${u.id},'${esc(u.first_name||'')}','${esc(u.last_name||'')}','${esc(u.studio_name||'')}','${esc(u.phone||'')}','${esc(u.email)}')">Edit</button>
+            </td>
+          </tr>
+          ${expandRow(u, 8)}`;
 
         const studioRow = u => `
           <tr id="row-${u.id}" data-utype="studio">
@@ -754,21 +799,15 @@
             <td>${esc(u.phone||'—')}</td>
             <td>${fmtDate(u.created_at)}</td>
             <td><span class="badge ${u.email_verified?'badge-verified':'badge-unverified'}">${u.email_verified?'Verified':'Unverified'}</span></td>
-            <td><span class="badge ${u.is_admin?'badge-admin':'badge-user'}">${u.is_admin?'Admin':'User'}</span></td>
             <td class="text-nowrap">
               <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
                 onclick="openEdit(${u.id},'${esc(u.first_name||'')}','${esc(u.last_name||'')}','${esc(u.studio_name||'')}','${esc(u.phone||'')}','${esc(u.email)}')">Edit</button>
-              ${u.is_admin ? '' : `
-                <button class="btn btn-sm py-0 px-2 me-1" style="border:1px solid #3b5bdb;color:#74c0fc;"
-                  onclick="loginAsUser(${u.id},'${esc((u.first_name||'')+' '+(u.last_name||''))}')">Login As</button>
-                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id},'${esc(u.email)}')">Delete</button>`}
+              <button class="btn btn-sm py-0 px-2 me-1" style="border:1px solid #3b5bdb;color:#74c0fc;"
+                onclick="loginAsUser(${u.id},'${esc((u.first_name||'')+' '+(u.last_name||''))}')">Login As</button>
+              <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id},'${esc(u.email)}')">Delete</button>
             </td>
           </tr>
-          <tr id="students-row-${u.id}" class="d-none">
-            <td colspan="9" style="background:#0d0d0d;padding:0;">
-              <div class="p-3" id="students-content-${u.id}"></div>
-            </td>
-          </tr>`;
+          ${expandRow(u, 8)}`;
 
         const indepRow = u => `
           <tr id="row-${u.id}" data-utype="independent">
@@ -784,22 +823,17 @@
             <td>${esc(u.phone||'—')}</td>
             <td>${fmtDate(u.created_at)}</td>
             <td><span class="badge ${u.email_verified?'badge-verified':'badge-unverified'}">${u.email_verified?'Verified':'Unverified'}</span></td>
-            <td><span class="badge ${u.is_admin?'badge-admin':'badge-user'}">${u.is_admin?'Admin':'User'}</span></td>
             <td class="text-nowrap">
               <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
                 onclick="openEdit(${u.id},'${esc(u.first_name||'')}','${esc(u.last_name||'')}','','${esc(u.phone||'')}','${esc(u.email)}')">Edit</button>
-              ${u.is_admin ? '' : `
-                <button class="btn btn-sm py-0 px-2 me-1" style="border:1px solid #3b5bdb;color:#74c0fc;"
-                  onclick="loginAsUser(${u.id},'${esc((u.first_name||'')+' '+(u.last_name||''))}')">Login As</button>
-                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id},'${esc(u.email)}')">Delete</button>`}
+              <button class="btn btn-sm py-0 px-2 me-1" style="border:1px solid #3b5bdb;color:#74c0fc;"
+                onclick="loginAsUser(${u.id},'${esc((u.first_name||'')+' '+(u.last_name||''))}')">Login As</button>
+              <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteUser(${u.id},'${esc(u.email)}')">Delete</button>
             </td>
           </tr>
-          <tr id="students-row-${u.id}" class="d-none">
-            <td colspan="8" style="background:#0d0d0d;padding:0;">
-              <div class="p-3" id="students-content-${u.id}"></div>
-            </td>
-          </tr>`;
+          ${expandRow(u, 7)}`;
 
+        document.getElementById('adminTableBody').innerHTML       = adminUsers.map(adminRow).join('');
         document.getElementById('studioTableBody').innerHTML      = studioUsers.map(studioRow).join('');
         document.getElementById('independentTableBody').innerHTML = independentUsers.map(indepRow).join('');
         document.getElementById('loadingSpinner').classList.add('d-none');
