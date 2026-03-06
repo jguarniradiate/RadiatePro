@@ -1871,24 +1871,23 @@ def admin_create_registration(
         reg.finalized_at = datetime.now(timezone.utc)
         reg.pending_student_ids = ",".join(pending) if pending else None
 
-        # Complimentary students — record $0 transaction
-        if comp_student_ids:
+        # Complimentary students — one $0 transaction per student so attendee name is captured
+        for sid in comp_student_ids:
             _record_transaction(db, reg, D("0"), "admin-paid",
-                                description=f"{len(comp_student_ids)} dancer(s) (complimentary)",
-                                student_count=len(comp_student_ids))
+                                description="1 dancer (complimentary)",
+                                student_count=1, student_id=int(sid))
 
-        # Cash-paid students — record actual price transaction and track in cash_student_ids
+        # Cash-paid students — one transaction per student and track tokens in cash_student_ids
         if paid_student_ids:
             existing_cash = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
             for sid in paid_student_ids:
                 tok = str(sid)
                 if tok not in existing_cash:
                     existing_cash.append(tok)
+                _record_transaction(db, reg, price_per_student, "admin-paid",
+                                    description="1 dancer (cash / offline)",
+                                    student_count=1, student_id=int(sid))
             reg.cash_student_ids = ",".join(existing_cash) if existing_cash else None
-            total_amount = price_per_student * len(paid_student_ids)
-            _record_transaction(db, reg, total_amount, "admin-paid",
-                                description=f"{len(paid_student_ids)} dancer(s) (cash / offline)",
-                                student_count=len(paid_student_ids))
 
         db.commit()
         db.refresh(reg)
