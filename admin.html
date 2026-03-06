@@ -940,6 +940,7 @@
                 <div class="fw-bold">${typeBadge(e.event_type)}${esc(e.title)}</div>
                 <div class="text-muted small">&#128337; ${fmtDt(e.event_date)}${e.location ? ' &nbsp;&#128205; '+esc(e.location) : ''}${revHtml}</div>
                 ${e.description ? `<div class="text-muted small mt-1">${esc(e.description)}</div>` : ''}
+                <div id="event-rev-${e.id}"></div>
                 ${capHtml}
               </div>
               <div class="d-flex gap-2 ms-3 flex-shrink-0">
@@ -1068,6 +1069,23 @@
           if (totalRevenue > 0) parts.push(`<span style="color:#22c55e;font-weight:600;">$${totalRevenue.toFixed(2)}</span>`);
           if (totalPending > 0) parts.push(`<span style="color:#f87171;">$${totalPending.toFixed(2)} due</span>`);
           summaryEl.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+        }
+
+        // Update the revenue summary above the capacity bar
+        const revEl = document.getElementById(`event-rev-${eventId}`);
+        if (revEl) {
+          if (totalRevenue > 0 || paidStudentCount > 0 || paidObserverCount > 0) {
+            const attendeeParts = [];
+            if (paidStudentCount > 0) attendeeParts.push(`${paidStudentCount} student${paidStudentCount !== 1 ? 's' : ''}`);
+            if (paidObserverCount > 0) attendeeParts.push(`${paidObserverCount} observer${paidObserverCount !== 1 ? 's' : ''}`);
+            const attendeeStr = attendeeParts.length ? ` &nbsp;·&nbsp; <span style="color:#aaa;">${attendeeParts.join(', ')} paid</span>` : '';
+            revEl.innerHTML = `<div style="margin-top:.45rem;font-size:.75rem;">
+              <span style="color:#999;">Revenue:</span>
+              <span style="color:#22c55e;font-weight:600;margin-left:.3rem;">$${totalRevenue.toFixed(2)}</span>${attendeeStr}${totalPending > 0 ? ` &nbsp;·&nbsp; <span style="color:#f87171;">$${totalPending.toFixed(2)} due</span>` : ''}
+            </div>`;
+          } else {
+            revEl.innerHTML = '';
+          }
         }
 
         content.innerHTML = `
@@ -1258,6 +1276,7 @@
             <thead>
               <tr style="color:#555;border-bottom:1px solid #222;">
                 <th style="padding:.25rem .4rem;font-weight:600;text-align:left;">Description</th>
+                <th style="padding:.25rem .4rem;font-weight:600;text-align:left;">Attendee</th>
                 <th style="padding:.25rem .4rem;font-weight:600;text-align:right;">Amount</th>
                 <th style="padding:.25rem .4rem;font-weight:600;text-align:right;white-space:nowrap;">Date</th>
               </tr>
@@ -1268,8 +1287,12 @@
                   ? new Date(tx.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                   : '—';
                 const desc = (tx.description || `${tx.student_count} dancer(s)${tx.observer_count ? `, ${tx.observer_count} observer(s)` : ''}`).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                const attendee = tx.attendee_name
+                  ? `${tx.attendee_type === 'observer' ? '👁 ' : ''}${tx.attendee_name.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`
+                  : '<span style="color:#444;">—</span>';
                 return `<tr style="border-bottom:1px solid #111;">
                   <td style="padding:.3rem .4rem;color:#bbb;">${desc}</td>
+                  <td style="padding:.3rem .4rem;color:#ccc;">${attendee}</td>
                   <td style="padding:.3rem .4rem;text-align:right;">${txAmt(tx)}</td>
                   <td style="padding:.3rem .4rem;text-align:right;color:#666;white-space:nowrap;">${date}</td>
                 </tr>`;

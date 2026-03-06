@@ -147,8 +147,13 @@ class Transaction(Base):
     description     = Column(String, nullable=True)    # e.g. "3 dancer(s)", "1 added dancer"
     student_count   = Column(Integer, nullable=True, default=0)
     observer_count  = Column(Integer, nullable=True, default=0)
+    # Optional: which specific dancer this transaction covers (null for batch/whole-reg txns)
+    student_id      = Column(Integer, ForeignKey("students.id"), nullable=True)
+    observer_id     = Column(Integer, ForeignKey("observers.id"), nullable=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
 
     registration = relationship("EventRegistration", back_populates="transactions")
     event        = relationship("Event")
     user         = relationship("User")
+    student      = relationship("Student",  foreign_keys=[student_id])
+    observer     = relationship("Observer", foreign_keys=[observer_id])

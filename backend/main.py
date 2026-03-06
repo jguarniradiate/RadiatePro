@@ -115,6 +115,9 @@ def run_migrations(eng):
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS pending_student_ids TEXT",
         # Cash/offline payment tracking for individually admin-paid dancers
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS cash_student_ids TEXT",
+        # Per-dancer references on transaction rows (null for batch/whole-reg transactions)
+        "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS student_id INTEGER REFERENCES students(id) ON DELETE SET NULL",
+        "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS observer_id INTEGER REFERENCES observers(id) ON DELETE SET NULL",
         # Back-fill: ensure every paid registration is also marked finalized
         "UPDATE event_registrations SET is_finalized = TRUE WHERE payment_status IN ('paid', 'free', 'admin-paid') AND is_finalized = FALSE",
         # Immutable transaction ledger — one row per payment event
@@ -438,6 +441,8 @@ def _record_transaction(
     description: str = None,
     student_count: int = 0,
     observer_count: int = 0,
+    student_id: int = None,
+    observer_id: int = None,
 ) -> models.Transaction:
     """Insert a Transaction row unless one with this stripe_session_id already exists.
     Stripe may fire both the webhook and the verify-payment response; the second
@@ -460,6 +465,8 @@ def _record_transaction(
         description=description,
         student_count=student_count,
         observer_count=observer_count,
+        student_id=student_id,
+        observer_id=observer_id,
     )
     db.add(tx)
     return tx
@@ -2096,7 +2103,8 @@ def admin_finalize_registration(
             _amount = D("0")
             _desc = f"1 {'dancer' if student_id is not None else 'observer'} (complimentary)"
         _record_transaction(db, reg, _amount, "admin-paid",
-                            description=_desc, student_count=_sc, observer_count=_oc)
+                            description=_desc, student_count=_sc, observer_count=_oc,
+                            student_id=student_id, observer_id=observer_id)
     else:
         # Whole-registration finalize (no specific dancer ID supplied).
         # This is the only path that sets payment_status = 'admin-paid'.
@@ -2263,6 +2271,17 @@ def admin_reg_transactions(
             "created_at": tx.created_at.isoformat() if tx.created_at else None,
             "student_count": tx.student_count or 0,
             "observer_count": tx.observer_count or 0,
+            # Attendee name — populated for individually finalized dancers, null for batch txns
+            "attendee_name": (
+                tx.student.name if tx.student_id and tx.student else
+                tx.observer.name if tx.observer_id and tx.observer else
+                None
+            ),
+            "attendee_type": (
+                "student"  if tx.student_id  else
+                "observer" if tx.observer_id else
+                None
+            ),
         }
         for tx in txs
     ]
