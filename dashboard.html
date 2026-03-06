@@ -861,12 +861,12 @@
           const amtStr = t.payment_status === 'free'
             ? '<span style="color:#4ade80;font-weight:600;">Free</span>'
             : t.payment_status === 'admin-paid'
-              ? '<span style="color:#a78bfa;font-weight:600;">Admin</span>'
+              ? '<span style="color:#4ade80;font-weight:600;">Paid</span>'
               : `<span style="font-weight:600;">$${Number(t.amount_paid).toFixed(2)}</span>`;
           const statusBadge = t.payment_status === 'free'
             ? '<span class="tx-status-free">Free</span>'
             : t.payment_status === 'admin-paid'
-              ? '<span class="tx-status-paid" style="background:rgba(167,139,250,.15);color:#a78bfa;border-color:#a78bfa;">Admin</span>'
+              ? '<span class="tx-status-paid">&#10003; Paid</span>'
               : '<span class="tx-status-paid">&#10003; Paid</span>';
           // Details: use description if present, otherwise fall back to dancer count
           const details = t.description
