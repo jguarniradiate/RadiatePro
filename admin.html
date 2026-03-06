@@ -995,10 +995,22 @@
       }
     }
 
+    function collapseEventRegistrations(eventId) {
+      const panel = document.getElementById(`ereg-${eventId}`);
+      const arrow = document.getElementById(`ereg-arrow-${eventId}`);
+      panel.classList.add('d-none'); arrow.textContent = '▶';
+    }
+
     async function toggleEventRegistrations(eventId) {
       const panel = document.getElementById(`ereg-${eventId}`);
       const arrow = document.getElementById(`ereg-arrow-${eventId}`);
-      if (!panel.classList.contains('d-none')) { panel.classList.add('d-none'); arrow.textContent = '▶'; return; }
+      // If already open, refresh data instead of collapsing
+      if (!panel.classList.contains('d-none')) {
+        arrow.textContent = '↻';
+        await refreshEventRegistrations(eventId);
+        arrow.textContent = '▼';
+        return;
+      }
       panel.classList.remove('d-none'); arrow.textContent = '▼';
       await refreshEventRegistrations(eventId);
     }
@@ -1043,8 +1055,12 @@
               <p class="small fw-bold mb-0" style="color:#E3FC02;" id="ereg-heading-${eventId}">Registrations (${regs.length})</p>
               ${paymentSummary}
             </div>
-            <button class="btn btn-accent btn-sm py-0 px-2 ms-2 flex-shrink-0" style="font-size:.76rem;"
-              onclick="openAdminCreateReg(${eventId})">+ Add Registration</button>
+            <div class="d-flex gap-1 ms-2 flex-shrink-0">
+              <button class="btn btn-accent btn-sm py-0 px-2" style="font-size:.76rem;"
+                onclick="openAdminCreateReg(${eventId})">+ Add Registration</button>
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.76rem;" title="Close"
+                onclick="collapseEventRegistrations(${eventId})">✕</button>
+            </div>
           </div>
           ${regs.map(reg => renderRegCard(eventId, reg)).join('')}`;
       } catch {
