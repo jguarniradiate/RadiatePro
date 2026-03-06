@@ -6,6 +6,7 @@
   <title>Events — Radiate Portal</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <script src="https://js.stripe.com/v3/"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body { background-color: #0a0a0a; color: #f0f0f0; margin: 0; font-family: system-ui, sans-serif; }
@@ -234,6 +235,9 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body" style="padding-bottom:.5rem;">
+
+          <!-- ── Step 1: Dancer / Observer selection ── -->
+          <div id="regSelectionStep">
           <div id="regAlert" class="alert alert-danger d-none mb-3"></div>
           <input type="hidden" id="regEventId">
 
@@ -299,6 +303,7 @@
                   <tr>
                     <th style="width:56px;">Attending</th>
                     <th>Name</th>
+                    <th style="color:#a78bfa;">Linked Dancer</th>
                   </tr>
                 </thead>
                 <tbody id="observerTableBody"></tbody>
@@ -309,6 +314,14 @@
               <a href="dashboard.html#observers" style="color:#a78bfa;">Add observers in Dashboard</a>.
             </p>
           </div>
+
+          </div><!-- end #regSelectionStep -->
+
+          <!-- ── Step 2: Stripe Embedded Checkout ── -->
+          <div id="regPaymentStep" class="d-none">
+            <div id="stripe-checkout-container"></div>
+          </div>
+
         </div>
         <!-- Cost summary (shown when event has pricing) -->
         <div id="regCostSummary" class="d-none" style="padding:.75rem 1rem .25rem;border-top:1px solid #2a2a2a;">
@@ -324,13 +337,20 @@
         </div>
 
         <div class="modal-footer flex-column align-items-stretch gap-2" style="padding:.75rem 1rem;">
-          <div class="d-flex gap-2 flex-wrap">
+          <!-- Step 1 footer: selection buttons -->
+          <div class="d-flex gap-2 flex-wrap" id="regFooterStep1">
             <button class="btn btn-outline-danger btn-sm me-auto" id="unregBtn" onclick="unregisterFromEvent()" style="display:none;">
               Cancel Registration
             </button>
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
             <button type="button" class="btn btn-outline-secondary" id="regSaveDraftBtn" style="display:none;">Save</button>
             <button type="button" class="btn btn-finalize" id="regSaveBtn">Register</button>
+          </div>
+          <!-- Step 2 footer: back button (shown during Stripe checkout) -->
+          <div class="d-none w-100" id="regFooterStep2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="backToRegSelection()">
+              &#8592; Back to Registration
+            </button>
           </div>
         </div>
       </div>
@@ -346,6 +366,8 @@
     let eventsCache = {};     // event_id → full event object
     let regModal;
     let currentRegEvent = null; // full event object for the open modal
+    let stripeInstance = null;
+    let stripeCheckoutInstance = null;
 
     function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
 
@@ -628,6 +650,13 @@
           payBadge = '<span class="observer-badge-unpaid">&#9203; Unpaid</span>';
         }
 
+        const linkedDancer = o.linked_student_id
+          ? (myStudents.find(s => s.id === o.linked_student_id) || null)
+          : null;
+        const linkedName = linkedDancer
+          ? `<span style="color:#a78bfa;font-size:.82rem;">${esc(linkedDancer.name)}</span>`
+          : '<span style="color:#444;">—</span>';
+
         return `
           <tr onclick="${locked ? '' : `document.getElementById('osw-${o.id}').click()`}" style="${locked ? 'cursor:default;' : ''}">
             <td>
@@ -642,6 +671,7 @@
             <td class="fw-semibold" style="color:${locked ? '#888' : '#f0f0f0'};">
               ${esc(o.name)}${locked ? ' <span class="lock-icon">&#128274;</span>' : ''}${payBadge}
             </td>
+            <td>${linkedName}</td>
           </tr>`;
       }).join('');
     }
@@ -761,27 +791,43 @@
     }
 
     async function checkoutRegistration(isAddDancers) {
-      const token   = localStorage.getItem('token');
-      const eventId = parseInt(document.getElementById('regEventId').value);
-      const alertEl = document.getElementById('regAlert');
-      const saveBtn = document.getElementById('regSaveBtn');
+      const token      = localStorage.getItem('token');
+      const eventId    = parseInt(document.getElementById('regEventId').value);
+      const alertEl    = document.getElementById('regAlert');
+      const saveBtn    = document.getElementById('regSaveBtn');
       const studentIds = getSelectedStudentIds();
+      const observerIds = getSelectedObserverIds();
+      const reg        = myRegistrations[String(eventId)];
+      const isFinalized = reg && reg.is_finalized;
 
-      if (!studentIds.length) {
+      // For new registrations, require at least one student
+      if (!isAddDancers && !studentIds.length) {
         alertEl.textContent = 'Please select at least one student.';
         alertEl.classList.remove('d-none');
         return;
       }
 
+      // For finalized (update) registrations, require at least one new addition
+      if (isAddDancers) {
+        const lockedIds    = isFinalized ? (reg.student_ids  || []) : [];
+        const lockedObsIds = isFinalized ? (reg.observer_ids || []) : [];
+        const newStudents  = studentIds.filter(id => !lockedIds.includes(id));
+        const newObservers = observerIds.filter(id => !lockedObsIds.includes(id));
+        if (!newStudents.length && !newObservers.length) {
+          alertEl.textContent = 'Please select at least one new dancer or observer to add.';
+          alertEl.classList.remove('d-none');
+          return;
+        }
+      }
+
       alertEl.classList.add('d-none');
+      const origBtnText = saveBtn.textContent;
       saveBtn.disabled = true;
       saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing…';
 
       const endpoint = isAddDancers
-        ? `${API}/events/${eventId}/register/add-students`
-        : `${API}/events/${eventId}/register/checkout`;
-
-      const observerIds = getSelectedObserverIds();
+        ? `${API}/events/${eventId}/register/add-students?embedded=true`
+        : `${API}/events/${eventId}/register/checkout?embedded=true`;
 
       try {
         const res = await fetch(endpoint, {
@@ -793,13 +839,15 @@
         if (!res.ok) {
           alertEl.textContent = data.detail || `Error ${res.status}`;
           alertEl.classList.remove('d-none');
+          saveBtn.disabled = false;
+          saveBtn.textContent = origBtnText;
           return;
         }
+
         if (data.session_id === 'free') {
           // Free event — immediately finalized
           myRegistrations[String(eventId)] = {
             ...myRegistrations[String(eventId)],
-            registration_id: data.registration_id,
             student_ids: studentIds,
             observer_ids: observerIds,
             is_finalized: true,
@@ -807,17 +855,70 @@
           };
           updateEventCard(eventId, true);
           regModal.hide();
-        } else {
-          // Redirect to Stripe Checkout
+          saveBtn.disabled = false;
+          saveBtn.textContent = origBtnText;
+
+        } else if (data.client_secret) {
+          // Embedded Stripe checkout — mount inside modal
+          saveBtn.disabled = false;
+          saveBtn.textContent = origBtnText;
+
+          // Initialise Stripe (lazy — only fetched once)
+          if (!stripeInstance) {
+            const cfgRes = await fetch(`${API}/stripe/config`);
+            const cfg    = await cfgRes.json();
+            stripeInstance = Stripe(cfg.publishable_key);
+          }
+
+          // Destroy any previous embedded checkout
+          if (stripeCheckoutInstance) {
+            await stripeCheckoutInstance.destroy();
+            stripeCheckoutInstance = null;
+          }
+          document.getElementById('stripe-checkout-container').innerHTML = '';
+
+          stripeCheckoutInstance = await stripeInstance.initEmbeddedCheckout({
+            clientSecret: data.client_secret,
+          });
+          stripeCheckoutInstance.mount('#stripe-checkout-container');
+
+          // Switch modal to Step 2 (payment UI)
+          document.getElementById('regSelectionStep').classList.add('d-none');
+          document.getElementById('regCostSummary').classList.add('d-none');
+          document.getElementById('regPaymentStep').classList.remove('d-none');
+          document.getElementById('regFooterStep1').classList.add('d-none');
+          document.getElementById('regFooterStep2').classList.remove('d-none');
+
+        } else if (data.checkout_url) {
+          // Fallback: redirect to hosted Stripe page
           regModal.hide();
           window.location.href = data.checkout_url;
+
+        } else {
+          saveBtn.disabled = false;
+          saveBtn.textContent = origBtnText;
         }
       } catch {
         alertEl.textContent = 'Something went wrong. Please try again.';
         alertEl.classList.remove('d-none');
-      } finally {
         saveBtn.disabled = false;
+        saveBtn.textContent = origBtnText;
       }
+    }
+
+    async function backToRegSelection() {
+      // Destroy embedded Stripe checkout and return to Step 1
+      if (stripeCheckoutInstance) {
+        await stripeCheckoutInstance.destroy();
+        stripeCheckoutInstance = null;
+      }
+      document.getElementById('stripe-checkout-container').innerHTML = '';
+
+      document.getElementById('regPaymentStep').classList.add('d-none');
+      document.getElementById('regSelectionStep').classList.remove('d-none');
+      document.getElementById('regFooterStep2').classList.add('d-none');
+      document.getElementById('regFooterStep1').classList.remove('d-none');
+      updateCostSummary();
     }
 
     async function saveDraftRegistration() {
@@ -996,6 +1097,20 @@
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html'; return; }
       regModal = new bootstrap.Modal(document.getElementById('regModal'));
+
+      // Clean up Stripe embedded checkout when modal is fully closed
+      document.getElementById('regModal').addEventListener('hidden.bs.modal', async function() {
+        if (stripeCheckoutInstance) {
+          await stripeCheckoutInstance.destroy();
+          stripeCheckoutInstance = null;
+        }
+        document.getElementById('stripe-checkout-container').innerHTML = '';
+        // Reset modal back to Step 1 for next open
+        document.getElementById('regPaymentStep').classList.add('d-none');
+        document.getElementById('regSelectionStep').classList.remove('d-none');
+        document.getElementById('regFooterStep2').classList.add('d-none');
+        document.getElementById('regFooterStep1').classList.remove('d-none');
+      });
 
       // Live cost summary update when student/observer checkboxes change
       document.getElementById('regModal').addEventListener('change', function(e) {

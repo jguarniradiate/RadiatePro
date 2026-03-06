@@ -303,6 +303,21 @@
         <div class="modal-body">
           <p class="text-muted small mb-1" id="addRegForUser"></p>
 
+          <!-- Payment status selection -->
+          <div class="mb-3 p-2 rounded" style="background:#111;border:1px solid #2a2a2a;">
+            <p class="fw-semibold mb-2" style="font-size:.8rem;color:#aaa;text-transform:uppercase;letter-spacing:.05em;">Payment Status</p>
+            <div class="d-flex gap-3 flex-wrap">
+              <div class="form-check mb-0">
+                <input class="form-check-input" type="radio" name="addStudentPayStatus" id="addStuPayNo" value="no" checked>
+                <label class="form-check-label" for="addStuPayNo" style="font-size:.85rem;">Not Paid <span class="text-muted">(pending)</span></label>
+              </div>
+              <div class="form-check mb-0">
+                <input class="form-check-input" type="radio" name="addStudentPayStatus" id="addStuPayYes" value="yes">
+                <label class="form-check-label" for="addStuPayYes" style="font-size:.85rem;color:#818cf8;">&#10003; Paid (cash / offline)</label>
+              </div>
+            </div>
+          </div>
+
           <!-- Existing students list -->
           <p class="fw-semibold mb-2" style="font-size:.82rem;color:#E3FC02;">Existing Students</p>
           <div id="addRegStudentLoading" class="text-center py-2"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div></div>
@@ -396,6 +411,21 @@
         </div>
         <div class="modal-body">
           <p class="text-muted small mb-1" id="addRegObsForUser"></p>
+
+          <!-- Payment status selection -->
+          <div class="mb-3 p-2 rounded" style="background:#111;border:1px solid #2a2a2a;">
+            <p class="fw-semibold mb-2" style="font-size:.8rem;color:#aaa;text-transform:uppercase;letter-spacing:.05em;">Payment Status</p>
+            <div class="d-flex gap-3 flex-wrap">
+              <div class="form-check mb-0">
+                <input class="form-check-input" type="radio" name="addObsPayStatus" id="addObsPayNo" value="no" checked>
+                <label class="form-check-label" for="addObsPayNo" style="font-size:.85rem;">Not Paid <span class="text-muted">(pending)</span></label>
+              </div>
+              <div class="form-check mb-0">
+                <input class="form-check-input" type="radio" name="addObsPayStatus" id="addObsPayYes" value="yes">
+                <label class="form-check-label" for="addObsPayYes" style="font-size:.85rem;color:#818cf8;">&#10003; Paid (cash / offline)</label>
+              </div>
+            </div>
+          </div>
 
           <!-- Existing observers list -->
           <p class="fw-semibold mb-2" style="font-size:.82rem;color:#a78bfa;">User's Observers</p>
@@ -879,15 +909,15 @@
             <div style="margin-top:.6rem;">
               <div class="d-flex justify-content-between align-items-center mb-1">
                 <span style="font-size:.75rem;color:#aaa;">Capacity</span>
-                <span style="font-size:.75rem;color:${barColor};font-weight:600;">${cnt}/${cap} students${pct>=100?' &nbsp;<span style="background:#ff4444;color:#fff;padding:1px 6px;border-radius:4px;font-size:.68rem;">FULL</span>':''}</span>
+                <span id="cap-count-${e.id}" style="font-size:.75rem;color:${barColor};font-weight:600;">${cnt}/${cap} students${pct>=100?' &nbsp;<span style="background:#ff4444;color:#fff;padding:1px 6px;border-radius:4px;font-size:.68rem;">FULL</span>':''}</span>
               </div>
               <div style="background:#2a2a2a;border-radius:4px;height:6px;overflow:hidden;">
-                <div style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width .3s;"></div>
+                <div id="cap-bar-${e.id}" style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width .3s;"></div>
               </div>
-            </div>` : (cnt > 0 ? `<div style="font-size:.75rem;color:#aaa;margin-top:.4rem;">${cnt} student${cnt!==1?'s':''} registered (no cap)</div>` : '');
+            </div>` : (cnt > 0 ? `<div id="cap-count-${e.id}" style="font-size:.75rem;color:#aaa;margin-top:.4rem;">${cnt} student${cnt!==1?'s':'' registered (no cap)</div>` : '');
           const revHtml = e.total_revenue != null ? `<span style="font-size:.75rem;color:#6fcf97;font-weight:600;margin-left:.75rem;">&#36;${parseFloat(e.total_revenue).toFixed(2)} revenue</span>` : '';
           return `
-          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;margin-bottom:.5rem;" id="erow-${e.id}">
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;margin-bottom:.5rem;" id="erow-${e.id}" data-max-students="${e.max_students || 0}">
             <div class="d-flex align-items-start justify-content-between p-3">
               <div style="flex:1;min-width:0;">
                 <div class="fw-bold">${typeBadge(e.event_type)}${esc(e.title)}</div>
@@ -978,6 +1008,9 @@
         const amt = reg.amount_paid != null ? ` &nbsp;$${Number(reg.amount_paid).toFixed(2)}` : '';
         return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid${amt}</span>`;
       }
+      if (reg.payment_status === 'admin-paid') {
+        return `<span style="background:rgba(99,102,241,.15);color:#818cf8;border:1px solid #818cf8;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Admin Paid</span>`;
+      }
       if (reg.payment_status === 'free') {
         return `<span style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">Free</span>`;
       }
@@ -1009,7 +1042,7 @@
         <div class="reg-card" id="areg-${reg.id}">
           <div class="d-flex align-items-start justify-content-between mb-2">
             <div style="flex:1;min-width:0;">
-              <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+              <div class="d-flex align-items-center flex-wrap gap-2 mb-1" id="pay-status-${reg.id}">
                 <span class="fw-semibold" style="font-size:.9rem;">${esc(reg.user_name)}</span>
                 ${paymentBadge(reg)}${paidOnHtml}
               </div>
@@ -1051,6 +1084,25 @@
             const remaining = content.querySelectorAll('.reg-card').length;
             if (remaining === 0) content.innerHTML = '<p class="text-muted small mb-0">No registrations yet.</p>';
             else heading.textContent = `Registrations (${remaining})`;
+          }
+          // Refresh capacity totals by counting remaining student badges
+          const studentCount = content.querySelectorAll('[id^="rst-"]').length;
+          const eventRow     = document.getElementById(`erow-${eventId}`);
+          const maxStudents  = eventRow ? parseInt(eventRow.dataset.maxStudents || '0') : 0;
+          const capCountEl   = document.getElementById(`cap-count-${eventId}`);
+          const capBarEl     = document.getElementById(`cap-bar-${eventId}`);
+          if (capCountEl && maxStudents > 0) {
+            const pct      = Math.min(100, Math.round(studentCount / maxStudents * 100));
+            const barColor = pct >= 100 ? '#ff4444' : pct >= 80 ? '#ff9900' : '#E3FC02';
+            const fullTag  = pct >= 100 ? ' &nbsp;<span style="background:#ff4444;color:#fff;padding:1px 6px;border-radius:4px;font-size:.68rem;">FULL</span>' : '';
+            capCountEl.style.color = barColor;
+            capCountEl.innerHTML   = `${studentCount}/${maxStudents} students${fullTag}`;
+            if (capBarEl) { capBarEl.style.width = `${pct}%`; capBarEl.style.background = barColor; }
+          } else if (capCountEl && maxStudents === 0) {
+            // No cap — update free-form count text
+            capCountEl.textContent = studentCount > 0
+              ? `${studentCount} student${studentCount !== 1 ? 's' : ''} registered (no cap)`
+              : '';
           }
         } else alert('Failed to remove registration.');
       } catch { alert('Something went wrong.'); }
@@ -1154,6 +1206,8 @@
             badge.innerHTML = `&#128065; ${esc(observerName)} <button class="stu-badge-remove" style="color:#9d7ee0;" title="Remove observer" onclick="adminRemoveRegObserver(${eventId},${regId},${observerId},'${esc(observerName)}')">×</button>`;
             container.insertBefore(badge, addBtn);
           }
+          // Handle payment status (admin-paid finalization)
+          await maybeAdminFinalize(eventId, regId, token, 'addObsPayStatus');
           if (!document.getElementById('addRegObsList').children.length) addRegObserverModal.hide();
         } else {
           const d = await res.json().catch(()=>({}));
@@ -1194,7 +1248,7 @@
         });
         if (!createRes.ok) { const d = await createRes.json().catch(()=>({})); alertEl.textContent = d.detail || 'Failed to create observer.'; alertEl.classList.remove('d-none'); return; }
         const obs = await createRes.json();
-        // 2. Add to registration
+        // 2. Add to registration (payment finalization is handled inside adminAddRegObserver)
         await adminAddRegObserver(obs.id, obs.name);
         document.getElementById('newObserverName').value = '';
         document.getElementById('newObserverLinkedStudent').value = '';
@@ -1362,6 +1416,29 @@
       }
     }
 
+    // Helper: read payment-status radio and optionally call admin-finalize
+    async function maybeAdminFinalize(eventId, regId, token, payStatusRadioName) {
+      const isPaid = document.querySelector(`input[name="${payStatusRadioName}"]:checked`)?.value === 'yes';
+      if (!isPaid) return false;
+      try {
+        const fRes = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/admin-finalize`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (fRes.ok) {
+          // Update the payment badge in the DOM
+          const badgeDiv = document.getElementById(`pay-status-${regId}`);
+          if (badgeDiv) {
+            const existingBadge = badgeDiv.querySelector('span:not(.fw-semibold)');
+            const newBadge = '<span style="background:rgba(99,102,241,.15);color:#818cf8;border:1px solid #818cf8;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Admin Paid</span>';
+            if (existingBadge) existingBadge.outerHTML = newBadge;
+            else badgeDiv.insertAdjacentHTML('beforeend', newBadge);
+          }
+          return true;
+        }
+      } catch {}
+      return false;
+    }
+
     async function adminAddRegStudent(studentId, studentName) {
       const { eventId, regId } = _regCtx;
       const token = localStorage.getItem('token');
@@ -1383,6 +1460,8 @@
             badge.innerHTML = `${esc(studentName)} <button class="stu-badge-remove" title="Remove student" onclick="adminRemoveRegStudent(${eventId},${regId},${studentId},'${esc(studentName)}')">×</button>`;
             container.insertBefore(badge, addBtn);
           }
+          // Handle payment status (admin-paid finalization)
+          await maybeAdminFinalize(eventId, regId, token, 'addStudentPayStatus');
           // Close modal if no more available
           if (!document.getElementById('addRegStudentList').children.length) addRegStudentModal.hide();
         } else {
@@ -1463,6 +1542,9 @@
             onclick="adminRemoveRegStudent(${eventId},${regId},${newStudent.id},'${esc(newStudent.name)}')">×</button>`;
           container.insertBefore(badge, addBtn);
         }
+
+        // Handle payment status (admin-paid finalization)
+        await maybeAdminFinalize(eventId, regId, token, 'addStudentPayStatus');
 
         // Reset and collapse the form
         document.getElementById('newStudentName').value  = '';

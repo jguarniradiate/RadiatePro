@@ -171,8 +171,9 @@ class EventRegistrationOut(BaseModel):
 
 
 class CheckoutSessionOut(BaseModel):
-    checkout_url: str   # empty string = free event, skip redirect
-    session_id: str     # 'free' for free events
+    checkout_url: str        # empty string = free or embedded
+    session_id: str          # 'free' for free events
+    client_secret: str | None = None  # set when embedded=true
 
 
 class VerifyPaymentRequest(BaseModel):

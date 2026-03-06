@@ -6,13 +6,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import stripe
-from fastapi import FastAPI, Depends, HTTPException, Header, Request
+from fastapi import FastAPI, Depends, HTTPException, Header, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_WEBHOOK_SECRET    = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_PUBLISHABLE_KEY   = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://goldfish-app-fuu3t.ondigitalocean.app")
 
 import models
@@ -369,6 +370,12 @@ def me(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/stripe/config")
+def stripe_config():
+    """Return the Stripe publishable key so the frontend can initialise Stripe.js."""
+    return {"publishable_key": STRIPE_PUBLISHABLE_KEY}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -828,6 +835,7 @@ def unregister_from_event(
 def create_checkout(
     event_id: int,
     body: schemas.EventRegistrationCreate,
+    embedded: bool = Query(False, description="Use Stripe Embedded Checkout (returns client_secret)"),
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
@@ -934,30 +942,44 @@ def create_checkout(
             },
             "quantity": len(body.observer_ids),
         })
+    meta = {
+        "registration_id": str(reg.id),
+        "event_id": str(event_id),
+        "user_name": user_name,
+        "observer_ids": ",".join(str(i) for i in body.observer_ids),
+    }
+    return_url = (
+        f"{FRONTEND_URL}/events.html"
+        f"?payment=success&event_id={event_id}&session_id={{CHECKOUT_SESSION_ID}}"
+    )
     try:
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=line_items,
-            mode="payment",
-            customer_email=user.email,
-            success_url=(
-                f"{FRONTEND_URL}/events.html"
-                f"?payment=success&event_id={event_id}&session_id={{CHECKOUT_SESSION_ID}}"
-            ),
-            cancel_url=f"{FRONTEND_URL}/events.html?payment=cancelled&event_id={event_id}",
-            metadata={
-                "registration_id": str(reg.id),
-                "event_id": str(event_id),
-                "user_name": user_name,
-                "observer_ids": ",".join(str(i) for i in body.observer_ids),
-            },
-        )
+        if embedded:
+            session = stripe.checkout.Session.create(
+                ui_mode="embedded",
+                line_items=line_items,
+                mode="payment",
+                customer_email=user.email,
+                return_url=return_url,
+                metadata=meta,
+            )
+        else:
+            session = stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=line_items,
+                mode="payment",
+                customer_email=user.email,
+                success_url=return_url,
+                cancel_url=f"{FRONTEND_URL}/events.html?payment=cancelled&event_id={event_id}",
+                metadata=meta,
+            )
     except stripe.StripeError as e:
         raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message}")
 
     reg.payment_status = "pending"
     reg.stripe_session_id = session.id
     db.commit()
+    if embedded:
+        return schemas.CheckoutSessionOut(checkout_url="", session_id=session.id, client_secret=session.client_secret)
     return schemas.CheckoutSessionOut(checkout_url=session.url, session_id=session.id)
 
 
@@ -1067,6 +1089,7 @@ def add_students_save(
 def add_students_to_finalized(
     event_id: int,
     body: schemas.EventRegistrationCreate,
+    embedded: bool = Query(False, description="Use Stripe Embedded Checkout"),
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
@@ -1144,31 +1167,44 @@ def add_students_to_finalized(
             },
             "quantity": len(new_obs_ids),
         })
+    meta2 = {
+        "registration_id": str(reg.id),
+        "event_id": str(event_id),
+        "new_student_ids": ",".join(str(i) for i in new_ids),
+        "observer_ids": ",".join(str(i) for i in new_obs_ids),
+        "user_name": user_name,
+    }
+    return_url2 = (
+        f"{FRONTEND_URL}/events.html"
+        f"?payment=success&event_id={event_id}&session_id={{CHECKOUT_SESSION_ID}}"
+    )
     try:
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=line_items,
-            mode="payment",
-            customer_email=user.email,
-            success_url=(
-                f"{FRONTEND_URL}/events.html"
-                f"?payment=success&event_id={event_id}&session_id={{CHECKOUT_SESSION_ID}}"
-                f"&new_students={','.join(str(i) for i in new_ids)}"
-            ),
-            cancel_url=f"{FRONTEND_URL}/events.html?payment=cancelled&event_id={event_id}",
-            metadata={
-                "registration_id": str(reg.id),
-                "event_id": str(event_id),
-                "new_student_ids": ",".join(str(i) for i in new_ids),
-                "observer_ids": ",".join(str(i) for i in new_obs_ids),
-                "user_name": user_name,
-            },
-        )
+        if embedded:
+            session = stripe.checkout.Session.create(
+                ui_mode="embedded",
+                line_items=line_items,
+                mode="payment",
+                customer_email=user.email,
+                return_url=return_url2,
+                metadata=meta2,
+            )
+        else:
+            session = stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=line_items,
+                mode="payment",
+                customer_email=user.email,
+                success_url=return_url2 + f"&new_students={','.join(str(i) for i in new_ids)}",
+                cancel_url=f"{FRONTEND_URL}/events.html?payment=cancelled&event_id={event_id}",
+                metadata=meta2,
+            )
     except stripe.StripeError as e:
         raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message}")
 
     reg.stripe_session_id = session.id
     db.commit()
+    if embedded:
+        return schemas.CheckoutSessionOut(checkout_url="", session_id=session.id, client_secret=session.client_secret)
     return schemas.CheckoutSessionOut(checkout_url=session.url, session_id=session.id)
 
 
@@ -1494,6 +1530,35 @@ def admin_add_reg_student(
     db.add(models.EventRegistrationStudent(registration_id=reg_id, student_id=student_id))
     db.commit()
     return {"message": "Student added to registration."}
+
+
+@app.post("/admin/events/{event_id}/registrations/{reg_id}/admin-finalize", response_model=schemas.MessageOut)
+def admin_finalize_registration(
+    event_id: int,
+    reg_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Admin manually marks a registration as paid (cash / offline payment).
+
+    Sets payment_status = 'admin-paid', is_finalized = True, and records
+    finalized_at so the frontend can distinguish admin approvals from
+    Stripe payments.
+    """
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.id == reg_id,
+        models.EventRegistration.event_id == event_id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found.")
+    reg.is_finalized   = True
+    reg.payment_status = "admin-paid"
+    reg.finalized_at   = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": "Registration marked as paid by admin."}
 
 
 # ── Admin student management ──────────────────────────────────────────────────
