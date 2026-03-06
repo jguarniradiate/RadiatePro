@@ -424,20 +424,8 @@
         </div>
         <div id="txError" class="alert alert-danger d-none"></div>
 
-        <div class="table-responsive d-none" id="txTableWrap">
-          <table class="table tbl align-middle mb-0">
-            <thead>
-              <tr>
-                <th>Event</th>
-                <th>Event Date</th>
-                <th>Details</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody id="txBody"></tbody>
-          </table>
+        <div class="d-none" id="txTableWrap">
+          <div id="txBody"></div>
         </div>
       </div>
 
@@ -891,36 +879,119 @@
           return;
         }
 
+        // ── Group transactions by event ──────────────────────────────────────
+        const groupMap = {};   // event_id → { event_title, event_date, txs[] }
+        const groupOrder = []; // ordered event_ids
+        for (const t of txs) {
+          const key = String(t.event_id ?? t.event_title);
+          if (!groupMap[key]) {
+            groupMap[key] = { event_title: t.event_title, event_date: t.event_date, txs: [] };
+            groupOrder.push(key);
+          }
+          groupMap[key].txs.push(t);
+        }
+
+        // ── Helper: amount display + status badge per transaction ──────────
+        function txDisplay(t) {
+          const amt = t.amount_paid || 0;
+          switch (t.payment_status) {
+            case 'free':
+              return {
+                amtHtml:    '<span style="color:#4ade80;font-weight:700;">Free</span>',
+                statusHtml: '<span style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;">Free</span>',
+                sign: 0,
+              };
+            case 'admin-paid':
+              if (amt > 0) return {
+                amtHtml:    `<span style="color:#22c55e;font-weight:700;">+$${amt.toFixed(2)}</span>`,
+                statusHtml: '<span class="tx-status-paid">&#10003; Paid</span>',
+                sign: amt,
+              };
+              return {
+                amtHtml:    '<span style="color:#a78bfa;font-weight:600;">Complimentary</span>',
+                statusHtml: '<span style="background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid #a78bfa;font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;">&#10003; Comp</span>',
+                sign: 0,
+              };
+            case 'credit-applied':
+              return {
+                amtHtml:    `<span style="color:#fbbf24;font-weight:600;">&#128179; $${amt.toFixed(2)}</span>`,
+                statusHtml: '<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;">Credit</span>',
+                sign: 0,
+              };
+            case 'credit':
+              return {
+                amtHtml:    `<span style="color:#fbbf24;font-weight:700;">&#8722;$${amt.toFixed(2)}</span>`,
+                statusHtml: '<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;">&#128179; Credit Issued</span>',
+                sign: -amt,
+              };
+            case 'removed':
+              return {
+                amtHtml:    '<span style="color:#555;font-style:italic;">—</span>',
+                statusHtml: '<span style="color:#555;font-size:.78rem;font-style:italic;">Removed</span>',
+                sign: 0,
+              };
+            default: // 'paid' (Stripe)
+              return {
+                amtHtml:    `<span style="color:#22c55e;font-weight:700;">+$${amt.toFixed(2)}</span>`,
+                statusHtml: '<span class="tx-status-paid">&#10003; Paid</span>',
+                sign: amt,
+              };
+          }
+        }
+
+        // ── Render event groups ──────────────────────────────────────────────
         document.getElementById('txTableWrap').classList.remove('d-none');
-        document.getElementById('txBody').innerHTML = txs.map(t => {
-          const evDate = t.event_date
-            ? new Date(t.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        document.getElementById('txBody').innerHTML = groupOrder.map(key => {
+          const g = groupMap[key];
+          const evDate = g.event_date
+            ? new Date(g.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
             : '—';
-          const paidOn = t.finalized_at
-            ? new Date(t.finalized_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-            : '—';
-          const amtStr = t.payment_status === 'free'
-            ? '<span style="color:#4ade80;font-weight:600;">Free</span>'
-            : t.payment_status === 'admin-paid'
-              ? '<span style="color:#a78bfa;font-weight:600;">Complimentary</span>'
-              : `<span style="font-weight:600;">$${Number(t.amount_paid).toFixed(2)}</span>`;
-          const statusBadge = t.payment_status === 'free'
-            ? '<span class="tx-status-free">Free</span>'
-            : t.payment_status === 'admin-paid'
-              ? '<span class="tx-status-paid">&#10003; Paid</span>'
-              : '<span class="tx-status-paid">&#10003; Paid</span>';
-          // Details: use description if present, otherwise fall back to dancer count
-          const details = t.description
-            ? esc(t.description)
-            : `${t.student_count} dancer${t.student_count !== 1 ? 's' : ''}${t.observer_count ? `, ${t.observer_count} observer${t.observer_count !== 1 ? 's' : ''}` : ''}`;
-          return `<tr>
-            <td class="fw-semibold">${esc(t.event_title)}</td>
-            <td style="white-space:nowrap;">${evDate}</td>
-            <td style="color:#aaa;font-size:.85rem;">${details}</td>
-            <td style="white-space:nowrap;">${amtStr}</td>
-            <td style="white-space:nowrap;">${statusBadge}</td>
-            <td style="color:#888;font-size:.85rem;white-space:nowrap;">${paidOn}</td>
-          </tr>`;
+
+          // Net total for this event group
+          let net = g.txs.reduce((s, t) => s + (txDisplay(t).sign || 0), 0);
+          const netStr   = net === 0 ? '' : net > 0 ? `+$${net.toFixed(2)}` : `&#8722;$${Math.abs(net).toFixed(2)}`;
+          const netColor = net > 0 ? '#22c55e' : net < 0 ? '#fbbf24' : '#888';
+
+          // Rows
+          const rows = g.txs.map(t => {
+            const { amtHtml, statusHtml } = txDisplay(t);
+            const paidOn = t.finalized_at
+              ? new Date(t.finalized_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : '—';
+            const details = t.description
+              ? esc(t.description)
+              : `${t.student_count} dancer${t.student_count !== 1 ? 's' : ''}${t.observer_count ? `, ${t.observer_count} observer${t.observer_count !== 1 ? 's' : ''}` : ''}`;
+            return `
+              <tr style="border-top:1px solid #1e1e1e;">
+                <td style="padding:.65rem 1rem;color:#bbb;font-size:.84rem;">${details}</td>
+                <td style="padding:.65rem .5rem;text-align:right;white-space:nowrap;">${amtHtml}</td>
+                <td style="padding:.65rem .75rem;white-space:nowrap;">${statusHtml}</td>
+                <td style="padding:.65rem 1rem;color:#555;font-size:.78rem;white-space:nowrap;text-align:right;">${paidOn}</td>
+              </tr>`;
+          }).join('');
+
+          return `
+            <div class="mb-3" style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:11px;overflow:hidden;">
+              <!-- Event group header -->
+              <div class="d-flex align-items-center justify-content-between px-4 py-3" style="background:#111;border-bottom:1px solid #252525;">
+                <div>
+                  <div class="fw-bold" style="color:#f0f0f0;font-size:.95rem;">${esc(g.event_title)}</div>
+                  <div style="color:#555;font-size:.75rem;margin-top:.2rem;">&#128197; ${evDate}</div>
+                </div>
+                ${netStr ? `<div style="color:${netColor};font-weight:800;font-size:1rem;letter-spacing:.01em;">${netStr}</div>` : ''}
+              </div>
+              <!-- Column headers -->
+              <div style="display:grid;grid-template-columns:1fr auto auto auto;padding:.35rem 1rem;background:#131313;border-bottom:1px solid #1e1e1e;">
+                <span style="color:#444;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;">Details</span>
+                <span style="color:#444;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;text-align:right;padding-right:.5rem;">Amount</span>
+                <span style="color:#444;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;padding:0 .75rem;">Status</span>
+                <span style="color:#444;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;text-align:right;">Date</span>
+              </div>
+              <!-- Transaction rows -->
+              <table style="width:100%;border-collapse:collapse;">
+                <tbody>${rows}</tbody>
+              </table>
+            </div>`;
         }).join('');
 
       } catch {
