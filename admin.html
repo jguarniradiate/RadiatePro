@@ -1016,13 +1016,15 @@
         // and skip tokens that are balance-due (pending overrides paid).
         const totalRevenue = regs.reduce((sum, r) => {
           if (r.payment_status === 'paid') return sum + (r.amount_paid || 0);
-          const pendingSet  = new Set(r.pending_student_ids || []);
+          const pendingSet       = new Set(r.pending_student_ids  || []);
+          const creditAppliedSet = new Set(r.credit_applied_ids   || []);
           const activeToks  = new Set([
             ...(r.students  || []).map(s => String(s.id)),
             ...(r.observers || []).map(o => `o${o.id}`),
           ]);
           for (const tok of (r.cash_student_ids || [])) {
-            if (pendingSet.has(tok) || !activeToks.has(tok)) continue;
+            // Skip: pending (not yet paid), credit-applied (no new cash), or removed attendee
+            if (pendingSet.has(tok) || creditAppliedSet.has(tok) || !activeToks.has(tok)) continue;
             sum += tok.startsWith('o') ? (r.observer_price || 0) : (r.price_per_student || 0);
           }
           return sum;
@@ -1032,11 +1034,13 @@
         // Count individual paid / complimentary attendees (students + observers separately)
         let paidStudentCount = 0, paidObserverCount = 0, compStudentCount = 0, compObserverCount = 0, balanceDueCount = 0;
         for (const reg of regs) {
-          const ps   = new Set(reg.pending_student_ids || []);
-          const cash = new Set(reg.cash_student_ids    || []);
+          const ps          = new Set(reg.pending_student_ids || []);
+          const cash        = new Set(reg.cash_student_ids    || []);
+          const credApplied = new Set(reg.credit_applied_ids  || []);
           for (const s of (reg.students || [])) {
             const tok = String(s.id);
             if (ps.has(tok))                              balanceDueCount++;
+            else if (credApplied.has(tok))                compStudentCount++;  // settled via credit — treat as comp
             else if (cash.has(tok))                       paidStudentCount++;  // individually cash-paid
             else if (reg.payment_status === 'paid')       paidStudentCount++;  // Stripe-paid
             else if (reg.payment_status === 'admin-paid') compStudentCount++;  // complimentary
@@ -1044,6 +1048,7 @@
           for (const o of (reg.observers || [])) {
             const tok = `o${o.id}`;
             if (ps.has(tok))                              balanceDueCount++;
+            else if (credApplied.has(tok))                compObserverCount++; // settled via credit — treat as comp
             else if (cash.has(tok))                       paidObserverCount++; // individually cash-paid
             else if (reg.payment_status === 'paid')       paidObserverCount++; // Stripe-paid
             else if (reg.payment_status === 'admin-paid') compObserverCount++; // complimentary
@@ -1129,6 +1134,14 @@
       }
       if (reg.payment_status === 'admin-paid') {
         if (hasPending) return dueBadge + creditBadge;
+        // If no real cash was collected (cash_student_ids is empty or all tokens are credit-applied)
+        // show Complimentary in purple; otherwise show Paid in green
+        const cashSet         = new Set(reg.cash_student_ids    || []);
+        const creditAppliedSet= new Set(reg.credit_applied_ids  || []);
+        const hasRealCash = [...cashSet].some(tok => !creditAppliedSet.has(tok));
+        if (!hasRealCash) {
+          return `<span style="background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid #a78bfa;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Complimentary</span>${creditBadge}`;
+        }
         return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid</span>${creditBadge}`;
       }
       if (reg.payment_status === 'free') {
@@ -1143,22 +1156,28 @@
     }
 
     function renderRegCard(eventId, reg) {
-      // Build sets for pending and cash-paid tokens: "5" for student, "o3" for observer
-      const pendingSet = new Set(reg.pending_student_ids || []);
-      const cashSet    = new Set(reg.cash_student_ids    || []);
+      // Build sets for pending / cash-paid / credit-applied tokens: "5" = student, "o3" = observer
+      const pendingSet      = new Set(reg.pending_student_ids  || []);
+      const cashSet         = new Set(reg.cash_student_ids     || []);
+      const creditAppliedSet= new Set(reg.credit_applied_ids  || []);
+
+      // Style helper: returns inline style string for a student/observer badge
+      function attendeeBadgeStyle(tok, isObs) {
+        const isPending     = pendingSet.has(tok);
+        const isCreditApply = creditAppliedSet.has(tok);
+        const isCash        = cashSet.has(tok) && !isCreditApply; // real cash — not credit
+        const isStripePaid  = reg.payment_status === 'paid' && !isPending;
+        if (isPending)     return 'background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.5);';
+        if (isCreditApply) return 'background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.5);'; // amber — credit
+        if (isCash || isStripePaid) return 'background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.4);'; // green — paid
+        // finalized but no cash/credit → complimentary
+        if (reg.is_finalized || isObs) return 'background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid rgba(167,139,250,.4);';
+        return ''; // non-finalized, no status yet
+      }
 
       const stuBadges = reg.students.map(s => {
-        const tok       = String(s.id);
-        const isPending = pendingSet.has(tok);
-        const isCash    = cashSet.has(tok);
-        const isStripePaid = reg.payment_status === 'paid' && !isPending;
-        const style = isPending
-          ? 'background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.5);'
-          : (isCash || isStripePaid)
-            ? 'background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.4);'
-            : reg.is_finalized
-              ? 'background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid rgba(167,139,250,.4);' // complimentary
-              : ''; // non-finalized reg: keep default .stu-badge styling
+        const tok   = String(s.id);
+        const style = attendeeBadgeStyle(tok, false);
         return `
           <span class="stu-badge" id="rst-${reg.id}-${s.id}"${style ? ` style="${style}"` : ''}>
             ${esc(s.name)}
@@ -1169,16 +1188,13 @@
 
       const observers = reg.observers || [];
       const obsBadges = observers.map(o => {
-        const tok       = `o${o.id}`;
-        const isPending = pendingSet.has(tok);
-        const isCash    = cashSet.has(tok);
-        const isStripePaid = reg.payment_status === 'paid' && !isPending;
-        const style = isPending
-          ? 'background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.5);'
-          : (isCash || isStripePaid)
-            ? 'background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.4);'
-            : 'background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid #6d5fa6;'; // complimentary purple
-        const removeBtnColor = isPending ? '#f87171' : (isCash || isStripePaid) ? '#4ade80' : '#9d7ee0';
+        const tok   = `o${o.id}`;
+        const style = attendeeBadgeStyle(tok, true);
+        const isPending     = pendingSet.has(tok);
+        const isCreditApply = creditAppliedSet.has(tok);
+        const isCash        = cashSet.has(tok) && !isCreditApply;
+        const isStripePaid  = reg.payment_status === 'paid' && !isPending;
+        const removeBtnColor = isPending ? '#f87171' : isCreditApply ? '#fbbf24' : (isCash || isStripePaid) ? '#4ade80' : '#9d7ee0';
         return `<span class="stu-badge" id="robs-${reg.id}-${o.id}" style="${style}">
           &#128065; ${esc(o.name)}
           <button class="stu-badge-remove" title="Remove observer" style="color:${removeBtnColor};"
@@ -1275,9 +1291,10 @@
         }
 
         const txAmt = tx => {
-          if (tx.payment_status === 'free')    return '<span style="color:#4ade80;font-weight:600;">Free</span>';
-          if (tx.payment_status === 'removed') return '<span style="color:#6b7280;font-style:italic;">Removed</span>';
-          if (tx.payment_status === 'credit')  return `<span style="color:#fbbf24;font-weight:600;">💳 &#8722;$${tx.amount.toFixed(2)}</span>`;
+          if (tx.payment_status === 'free')           return '<span style="color:#4ade80;font-weight:600;">Free</span>';
+          if (tx.payment_status === 'removed')        return '<span style="color:#6b7280;font-style:italic;">Removed</span>';
+          if (tx.payment_status === 'credit')         return `<span style="color:#fbbf24;font-weight:600;">💳 &#8722;$${tx.amount.toFixed(2)}</span>`;
+          if (tx.payment_status === 'credit-applied') return `<span style="color:#fbbf24;font-weight:600;">💳 $${tx.amount.toFixed(2)}</span>`;
           if (tx.payment_status === 'admin-paid' && tx.amount > 0) return `<span style="color:#22c55e;font-weight:600;">$${tx.amount.toFixed(2)}</span>`;
           if (tx.payment_status === 'admin-paid') return '<span style="color:#a78bfa;">Complimentary</span>';
           return `<span style="color:#22c55e;font-weight:600;">$${tx.amount.toFixed(2)}</span>`;
@@ -1325,17 +1342,20 @@
 
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
-      const pendingSet   = new Set(reg.pending_student_ids || []);
-      const cashSet      = new Set(reg.cash_student_ids    || []);
+      const pendingSet        = new Set(reg.pending_student_ids  || []);
+      const cashSet           = new Set(reg.cash_student_ids     || []);
+      const creditAppliedSet  = new Set(reg.credit_applied_ids  || []);
       const pricePerStu  = reg.price_per_student || 0;
       const obsvPrice    = reg.observer_price    || 0;
 
       // Determine label + amount for each attendee token
       function attendeeLabel(token, unitPrice) {
         // Balance due always wins — checked first
-        if (pendingSet.has(token)) return ['Balance Due', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'];
+        if (pendingSet.has(token))       return ['Balance Due',    unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'];
+        // Credit-applied — settled via credit, not new cash
+        if (creditAppliedSet.has(token)) return ['Credit Applied', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
         // Individually cash-paid by admin
-        if (cashSet.has(token))    return ['Paid', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
+        if (cashSet.has(token))          return ['Paid',           unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
         // Stripe-paid registration — only mark as Paid if the reg is actually finalized;
         // guards against unfinalized regs whose payment_status was pre-set to 'paid'
         if (reg.payment_status === 'paid' && reg.is_finalized) return ['Paid', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
@@ -1424,33 +1444,38 @@
       }
 
       // ── Summary ────────────────────────────────────────────
-      // Total paid = Stripe amount_paid + sum of individually cash-paid tokens
-      // Skip tokens that are pending (balance due) or belong to removed attendees
+      // Total paid = Stripe amount_paid + sum of individually cash-paid tokens (excluding credit-applied)
+      // Skip tokens that are pending (balance due), credit-applied, or belong to removed attendees
       const activeToks = new Set([
         ...(reg.students  || []).map(s => String(s.id)),
         ...(reg.observers || []).map(o => `o${o.id}`),
       ]);
       const cashPaidTotal = [...cashSet].reduce((s, tok) =>
-        (pendingSet.has(tok) || !activeToks.has(tok)) ? s : s + (tok.startsWith('o') ? obsvPrice : pricePerStu), 0);
+        (pendingSet.has(tok) || creditAppliedSet.has(tok) || !activeToks.has(tok))
+          ? s : s + (tok.startsWith('o') ? obsvPrice : pricePerStu), 0);
       const totalPaidAmount = (reg.amount_paid || 0) + cashPaidTotal;
 
-      // Total complimentary = face value of all comp/free attendees still in the registration
+      // Total complimentary = face value of comp/free/credit-applied attendees still in the registration
       let totalCompAmount = 0;
+      let totalCreditAppliedAmount = 0;
       for (const s of (reg.students || [])) {
         const [status] = attendeeLabel(String(s.id), pricePerStu);
         if (status === 'Complimentary' || status === 'Free') totalCompAmount += pricePerStu;
+        if (status === 'Credit Applied') totalCreditAppliedAmount += pricePerStu;
       }
       for (const o of (reg.observers || [])) {
         const [status] = attendeeLabel(`o${o.id}`, obsvPrice);
         if (status === 'Complimentary' || status === 'Free') totalCompAmount += obsvPrice;
+        if (status === 'Credit Applied') totalCreditAppliedAmount += obsvPrice;
       }
 
       const totalOutstanding = reg.pending_amount || 0;
 
       const summaryRows = [];
-      if (totalPaidAmount  > 0) summaryRows.push(['Total Paid',          `$${totalPaidAmount.toFixed(2)}`,  'paid']);
-      if (totalCompAmount  > 0) summaryRows.push(['Total Complimentary', `$${totalCompAmount.toFixed(2)}`,  'comp']);
-      if (totalOutstanding > 0) summaryRows.push(['Total Outstanding',   `$${totalOutstanding.toFixed(2)}`, 'due']);
+      if (totalPaidAmount          > 0) summaryRows.push(['Total Paid',           `$${totalPaidAmount.toFixed(2)}`,          'paid']);
+      if (totalCreditAppliedAmount > 0) summaryRows.push(['Total Credit Applied', `$${totalCreditAppliedAmount.toFixed(2)}`, 'credit']);
+      if (totalCompAmount          > 0) summaryRows.push(['Total Complimentary',  `$${totalCompAmount.toFixed(2)}`,          'comp']);
+      if (totalOutstanding         > 0) summaryRows.push(['Total Outstanding',    `$${totalOutstanding.toFixed(2)}`,         'due']);
 
       if (summaryRows.length) {
         // Divider
@@ -1466,9 +1491,10 @@
           },
           didParseCell: (data) => {
             const key = summaryRows[data.row.index]?.[2];
-            if (key === 'paid') data.cell.styles.textColor = [34, 197, 94];
-            else if (key === 'comp') data.cell.styles.textColor = [167, 139, 250];
-            else if (key === 'due')  data.cell.styles.textColor = [239, 68, 68];
+            if (key === 'paid')   data.cell.styles.textColor = [34, 197, 94];
+            else if (key === 'credit') data.cell.styles.textColor = [251, 191, 36];
+            else if (key === 'comp')   data.cell.styles.textColor = [167, 139, 250];
+            else if (key === 'due')    data.cell.styles.textColor = [239, 68, 68];
           },
           styles: { fontSize: 10, cellPadding: 2 },
           theme: 'plain',

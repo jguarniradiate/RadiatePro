@@ -97,6 +97,9 @@ class EventRegistration(Base):
     # Accumulated credit from paid attendees who were later removed by admin.
     # Can be applied to offset pending balances on this registration.
     credit_amount        = Column(Numeric(10, 2), nullable=True, default=0)
+    # Comma-separated tokens of attendees whose balance was settled via credit (not new cash).
+    # Same token format: "5" for student id 5, "o3" for observer id 3.
+    credit_applied_ids   = Column(Text, nullable=True)
 
     event = relationship("Event", back_populates="registrations")
     user = relationship("User", back_populates="event_registrations")

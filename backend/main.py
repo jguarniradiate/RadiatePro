@@ -116,6 +116,8 @@ def run_migrations(eng):
         # Cash/offline payment tracking for individually admin-paid dancers
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS cash_student_ids TEXT",
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS credit_amount NUMERIC(10, 2) DEFAULT 0",
+        # Tokens settled via credit (not new cash) — same format as cash_student_ids
+        "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS credit_applied_ids TEXT",
         # Per-dancer references on transaction rows (null for batch/whole-reg transactions)
         "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS student_id INTEGER REFERENCES students(id) ON DELETE SET NULL",
         "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS observer_id INTEGER REFERENCES observers(id) ON DELETE SET NULL",
@@ -456,20 +458,25 @@ def _auto_apply_credit(db, reg, event, tok: str, student_id: int = None, observe
         return False
     pending.remove(tok)
     reg.pending_student_ids = ",".join(pending) if pending else None
-    # Add to cash_student_ids (marks as individually paid)
+    # Add to cash_student_ids (marks as individually settled)
     cash_tokens = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
     if tok not in cash_tokens:
         cash_tokens.append(tok)
     reg.cash_student_ids = ",".join(cash_tokens)
+    # Track separately as credit-applied (not new cash)
+    credit_applied_tokens = [x for x in (reg.credit_applied_ids or "").split(",") if x.strip()]
+    if tok not in credit_applied_tokens:
+        credit_applied_tokens.append(tok)
+    reg.credit_applied_ids = ",".join(credit_applied_tokens)
     # Deduct credit
     reg.credit_amount = credit - unit_price
-    # Record transaction
+    # Record transaction with 'credit-applied' status so frontend can display it distinctly
     if is_obs:
-        _record_transaction(db, reg, unit_price, "admin-paid",
+        _record_transaction(db, reg, unit_price, "credit-applied",
                             description="1 observer (credit applied)",
                             observer_count=1, observer_id=observer_id or int(tok[1:]))
     else:
-        _record_transaction(db, reg, unit_price, "admin-paid",
+        _record_transaction(db, reg, unit_price, "credit-applied",
                             description="1 dancer (credit applied)",
                             student_count=1, student_id=student_id or int(tok))
     return True
@@ -1800,8 +1807,9 @@ def admin_list_registrations(
         students = [{"id": ers.student_id, "name": ers.student.name} for ers in reg.attending_students]
         observers = [{"id": ero.observer_id, "name": ero.observer.name} for ero in reg.attending_observers]
         name = f"{reg.user.first_name or ''} {reg.user.last_name or ''}".strip() or reg.user.email
-        pending_raw = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
-        cash_raw    = [x for x in (reg.cash_student_ids   or "").split(",") if x.strip()]
+        pending_raw       = [x for x in (reg.pending_student_ids  or "").split(",") if x.strip()]
+        cash_raw          = [x for x in (reg.cash_student_ids     or "").split(",") if x.strip()]
+        credit_applied_raw= [x for x in (reg.credit_applied_ids  or "").split(",") if x.strip()]
         pending_stu_cnt = len([x for x in pending_raw if not x.startswith("o")])
         pending_obs_cnt = len([x for x in pending_raw if x.startswith("o")])
         pending_amount = float(price_per_student * pending_stu_cnt + observer_price * pending_obs_cnt)
@@ -1819,6 +1827,7 @@ def admin_list_registrations(
             "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
             "pending_student_ids": pending_raw,
             "cash_student_ids": cash_raw,
+            "credit_applied_ids": credit_applied_raw,
             "pending_amount": pending_amount,
             # Event-level fields needed for the registration report PDF
             "event_title": event.title if event else None,
