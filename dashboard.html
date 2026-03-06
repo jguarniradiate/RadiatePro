@@ -914,12 +914,18 @@
         }
 
         // ── Group transactions by event ──────────────────────────────────────
-        const groupMap = {};   // event_id → { event_title, event_date, txs[] }
+        const groupMap = {};   // event_id → { event_title, event_date, event_location, event_venue_name, txs[] }
         const groupOrder = []; // ordered event_ids
         for (const t of txs) {
           const key = String(t.event_id ?? t.event_title);
           if (!groupMap[key]) {
-            groupMap[key] = { event_title: t.event_title, event_date: t.event_date, txs: [] };
+            groupMap[key] = {
+              event_title: t.event_title,
+              event_date: t.event_date,
+              event_venue_name: t.event_venue_name || null,
+              event_location: t.event_location || null,
+              txs: [],
+            };
             groupOrder.push(key);
           }
           groupMap[key].txs.push(t);
@@ -939,7 +945,7 @@
               if (amt > 0) return {
                 amtHtml:    `<span style="color:#22c55e;font-weight:700;">+$${amt.toFixed(2)}</span>`,
                 statusHtml: '<span class="tx-status-paid">&#10003; Paid</span>',
-                sign: amt,
+                sign: -amt,  // user paid out → negative net
               };
               return {
                 amtHtml:    '<span style="color:#a78bfa;font-weight:600;">Complimentary</span>',
@@ -950,13 +956,13 @@
               return {
                 amtHtml:    `<span style="color:#fbbf24;font-weight:600;">&#128179; $${amt.toFixed(2)}</span>`,
                 statusHtml: '<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;">Credit</span>',
-                sign: 0,
+                sign: -amt,  // credit applied = user's prior payment being consumed
               };
             case 'credit':
               return {
                 amtHtml:    `<span style="color:#fbbf24;font-weight:700;">&#8722;$${amt.toFixed(2)}</span>`,
                 statusHtml: '<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:20px;">&#128179; Credit Issued</span>',
-                sign: -amt,
+                sign: amt,   // credit issued back to user → positive (refund)
               };
             case 'removed':
               return {
@@ -968,7 +974,7 @@
               return {
                 amtHtml:    `<span style="color:#22c55e;font-weight:700;">+$${amt.toFixed(2)}</span>`,
                 statusHtml: '<span class="tx-status-paid">&#10003; Paid</span>',
-                sign: amt,
+                sign: -amt,  // user paid out → negative net
               };
           }
         }
@@ -981,10 +987,10 @@
             ? new Date(g.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
             : '—';
 
-          // Net total for this event group
+          // Net total for this event group (from USER perspective: paid = negative, refund = positive)
           let net = g.txs.reduce((s, t) => s + (txDisplay(t).sign || 0), 0);
-          const netStr   = net === 0 ? '' : net > 0 ? `+$${net.toFixed(2)}` : `&#8722;$${Math.abs(net).toFixed(2)}`;
-          const netColor = net > 0 ? '#22c55e' : net < 0 ? '#fbbf24' : '#888';
+          const netStr   = net === 0 ? '' : net < 0 ? `&#8722;$${Math.abs(net).toFixed(2)}` : `+$${net.toFixed(2)}`;
+          const netColor = net < 0 ? '#e0e0e0' : net > 0 ? '#22c55e' : '#888';
 
           // Rows
           const rows = g.txs.map(t => {
@@ -1010,9 +1016,12 @@
               <div class="d-flex align-items-center justify-content-between px-4 py-3" style="background:#111;border-bottom:1px solid #252525;">
                 <div>
                   <div class="fw-bold" style="color:#f0f0f0;font-size:.95rem;">${esc(g.event_title)}</div>
-                  <div style="color:#555;font-size:.75rem;margin-top:.2rem;">&#128197; ${evDate}</div>
+                  <div style="color:#555;font-size:.75rem;margin-top:.2rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;">
+                    <span>&#128197; ${evDate}</span>
+                    ${(g.event_venue_name || g.event_location) ? `<span style="color:#444;">&#8226;</span><span>&#128205; ${[g.event_venue_name, g.event_location].filter(Boolean).map(esc).join(', ')}</span>` : ''}
+                  </div>
                 </div>
-                ${netStr ? `<div style="color:${netColor};font-weight:800;font-size:1rem;letter-spacing:.01em;">${netStr}</div>` : ''}
+                ${netStr ? `<div style="color:${netColor};font-weight:800;font-size:1rem;letter-spacing:.01em;flex-shrink:0;margin-left:1rem;">${netStr}</div>` : ''}
               </div>
               <!-- Column headers -->
               <div style="display:grid;grid-template-columns:1fr auto auto auto;padding:.35rem 1rem;background:#131313;border-bottom:1px solid #1e1e1e;">
