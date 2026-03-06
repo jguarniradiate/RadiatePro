@@ -88,9 +88,6 @@
       <li class="nav-item">
         <button class="nav-link" id="events-tab" data-bs-toggle="tab" data-bs-target="#eventsPane" type="button">Events</button>
       </li>
-      <li class="nav-item">
-        <button class="nav-link" id="payments-tab" data-bs-toggle="tab" data-bs-target="#paymentsPane" type="button">Payments</button>
-      </li>
     </ul>
 
     <div class="tab-content">
@@ -162,40 +159,6 @@
       </div>
 
       <!-- ── Payments Tab ── -->
-      <div class="tab-pane fade" id="paymentsPane">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-          <h4 class="fw-bold page-title mb-0">Payments</h4>
-          <button class="btn btn-accent btn-sm" onclick="loadPayments()">&#8635; Refresh</button>
-        </div>
-
-        <!-- Summary stats -->
-        <div class="row g-3 mb-4">
-          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="payStatTotal">—</div><div class="text-muted small">Total Transactions</div></div></div>
-          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="payStatRevenue">—</div><div class="text-muted small">Total Revenue</div></div></div>
-          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="payStatStudents">—</div><div class="text-muted small">Students Paid</div></div></div>
-          <div class="col-6 col-md-3"><div class="stat-card p-3 text-center"><div class="stat-number" id="payStatFree">—</div><div class="text-muted small">Free Regs</div></div></div>
-        </div>
-
-        <div id="paymentsLoading" class="text-center py-3"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div></div>
-        <div id="paymentsEmpty" class="text-muted text-center py-3 d-none">No payments recorded yet.</div>
-        <div id="paymentsError" class="alert alert-danger d-none"></div>
-        <div class="table-responsive d-none" id="paymentsTableWrap">
-          <table class="table tbl align-middle mb-0">
-            <thead>
-              <tr>
-                <th>User</th>
-                <th>Studio</th>
-                <th>Event</th>
-                <th>Details</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody id="paymentsBody"></tbody>
-          </table>
-        </div>
-      </div>
 
     </div>
   </div>
@@ -986,11 +949,12 @@
                   onclick="deleteEvent(${e.id},'${esc(e.title)}')">Delete</button>
               </div>
             </div>
-            <div style="border-top:1px solid #1f1f1f;padding:.4rem 1rem .5rem;">
+            <div style="border-top:1px solid #1f1f1f;padding:.4rem 1rem .5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.4rem;">
               <button class="btn btn-link p-0 text-decoration-none" style="color:#777;font-size:.82rem;"
                 onclick="toggleEventRegistrations(${e.id})">
                 <span id="ereg-arrow-${e.id}" style="font-size:.7rem;margin-right:.35rem;">▶</span>Registrations
               </button>
+              <span id="ereg-summary-${e.id}" style="font-size:.72rem;color:#555;"></span>
             </div>
             <div id="ereg-${e.id}" class="d-none">
               <div id="ereg-content-${e.id}" class="reg-section">
@@ -1095,6 +1059,16 @@
         if (pendingRegs.length)     pills.push(`<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9203; ${pendingRegs.length} Pending</span>`);
         if (balanceDueCount > 0)    pills.push(`<span style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid #f87171;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9889; ${balanceDueCount} Balance Due &nbsp;·&nbsp; $${totalPending.toFixed(2)}</span>`);
         const paymentSummary = pills.length ? `<div class="d-flex flex-wrap gap-1 mt-1">${pills.join('')}</div>` : '';
+
+        // Update the event-card summary line (visible even when registrations are collapsed)
+        const summaryEl = document.getElementById(`ereg-summary-${eventId}`);
+        if (summaryEl) {
+          const parts = [];
+          if (regs.length) parts.push(`${regs.length} reg${regs.length !== 1 ? 's' : ''}`);
+          if (totalRevenue > 0) parts.push(`<span style="color:#22c55e;font-weight:600;">$${totalRevenue.toFixed(2)}</span>`);
+          if (totalPending > 0) parts.push(`<span style="color:#f87171;">$${totalPending.toFixed(2)} due</span>`);
+          summaryEl.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+        }
 
         content.innerHTML = `
           <div class="d-flex align-items-start justify-content-between mb-3">
@@ -1202,8 +1176,8 @@
               <div style="font-size:.78rem;color:#999;">${reg.studio_name ? esc(reg.studio_name) : '<span class="badge badge-independent" style="font-size:.7rem;">Independent</span>'}</div>
             </div>
             <div class="d-flex gap-1 ms-2 flex-shrink-0">
-              <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.78rem;"
-                onclick="openStudioTransactions(${reg.user_id},'${esc(reg.user_name)}','${esc(reg.studio_name || '')}')">Transactions</button>
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.78rem;" id="txn-toggle-${reg.id}"
+                onclick="toggleRegTransactions(${eventId}, ${reg.id})">&#9776; Transactions</button>
               <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.78rem;"
                 onclick="downloadRegReport(${reg.id})">⬇ Report</button>
               <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.78rem;"
@@ -1226,7 +1200,87 @@
               + Add Observer
             </button>
           </div>
+          <!-- Inline transaction history (lazy-loaded on toggle) -->
+          <div id="reg-txns-${reg.id}" class="d-none" style="border-top:1px solid #1a1a1a;margin-top:.75rem;padding-top:.5rem;">
+            <div id="reg-txns-loading-${reg.id}" class="text-muted small text-center py-2">
+              <span class="spinner-border spinner-border-sm"></span> Loading transactions…
+            </div>
+            <div id="reg-txns-content-${reg.id}" class="d-none"></div>
+          </div>
         </div>`;
+    }
+
+    async function toggleRegTransactions(eventId, regId) {
+      const wrap    = document.getElementById(`reg-txns-${regId}`);
+      const loading = document.getElementById(`reg-txns-loading-${regId}`);
+      const content = document.getElementById(`reg-txns-content-${regId}`);
+      const btn     = document.getElementById(`txn-toggle-${regId}`);
+
+      // Toggle off
+      if (!wrap.classList.contains('d-none')) {
+        wrap.classList.add('d-none');
+        if (btn) { btn.style.color = ''; btn.style.borderColor = ''; }
+        return;
+      }
+      // Toggle on
+      wrap.classList.remove('d-none');
+      if (btn) { btn.style.color = '#E3FC02'; btn.style.borderColor = '#E3FC02'; }
+
+      // Already loaded — just show
+      if (content.dataset.loaded) return;
+
+      const token = localStorage.getItem('token');
+      try {
+        loading.classList.remove('d-none');
+        content.classList.add('d-none');
+        const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/transactions`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const txns = await res.json();
+        loading.classList.add('d-none');
+        content.classList.remove('d-none');
+        content.dataset.loaded = '1';
+
+        if (!txns.length) {
+          content.innerHTML = '<div class="text-muted small text-center py-1">No transactions recorded yet.</div>';
+          return;
+        }
+
+        const txAmt = tx => {
+          if (tx.payment_status === 'free') return '<span style="color:#4ade80;font-weight:600;">Free</span>';
+          if (tx.payment_status === 'admin-paid' && tx.amount > 0) return `<span style="color:#22c55e;font-weight:600;">$${tx.amount.toFixed(2)}</span>`;
+          if (tx.payment_status === 'admin-paid') return '<span style="color:#a78bfa;">Complimentary</span>';
+          return `<span style="color:#22c55e;font-weight:600;">$${tx.amount.toFixed(2)}</span>`;
+        };
+
+        content.innerHTML = `
+          <table style="width:100%;font-size:.78rem;border-collapse:collapse;">
+            <thead>
+              <tr style="color:#555;border-bottom:1px solid #222;">
+                <th style="padding:.25rem .4rem;font-weight:600;text-align:left;">Description</th>
+                <th style="padding:.25rem .4rem;font-weight:600;text-align:right;">Amount</th>
+                <th style="padding:.25rem .4rem;font-weight:600;text-align:right;white-space:nowrap;">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${txns.map(tx => {
+                const date = tx.created_at
+                  ? new Date(tx.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : '—';
+                const desc = (tx.description || `${tx.student_count} dancer(s)${tx.observer_count ? `, ${tx.observer_count} observer(s)` : ''}`).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                return `<tr style="border-bottom:1px solid #111;">
+                  <td style="padding:.3rem .4rem;color:#bbb;">${desc}</td>
+                  <td style="padding:.3rem .4rem;text-align:right;">${txAmt(tx)}</td>
+                  <td style="padding:.3rem .4rem;text-align:right;color:#666;white-space:nowrap;">${date}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>`;
+      } catch {
+        loading.classList.add('d-none');
+        content.classList.remove('d-none');
+        content.innerHTML = '<div class="text-danger small">Failed to load transactions.</div>';
+      }
     }
 
     function downloadRegReport(regId) {
@@ -2125,88 +2179,6 @@
 
       // ── Payments ────────────────────────────────────────────────────────────
 
-      async function loadPayments() {
-        const token = localStorage.getItem('token');
-        document.getElementById('paymentsLoading').classList.remove('d-none');
-        document.getElementById('paymentsEmpty').classList.add('d-none');
-        document.getElementById('paymentsError').classList.add('d-none');
-        document.getElementById('paymentsTableWrap').classList.add('d-none');
-
-        try {
-          const res = await fetch(`${API}/admin/payments`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const payments = await res.json();
-
-          document.getElementById('paymentsLoading').classList.add('d-none');
-
-          // Stats
-          const total    = payments.length;
-          const revenue  = payments.reduce((s, p) => s + (p.amount_paid || 0), 0);
-          const students = payments.reduce((s, p) => s + (p.student_count || 0), 0);
-          const freeRegs = payments.filter(p => p.payment_status === 'free').length;
-          document.getElementById('payStatTotal').textContent   = total;
-          document.getElementById('payStatRevenue').textContent = `$${revenue.toFixed(2)}`;
-          document.getElementById('payStatStudents').textContent = students;
-          document.getElementById('payStatFree').textContent    = freeRegs;
-
-          if (!payments.length) {
-            document.getElementById('paymentsEmpty').classList.remove('d-none');
-            return;
-          }
-
-          document.getElementById('paymentsTableWrap').classList.remove('d-none');
-          document.getElementById('paymentsBody').innerHTML = payments.map(p => {
-            const evDate = p.event_date
-              ? new Date(p.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              : '—';
-            const paidOn = p.finalized_at
-              ? new Date(p.finalized_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              : '—';
-            // admin-paid with amount > 0 = cash/offline — show real dollar amount;
-            // admin-paid with amount = 0 = complimentary — show purple label
-            const amtStr = p.payment_status === 'free'
-              ? '<span style="color:#4ade80;font-weight:600;">Free</span>'
-              : p.payment_status === 'admin-paid' && (p.amount_paid || 0) > 0
-                ? `<span style="font-weight:600;">$${Number(p.amount_paid).toFixed(2)}</span>`
-                : p.payment_status === 'admin-paid'
-                  ? '<span style="color:#a78bfa;font-weight:600;">Complimentary</span>'
-                  : `<span style="font-weight:600;">$${Number(p.amount_paid).toFixed(2)}</span>`;
-            const statusBadge = p.payment_status === 'free'
-              ? '<span class="badge" style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;">Free</span>'
-              : p.payment_status === 'admin-paid'
-                ? '<span class="badge" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;">&#10003; Paid</span>'
-                : '<span class="badge" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;">&#10003; Paid</span>';
-            const eName = (p.user_name||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            const eStudio = (p.studio_name||'Independent').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            const eEvent = (p.event_title||'').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            // Details: use description if available, otherwise fall back to dancer count
-            const details = p.description
-              ? p.description.replace(/</g,'&lt;').replace(/>/g,'&gt;')
-              : `${p.student_count} dancer${p.student_count !== 1 ? 's' : ''}${p.observer_count ? `, ${p.observer_count} observer${p.observer_count !== 1 ? 's' : ''}` : ''}`;
-            return `<tr>
-              <td class="fw-semibold">${eName}</td>
-              <td style="color:#aaa;font-size:.88rem;">${eStudio}</td>
-              <td>${eEvent}</td>
-              <td style="color:#aaa;font-size:.85rem;">${details}</td>
-              <td>${amtStr}</td>
-              <td>${statusBadge}</td>
-              <td style="color:#888;font-size:.85rem;white-space:nowrap;">${paidOn}</td>
-            </tr>`;
-          }).join('');
-
-        } catch (err) {
-          document.getElementById('paymentsLoading').classList.add('d-none');
-          document.getElementById('paymentsError').textContent = 'Failed to load payments.';
-          document.getElementById('paymentsError').classList.remove('d-none');
-        }
-      }
-
-      let paymentsLoaded = false;
-      document.getElementById('payments-tab').addEventListener('shown.bs.tab', () => {
-        if (!paymentsLoaded) { paymentsLoaded = true; loadPayments(); }
-      });
 
       loadUsers();
     })();

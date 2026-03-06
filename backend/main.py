@@ -2235,6 +2235,39 @@ def admin_delete_observer(user_id: int, observer_id: int, authorization: Optiona
     return {"message": "Observer deleted."}
 
 
+@app.get("/admin/events/{event_id}/registrations/{reg_id}/transactions")
+def admin_reg_transactions(
+    event_id: int,
+    reg_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Return all Transaction rows for a specific registration, newest first."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    txs = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.registration_id == reg_id,
+            models.Transaction.event_id == event_id,
+        )
+        .order_by(models.Transaction.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "description": tx.description,
+            "amount": float(tx.amount),
+            "payment_status": tx.payment_status,
+            "created_at": tx.created_at.isoformat() if tx.created_at else None,
+            "student_count": tx.student_count or 0,
+            "observer_count": tx.observer_count or 0,
+        }
+        for tx in txs
+    ]
+
+
 @app.get("/admin/users/{user_id}/transactions")
 def admin_user_transactions(
     user_id: int,
