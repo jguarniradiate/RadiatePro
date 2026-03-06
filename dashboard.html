@@ -575,34 +575,14 @@
 
         renderUser(currentUser);
 
-        // Home stats
-        const now = new Date();
-        document.getElementById('homeStudentCount').textContent = students.length;
-        // Unlock step 2 (observers) and step 3 (events) when dancers exist
+        // Home stats — shared helper handles count + step lock/unlock
+        updateStudentHomeStats();
+        // Step 3 sub-text needs the events list (upcoming count), set it once on init
         if (students.length > 0) {
-          // Step 2: Add Observers — unlock with purple accent
-          document.getElementById('homeStep2').style.borderLeftColor = '#a78bfa';
-          document.getElementById('homeStep2Num').style.background = '#a78bfa';
-          document.getElementById('homeStep2Num').style.color = '#000';
-          document.getElementById('homeStep2Title').style.color = '#f0f0f0';
-          const addObsBtn = document.getElementById('homeAddObserverBtn');
-          addObsBtn.style.background = '#a78bfa'; addObsBtn.style.border = 'none';
-          addObsBtn.style.color = '#000'; addObsBtn.style.fontWeight = '700';
-          addObsBtn.style.pointerEvents = '';
-          const manageObsBtn = document.getElementById('homeManageObserverBtn');
-          manageObsBtn.style.background = ''; manageObsBtn.style.border = '';
-          manageObsBtn.style.color = ''; manageObsBtn.style.pointerEvents = '';
-          manageObsBtn.classList.add('btn-outline-secondary');
-          // Step 3: Register for Events
+          const now = new Date();
           const upcomingCount = events.filter(e => new Date(e.event_date) >= now).length;
-          document.getElementById('homeStep3').style.borderLeftColor = '#E3FC02';
-          document.getElementById('homeStep3Num').style.background = '#E3FC02';
-          document.getElementById('homeStep3Num').style.color = '#000';
-          document.getElementById('homeStep3Title').style.color = '#f0f0f0';
-          document.getElementById('homeStep3Sub').textContent = `${upcomingCount} upcoming event${upcomingCount !== 1 ? 's' : ''} available. Browse and register your dancers.`;
-          const btn = document.getElementById('homeEventsBtn');
-          btn.style.background = ''; btn.style.border = ''; btn.style.color = '';
-          btn.classList.add('btn-accent'); btn.style.pointerEvents = '';
+          document.getElementById('homeStep3Sub').textContent =
+            `${upcomingCount} upcoming event${upcomingCount !== 1 ? 's' : ''} available. Browse and register your dancers.`;
         }
         // Observer count is populated after observers load
         if (typeof myObservers !== 'undefined') {
@@ -771,34 +751,72 @@
       return age;
     }
 
+    function renderStudentsTable() {
+      const tbody    = document.getElementById('studentsBody');
+      const emptyEl  = document.getElementById('studentsEmpty');
+      const tableWrap = document.getElementById('studentsTableWrap');
+      tbody.innerHTML = myStudents.map(s => `
+        <tr id="srow-${s.id}">
+          <td class="fw-semibold">${esc(s.name)}</td>
+          <td>${fmtDob(s.date_of_birth)}</td>
+          <td>${calcAge(s.date_of_birth)}</td>
+          <td>${esc(s.gender || '—')}</td>
+          <td class="text-nowrap">
+            <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
+              onclick="openEditStudent(${s.id},'${esc(s.name)}','${s.date_of_birth||''}','${esc(s.gender||'')}')">Edit</button>
+            <button class="btn btn-sm btn-outline-danger py-0 px-2"
+              onclick="deleteStudent(${s.id},'${esc(s.name)}')">Remove</button>
+          </td>
+        </tr>`).join('');
+      emptyEl.classList.toggle('d-none',  myStudents.length > 0);
+      tableWrap.classList.toggle('d-none', myStudents.length === 0);
+    }
+
+    function updateStudentHomeStats() {
+      const count = myStudents.length;
+      document.getElementById('homeStudentCount').textContent = count;
+      const has = count > 0;
+
+      // Step 2 — observers
+      document.getElementById('homeStep2').style.borderLeftColor     = has ? '#a78bfa' : '#2a2a2a';
+      document.getElementById('homeStep2Num').style.background        = has ? '#a78bfa' : '#2a2a2a';
+      document.getElementById('homeStep2Num').style.color             = has ? '#000'    : '#666';
+      document.getElementById('homeStep2Title').style.color           = has ? '#f0f0f0' : '#888';
+      const addObsBtn     = document.getElementById('homeAddObserverBtn');
+      const manageObsBtn  = document.getElementById('homeManageObserverBtn');
+      if (has) {
+        addObsBtn.style.cssText    = 'background:#a78bfa;border:none;color:#000;font-weight:700;pointer-events:auto;';
+        manageObsBtn.style.cssText = 'pointer-events:auto;';
+        manageObsBtn.classList.add('btn-outline-secondary');
+      } else {
+        addObsBtn.style.cssText    = 'background:#1a1a1a;border:1px solid #333;color:#666;pointer-events:none;';
+        manageObsBtn.style.cssText = 'background:#1a1a1a;border:1px solid #333;color:#666;pointer-events:none;';
+      }
+
+      // Step 3 — events
+      document.getElementById('homeStep3').style.borderLeftColor     = has ? '#E3FC02' : '#2a2a2a';
+      document.getElementById('homeStep3Num').style.background        = has ? '#E3FC02' : '#2a2a2a';
+      document.getElementById('homeStep3Num').style.color             = has ? '#000'    : '#666';
+      document.getElementById('homeStep3Title').style.color           = has ? '#f0f0f0' : '#888';
+      const evtsBtn = document.getElementById('homeEventsBtn');
+      if (has) {
+        evtsBtn.classList.add('btn-accent');
+        evtsBtn.style.cssText = 'pointer-events:auto;';
+      } else {
+        evtsBtn.classList.remove('btn-accent');
+        evtsBtn.style.cssText = 'background:#1a1a1a;border:1px solid #333;color:#666;pointer-events:none;';
+      }
+    }
+
     async function loadStudents() {
       const token = localStorage.getItem('token');
       try {
         const res      = await fetch(`${API}/students`, { headers: { Authorization: `Bearer ${token}` } });
         const students = await res.json();
         myStudents = students;
-
         document.getElementById('studentsLoading').classList.add('d-none');
-
-        if (!students.length) {
-          document.getElementById('studentsEmpty').classList.remove('d-none');
-          return;
-        }
-
-        document.getElementById('studentsTableWrap').classList.remove('d-none');
-        document.getElementById('studentsBody').innerHTML = students.map(s => `
-          <tr id="srow-${s.id}">
-            <td class="fw-semibold">${esc(s.name)}</td>
-            <td>${fmtDob(s.date_of_birth)}</td>
-            <td>${calcAge(s.date_of_birth)}</td>
-            <td>${esc(s.gender || '—')}</td>
-            <td class="text-nowrap">
-              <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
-                onclick="openEditStudent(${s.id},'${esc(s.name)}','${s.date_of_birth||''}','${esc(s.gender||'')}')">Edit</button>
-              <button class="btn btn-sm btn-outline-danger py-0 px-2"
-                onclick="deleteStudent(${s.id},'${esc(s.name)}')">Remove</button>
-            </td>
-          </tr>`).join('');
+        renderStudentsTable();
+        updateStudentHomeStats();
       } catch {
         document.getElementById('studentsLoading').classList.add('d-none');
         document.getElementById('studentsError').textContent = 'Failed to load students.';
@@ -865,10 +883,13 @@
 
         if (res.ok) {
           studentModal.hide();
-          document.getElementById('studentsTableWrap').classList.add('d-none');
-          document.getElementById('studentsEmpty').classList.add('d-none');
-          document.getElementById('studentsLoading').classList.remove('d-none');
-          loadStudents();
+          if (studentId) {
+            myStudents = myStudents.map(s => s.id === parseInt(studentId) ? data : s);
+          } else {
+            myStudents.push(data);
+          }
+          renderStudentsTable();
+          updateStudentHomeStats();
         } else {
           alertEl.textContent = data.detail || `Error ${res.status}`;
           alertEl.classList.remove('d-none');
@@ -890,11 +911,9 @@
       try {
         const res = await fetch(`${API}/students/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
-          document.getElementById(`srow-${id}`).remove();
-          if (!document.getElementById('studentsBody').children.length) {
-            document.getElementById('studentsTableWrap').classList.add('d-none');
-            document.getElementById('studentsEmpty').classList.remove('d-none');
-          }
+          myStudents = myStudents.filter(s => s.id !== id);
+          renderStudentsTable();
+          updateStudentHomeStats();
         } else {
           const data = await res.json().catch(() => ({}));
           errEl.textContent = data.detail || 'Failed to remove dancer.';
