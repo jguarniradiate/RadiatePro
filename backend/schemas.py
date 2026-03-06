@@ -108,6 +108,7 @@ class EventCreate(BaseModel):
     title: str
     description: str | None = None
     event_date: datetime
+    venue_name: str | None = None
     location: str | None = None
     event_type: str | None = None  # "convention" or "competition"
     early_price: Decimal | None = None
@@ -121,6 +122,7 @@ class EventUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     event_date: datetime | None = None
+    venue_name: str | None = None
     location: str | None = None
     event_type: str | None = None
     early_price: Decimal | None = None
@@ -135,6 +137,7 @@ class EventOut(BaseModel):
     title: str
     description: str | None = None
     event_date: datetime
+    venue_name: str | None = None
     location: str | None = None
     event_type: str | None = None
     early_price: Decimal | None = None

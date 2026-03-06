@@ -118,6 +118,8 @@ def run_migrations(eng):
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS credit_amount NUMERIC(10, 2) DEFAULT 0",
         # Tokens settled via credit (not new cash) — same format as cash_student_ids
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS credit_applied_ids TEXT",
+        # Venue name (e.g. "King of Prussia Convention Center") separate from street address
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS venue_name VARCHAR",
         # Per-dancer references on transaction rows (null for batch/whole-reg transactions)
         "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS student_id INTEGER REFERENCES students(id) ON DELETE SET NULL",
         "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS observer_id INTEGER REFERENCES observers(id) ON DELETE SET NULL",
@@ -267,12 +269,8 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
     if not db_user or not auth.verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    if not db_user.email_verified:
-        raise HTTPException(
-            status_code=403,
-            detail="Please verify your email before logging in.",
-        )
-
+    # Email verification is soft-enforced in the frontend; users can log in but
+    # are prompted to verify before registering for events.
     token = auth.create_access_token({"sub": db_user.email, "user_id": db_user.id})
     return {"access_token": token, "token_type": "bearer"}
 
@@ -302,6 +300,31 @@ def verify_email(body: schemas.VerifyEmailRequest, db: Session = Depends(get_db)
     db.commit()
 
     return {"message": "Email verified successfully. You can now sign in."}
+
+
+@app.post("/auth/resend-verification", response_model=schemas.MessageOut)
+def resend_verification(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Re-send the email verification link for the authenticated user."""
+    user = get_current_user(authorization, db)
+    if user.email_verified:
+        return {"message": "Your email is already verified."}
+
+    token = auth.generate_token()
+    expires = datetime.now(timezone.utc) + timedelta(hours=VERIFICATION_EXPIRE_HOURS)
+    user.verification_token = token
+    user.verification_token_expires_at = expires
+    db.commit()
+
+    try:
+        email_service.send_verification_email(user.email, token)
+    except Exception:
+        logger.exception("Failed to resend verification email to %s", user.email)
+        raise HTTPException(status_code=500, detail="Failed to send email. Please try again.")
+
+    return {"message": "Verification email sent. Please check your inbox."}
 
 
 @app.post("/auth/request-password-reset", response_model=schemas.MessageOut)

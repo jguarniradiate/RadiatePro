@@ -399,10 +399,13 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script>
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
     let myStudents = [];
     let myObservers = [];
+    let currentUser = null;   // loaded user object — checked before registration
     let myRegistrations = {}; // event_id (string) → {registration_id, student_ids, observer_ids}
     let eventsCache = {};     // event_id → full event object
     let allEvents   = [];     // full events list — kept so tab switching can re-filter without a re-fetch
@@ -524,6 +527,22 @@
                     </button>
                     ${(reg && !isFinalized && hasPricing) ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="finalize-btn-${e.id}" onclick="resumeCheckout(${e.id})">Complete Registration</button>` : ''}
                     ${hasPending ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="pay-pending-btn-${e.id}" onclick="payForPendingDancers(${e.id})">${(() => { const t = calcPendingTotal(e, reg); return t > 0 ? `Pay Outstanding Balance ($${t.toFixed(2)})` : 'Pay Outstanding Balance'; })()}</button>` : ''}
+                  </div>` : reg ? `
+                  <div class="mt-2" style="border-top:1px solid #1f1f1f;padding-top:.6rem;">
+                    <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                      ${reg.is_finalized
+                        ? `<span class="badge-finalized">&#10003; Finalized</span>`
+                        : `<span style="background:#2a2a2a;color:#aaa;border-radius:20px;padding:2px 10px;font-size:.72rem;">Registered</span>`}
+                      ${reg.amount_paid ? `<span style="color:#6fcf97;font-size:.78rem;font-weight:600;">&#36;${Number(reg.amount_paid).toFixed(2)} paid</span>` : ''}
+                      ${reg.payment_status === 'free' ? `<span style="color:#6fcf97;font-size:.78rem;font-weight:600;">Free Event</span>` : ''}
+                    </div>
+                    ${(reg.student_ids||[]).length ? `<div style="font-size:.78rem;color:#bbb;margin-bottom:.2rem;">
+                      <span style="color:#6fcf97;font-weight:600;">&#128100; Students: </span>${(reg.student_ids||[]).map(id => { const s = myStudents.find(x=>x.id===id); return s?esc(s.name):`#${id}`; }).join(', ')}
+                    </div>` : ''}
+                    ${(reg.observer_ids||[]).length ? `<div style="font-size:.78rem;color:#bbb;margin-bottom:.5rem;">
+                      <span style="color:#a78bfa;font-weight:600;">&#128064; Observers: </span>${(reg.observer_ids||[]).map(id => { const o = myObservers.find(x=>x.id===id); return o?esc(o.name):`#${id}`; }).join(', ')}
+                    </div>` : ''}
+                    <button class="btn btn-sm btn-outline-secondary py-1 px-3" style="font-size:.78rem;" onclick="downloadMyRegReport(${e.id})">&#8595; Download Report</button>
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
                 </div>
               </div>`;
@@ -863,6 +882,11 @@
     // ── Registration modal ─────────────────────────────────────────────────────
 
     function openRegModal(event) {
+      // Block registration if email not verified
+      if (currentUser && !currentUser.email_verified) {
+        showVerificationBanner();
+        return;
+      }
       const observersOnly = false; // kept for future use; modal always shows both
       currentRegEvent = event;
       document.getElementById('regEventId').value = event.id;
@@ -1341,6 +1365,163 @@
       } catch { alert('Something went wrong.'); }
     }
 
+    // ── Email verification helpers ─────────────────────────────────────────────
+    let _verificationBannerShown = false;
+    function showVerificationBanner() {
+      if (_verificationBannerShown) {
+        // If already shown, just flash it
+        const b = document.getElementById('verificationBanner');
+        if (b) { b.style.animation = 'none'; b.offsetHeight; b.style.animation = ''; }
+        return;
+      }
+      _verificationBannerShown = true;
+      const banner = document.createElement('div');
+      banner.id = 'verificationBanner';
+      banner.style.cssText = 'background:#1a1200;border:1px solid #a16207;color:#fbbf24;padding:.75rem 1.25rem;border-radius:8px;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;';
+      banner.innerHTML = `
+        <span>&#9888; Your email is not verified. Please verify your email to register for events.</span>
+        <button id="resendVerBtn" class="btn btn-sm py-1 px-3" style="background:#a16207;color:#fff;border:none;font-size:.82rem;" onclick="resendVerificationEmail()">
+          Resend Verification Email
+        </button>`;
+      document.querySelector('.content').prepend(banner);
+    }
+
+    async function resendVerificationEmail() {
+      const token = localStorage.getItem('token');
+      const btn = document.getElementById('resendVerBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+      try {
+        const res = await fetch(`${API}/auth/resend-verification`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          if (btn) { btn.textContent = '✓ Email Sent'; btn.style.background = '#166534'; }
+          const banner = document.getElementById('verificationBanner');
+          if (banner) banner.style.borderColor = '#166534';
+        } else {
+          if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }
+          alert(data.detail || 'Failed to send email. Please try again.');
+        }
+      } catch {
+        if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }
+        alert('Something went wrong. Please try again.');
+      }
+    }
+
+    // ── Past-event registration PDF report ────────────────────────────────────
+    function downloadMyRegReport(eventId) {
+      const reg   = myRegistrations[String(eventId)];
+      const event = eventsCache[eventId];
+      if (!reg || !event) { alert('Registration data not available. Please reload the page.'); return; }
+      if (!window.jspdf) { alert('PDF library not loaded yet — please try again in a moment.'); return; }
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      const pendingSet  = new Set(reg.pending_student_ids || []);
+      const pricePerStu = parseFloat(event.regular_price || event.early_price || 0);
+      const obsvPrice   = parseFloat(event.observer_price || 0);
+
+      function attendeeLabel(token, unitPrice) {
+        if (pendingSet.has(String(token))) return ['Balance Due', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'];
+        if (reg.payment_status === 'paid'       && reg.is_finalized) return ['Paid',           unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
+        if (reg.payment_status === 'admin-paid') return ['Complimentary', '$0.00'];
+        if (reg.payment_status === 'free')       return ['Free',          '$0.00'];
+        if (reg.is_finalized)                    return ['Paid',          unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
+        return ['Unpaid', '—'];
+      }
+
+      // Header bar
+      doc.setFillColor(20, 20, 20);
+      doc.rect(0, 0, 220, 28, 'F');
+      doc.setTextColor(227, 252, 2);
+      doc.setFontSize(17); doc.setFont('helvetica', 'bold');
+      doc.text('Registration Report', 14, 18);
+      doc.setTextColor(160, 160, 160); doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+      doc.text('Radiate Pro', 170, 18);
+
+      // Event / registrant info
+      let y = 36;
+      doc.setFontSize(9);
+      const eventDateStr = event.event_date
+        ? new Date(event.event_date).toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'})
+        : '—';
+      const locationStr = [event.venue_name, event.location].filter(Boolean).join(', ') || '—';
+      const statusStr   = reg.is_finalized ? (reg.payment_status || 'finalized') : (reg.payment_status || 'pending');
+      const infoRows = [
+        ['Event',    event.title || '—',  'Date',    eventDateStr],
+        ['Location', locationStr,          'Status',  statusStr],
+      ];
+      for (const [lA, vA, lB, vB] of infoRows) {
+        doc.setTextColor(130, 130, 130); doc.setFont('helvetica', 'normal');
+        doc.text(lA, 14, y); doc.text(lB, 110, y); y += 5;
+        doc.setTextColor(30, 30, 30); doc.setFont('helvetica', 'bold');
+        doc.text(String(vA), 14, y); doc.text(String(vB), 110, y); y += 7;
+      }
+      y += 2;
+
+      const tblHead   = { fillColor: [30, 30, 30], textColor: [240, 240, 240], fontStyle: 'bold', fontSize: 9 };
+      const tblStyles = { fontSize: 9, cellPadding: 3, textColor: [30, 30, 30] };
+      const tblAlt    = { fillColor: [245, 245, 245] };
+      const tblCols   = { 1: { cellWidth: 38 }, 2: { halign: 'right', cellWidth: 26 } };
+
+      // Students table
+      const regStudents = (reg.student_ids || []).map(id => myStudents.find(s => s.id === id)).filter(Boolean);
+      if (regStudents.length) {
+        doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
+        doc.text('Students', 14, y); y += 2;
+        doc.autoTable({
+          startY: y,
+          head: [['Name', 'Status', 'Amount']],
+          body: regStudents.map(s => { const [status, amount] = attendeeLabel(String(s.id), pricePerStu); return [s.name, status, amount]; }),
+          headStyles: { ...tblHead, textColor: [34, 197, 94] },
+          styles: tblStyles, alternateRowStyles: tblAlt, columnStyles: tblCols, margin: { left: 14, right: 14 },
+        });
+        y = doc.lastAutoTable.finalY + 10;
+      }
+
+      // Observers table
+      const regObservers = (reg.observer_ids || []).map(id => myObservers.find(o => o.id === id)).filter(Boolean);
+      if (regObservers.length) {
+        doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
+        doc.text('Observers', 14, y); y += 2;
+        doc.autoTable({
+          startY: y,
+          head: [['Name', 'Status', 'Amount']],
+          body: regObservers.map(o => { const [status, amount] = attendeeLabel(`o${o.id}`, obsvPrice); return [o.name, status, amount]; }),
+          headStyles: { ...tblHead, textColor: [167, 139, 250] },
+          styles: tblStyles, alternateRowStyles: tblAlt, columnStyles: tblCols, margin: { left: 14, right: 14 },
+        });
+        y = doc.lastAutoTable.finalY + 10;
+      }
+
+      // Summary
+      const summaryRows = [];
+      if (reg.amount_paid > 0) summaryRows.push(['Total Paid', `$${Number(reg.amount_paid).toFixed(2)}`, 'paid']);
+      const outstanding = (reg.pending_student_ids || []).reduce((sum, tok) =>
+        sum + (tok.startsWith('o') ? obsvPrice : pricePerStu), 0);
+      if (outstanding > 0) summaryRows.push(['Balance Due', `$${outstanding.toFixed(2)}`, 'due']);
+
+      if (summaryRows.length) {
+        doc.setDrawColor(200, 200, 200);
+        doc.line(14, y, 196, y); y += 5;
+        doc.autoTable({
+          startY: y,
+          body: summaryRows.map(r => [r[0], r[1]]),
+          columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 }, 1: { halign: 'right', fontStyle: 'bold' } },
+          didParseCell: (data) => {
+            const key = summaryRows[data.row.index]?.[2];
+            if (key === 'paid') data.cell.styles.textColor = [34, 197, 94];
+            else if (key === 'due') data.cell.styles.textColor = [239, 68, 68];
+          },
+          styles: { fontSize: 10, cellPadding: 2 }, theme: 'plain', margin: { left: 14, right: 14 },
+        });
+      }
+
+      const safeEvent = (event.title || 'event').replace(/[^a-z0-9]/gi, '_');
+      doc.save(`my_registration_${safeEvent}.pdf`);
+    }
+
     // Update the orange badge on the sidebar "Events" nav item with the count
     // of registrations that have an outstanding (unpaid) payment.
     function updatePendingBadge() {
@@ -1462,12 +1643,15 @@
         ]);
 
         if (userRes.status === 401) { localStorage.removeItem('token'); window.location.href = 'login.html'; return; }
-        const user = await userRes.json();
+        currentUser = await userRes.json();
+        const user = currentUser;
         const firstName = user.first_name || '';
         document.getElementById('sidebarAvatar').textContent = (firstName || user.email).charAt(0).toUpperCase();
         document.getElementById('sidebarName').textContent   = firstName ? `${firstName} ${user.last_name||''}`.trim() : user.email;
         document.getElementById('sidebarStudio').textContent = user.studio_name || '';
         if (user.is_admin) document.getElementById('adminLink').style.display = '';
+        // Show persistent verification banner if email not yet verified
+        if (!user.email_verified) showVerificationBanner();
 
         myStudents      = studRes.ok ? await studRes.json() : [];
         myObservers     = obsRes.ok  ? await obsRes.json()  : [];
@@ -1514,6 +1698,8 @@
 
         // Store all events globally so switchEventsTab can re-filter without re-fetch
         allEvents = events;
+        // Pre-populate cache so PDF/detail lookups always work regardless of active tab
+        events.forEach(e => { eventsCache[e.id] = e; });
 
         // Update "My Registrations" badge count
         const myRegCount = Object.keys(myRegistrations).length;

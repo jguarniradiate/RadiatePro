@@ -43,11 +43,16 @@
     .form-select option { background: #111; }
     .btn-close { filter: invert(1); }
     .date-muted { color: #666; font-size: .78rem; }
-    /* Tabs */
-    .nav-tabs { border-bottom: 1px solid #2a2a2a !important; }
-    .nav-tabs .nav-link { color: #888; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: .6rem 1.2rem; }
-    .nav-tabs .nav-link:hover { color: #E3FC02; border-color: transparent; }
-    .nav-tabs .nav-link.active { color: #E3FC02; background: transparent; border-bottom: 2px solid #E3FC02; }
+    /* Sidebar */
+    .admin-shell { display: flex; min-height: calc(100vh - 100px); }
+    .admin-sidebar { width: 190px; background: #080808; border-right: 1px solid #1e1e1e; flex-shrink: 0; padding: 1.5rem 0; }
+    .admin-content { flex: 1; padding: 2rem; overflow-x: hidden; min-width: 0; }
+    .admin-nav-item { padding: .75rem 1.5rem; color: #888; cursor: pointer; font-size: .9rem; border-left: 3px solid transparent; display: flex; align-items: center; gap: .55rem; transition: color .15s, background .15s; user-select: none; }
+    .admin-nav-item:hover { color: #f0f0f0; background: #111; }
+    .admin-nav-item.active { color: #E3FC02; border-left-color: #E3FC02; background: #111; font-weight: 600; }
+    .section-divider { display: flex; align-items: center; gap: .75rem; margin: .25rem 0 .85rem; }
+    .section-divider-label { color: #E3FC02; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+    .section-divider-line { flex: 1; height: 1px; background: #2a2a2a; }
     /* Registration section */
     .reg-section { background: #0a0a0a; border-top: 1px solid #2a2a2a; padding: 1rem; }
     .reg-card { background: #141414; border: 1px solid #252525; border-radius: 8px; padding: .75rem; margin-bottom: .5rem; }
@@ -79,21 +84,23 @@
     </div>
   </nav>
 
-  <div class="container py-4">
+  <div class="admin-shell">
 
-    <ul class="nav nav-tabs mb-4" id="adminTabs">
-      <li class="nav-item">
-        <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#usersPane" type="button">Users</button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" id="events-tab" data-bs-toggle="tab" data-bs-target="#eventsPane" type="button">Events</button>
-      </li>
-    </ul>
+    <!-- ── Sidebar ── -->
+    <div class="admin-sidebar">
+      <div class="admin-nav-item active" id="nav-users" onclick="showAdminSection('users')">
+        <span>&#128101;</span> Users
+      </div>
+      <div class="admin-nav-item" id="nav-events" onclick="showAdminSection('events')">
+        <span>&#128197;</span> Events
+      </div>
+    </div>
 
-    <div class="tab-content">
+    <!-- ── Content ── -->
+    <div class="admin-content">
 
-      <!-- ── Users Tab ── -->
-      <div class="tab-pane fade show active" id="usersPane">
+      <!-- ── Users Section ── -->
+      <div id="usersPane">
         <div class="d-flex justify-content-between align-items-center mb-4">
           <h4 class="fw-bold page-title mb-0">User Management</h4>
           <button class="btn btn-accent btn-sm" onclick="loadUsers()">&#8635; Refresh</button>
@@ -146,8 +153,8 @@
         </div>
       </div>
 
-      <!-- ── Events Tab ── -->
-      <div class="tab-pane fade" id="eventsPane">
+      <!-- ── Events Section ── -->
+      <div id="eventsPane" class="d-none">
         <div class="d-flex justify-content-between align-items-center mb-4">
           <h4 class="fw-bold page-title mb-0">Events</h4>
           <button class="btn btn-accent btn-sm" onclick="openAddEvent()">+ New Event</button>
@@ -158,10 +165,8 @@
         <div id="eventsList"></div>
       </div>
 
-      <!-- ── Payments Tab ── -->
-
-    </div>
-  </div>
+    </div><!-- /admin-content -->
+  </div><!-- /admin-shell -->
 
   <!-- Edit User Modal -->
   <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
@@ -458,7 +463,8 @@
             </select>
           </div>
           <div class="mb-3"><label class="form-label fw-semibold">Date &amp; Time <span class="text-danger">*</span></label><input type="datetime-local" class="form-control" id="eventDate"></div>
-          <div class="mb-3"><label class="form-label fw-semibold">Location</label><input type="text" class="form-control" id="eventLocation" placeholder="Venue or address"></div>
+          <div class="mb-3"><label class="form-label fw-semibold">Venue Name</label><input type="text" class="form-control" id="eventVenueName" placeholder="e.g. King of Prussia Convention Center"></div>
+          <div class="mb-3"><label class="form-label fw-semibold">Address / City</label><input type="text" class="form-control" id="eventLocation" placeholder="e.g. 123 Main St, Philadelphia, PA"></div>
           <div class="mb-3"><label class="form-label fw-semibold">Description</label><textarea class="form-control" id="eventDesc" rows="3" placeholder="Optional details…"></textarea></div>
           <!-- Capacity (all event types) -->
           <div class="mb-3">
@@ -912,7 +918,11 @@
         document.getElementById('eventsLoading').classList.add('d-none');
         if (!events.length) { document.getElementById('eventsEmpty').classList.remove('d-none'); return; }
 
-        document.getElementById('eventsList').innerHTML = events.map(e => {
+        const now = new Date();
+        const upcoming = events.filter(e => new Date(e.event_date) >= now);
+        const past     = events.filter(e => new Date(e.event_date) <  now);
+
+        function renderEventCard(e) {
           const cap = e.max_students;
           const cnt = e.registered_count || 0;
           const pct = cap ? Math.min(100, Math.round(cnt / cap * 100)) : 0;
@@ -928,19 +938,21 @@
               </div>
             </div>` : (cnt > 0 ? `<div id="cap-count-${e.id}" style="font-size:.75rem;color:#aaa;margin-top:.4rem;">${cnt} student${cnt!==1?'s':''} registered (no cap)</div>` : '');
           const revHtml = e.total_revenue != null ? `<span style="font-size:.75rem;color:#6fcf97;font-weight:600;margin-left:.75rem;">&#36;${parseFloat(e.total_revenue).toFixed(2)} revenue</span>` : '';
+          const locationParts = [e.venue_name ? esc(e.venue_name) : null, e.location ? esc(e.location) : null].filter(Boolean);
+          const locationHtml = locationParts.length ? ' &nbsp;&#128205; ' + locationParts.join(' &bull; ') : '';
           return `
           <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;margin-bottom:.5rem;" id="erow-${e.id}" data-max-students="${e.max_students || 0}">
             <div class="d-flex align-items-start justify-content-between p-3">
               <div style="flex:1;min-width:0;">
                 <div class="fw-bold">${typeBadge(e.event_type)}${esc(e.title)}</div>
-                <div class="text-muted small">&#128337; ${fmtDt(e.event_date)}${e.location ? ' &nbsp;&#128205; '+esc(e.location) : ''}${revHtml}</div>
+                <div class="text-muted small">&#128337; ${fmtDt(e.event_date)}${locationHtml}${revHtml}</div>
                 ${e.description ? `<div class="text-muted small mt-1">${esc(e.description)}</div>` : ''}
                 <div id="event-rev-${e.id}"></div>
                 ${capHtml}
               </div>
               <div class="d-flex gap-2 ms-3 flex-shrink-0">
                 <button class="btn btn-sm btn-outline-secondary py-0 px-2"
-                  onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}','${esc(e.event_type||'')}',${e.early_price||'null'},${e.regular_price||'null'},'${e.early_price_deadline?toLocalInput(e.early_price_deadline):''}',${e.max_students||'null'},${e.observer_price||'null'})">Edit</button>
+                  onclick="openEditEvent(${e.id},'${esc(e.title)}','${toLocalInput(e.event_date)}','${esc(e.location||'')}','${esc(e.description||'')}','${esc(e.event_type||'')}',${e.early_price||'null'},${e.regular_price||'null'},'${e.early_price_deadline?toLocalInput(e.early_price_deadline):''}',${e.max_students||'null'},${e.observer_price||'null'},'${esc(e.venue_name||'')}')">Edit</button>
                 <button class="btn btn-sm btn-outline-danger py-0 px-2"
                   onclick="deleteEvent(${e.id},'${esc(e.title)}')">Delete</button>
               </div>
@@ -958,7 +970,26 @@
               </div>
             </div>
           </div>`;
-        }).join('');
+        }
+
+        function sectionHeader(label, count) {
+          return `<div class="section-divider mt-3">
+            <span class="section-divider-label">${label}</span>
+            <span class="badge" style="background:#2a2a2a;color:#ccc;font-size:.68rem;">${count}</span>
+            <div class="section-divider-line"></div>
+          </div>`;
+        }
+
+        let html = '';
+        if (upcoming.length) {
+          html += sectionHeader('📅 Upcoming', upcoming.length);
+          html += upcoming.map(renderEventCard).join('');
+        }
+        if (past.length) {
+          html += sectionHeader('🕐 Past Events', past.length);
+          html += past.map(renderEventCard).join('');
+        }
+        document.getElementById('eventsList').innerHTML = html;
       } catch {
         document.getElementById('eventsLoading').classList.add('d-none');
         document.getElementById('eventsError').textContent = 'Failed to load events.';
@@ -974,14 +1005,12 @@
 
     async function toggleEventRegistrations(eventId) {
       const panel = document.getElementById(`ereg-${eventId}`);
-      const arrow = document.getElementById(`ereg-arrow-${eventId}`);
-      // If already open, refresh data instead of collapsing
+      // If already open, collapse it (toggle off)
       if (!panel.classList.contains('d-none')) {
-        arrow.textContent = '↻';
-        await refreshEventRegistrations(eventId);
-        arrow.textContent = '▼';
+        collapseEventRegistrations(eventId);
         return;
       }
+      const arrow = document.getElementById(`ereg-arrow-${eventId}`);
       panel.classList.remove('d-none'); arrow.textContent = '▼';
       await refreshEventRegistrations(eventId);
     }
@@ -2224,7 +2253,7 @@
     }
 
     function openAddEvent() {
-      ['eventId','eventTitle','eventDate','eventLocation','eventDesc','eventEarlyPrice','eventRegularPrice','eventEarlyDeadline','eventMaxStudents','eventObserverPrice'].forEach(id => document.getElementById(id).value = '');
+      ['eventId','eventTitle','eventDate','eventVenueName','eventLocation','eventDesc','eventEarlyPrice','eventRegularPrice','eventEarlyDeadline','eventMaxStudents','eventObserverPrice'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('eventType').value = '';
       document.getElementById('pricingSection').classList.add('d-none');
       document.getElementById('eventModalTitle').textContent = 'New Event';
@@ -2232,12 +2261,13 @@
       eventModal.show();
     }
 
-    function openEditEvent(id, title, date, location, desc, type, earlyPrice, regularPrice, earlyDeadline, maxStudents, observerPrice) {
+    function openEditEvent(id, title, date, location, desc, type, earlyPrice, regularPrice, earlyDeadline, maxStudents, observerPrice, venueName) {
       document.getElementById('eventModalTitle').textContent = 'Edit Event';
       document.getElementById('eventId').value              = id;
       document.getElementById('eventTitle').value           = title;
       document.getElementById('eventType').value            = type;
       document.getElementById('eventDate').value            = date;
+      document.getElementById('eventVenueName').value       = venueName || '';
       document.getElementById('eventLocation').value        = location;
       document.getElementById('eventDesc').value            = desc;
       document.getElementById('eventEarlyPrice').value      = earlyPrice || '';
@@ -2275,6 +2305,7 @@
           body: JSON.stringify({
             title, event_type: type,
             event_date: new Date(date).toISOString(),
+            venue_name: document.getElementById('eventVenueName').value.trim()||null,
             location: document.getElementById('eventLocation').value.trim()||null,
             description: document.getElementById('eventDesc').value.trim()||null,
             early_price: (type === 'convention' && earlyPrice) ? parseFloat(earlyPrice) : null,
@@ -2317,10 +2348,15 @@
       eventModal               = new bootstrap.Modal(document.getElementById('eventModal'));
       studioTransactionsModal  = new bootstrap.Modal(document.getElementById('studioTransactionsModal'));
 
-      let eventsLoaded = false;
-      document.getElementById('events-tab').addEventListener('shown.bs.tab', () => {
-        if (!eventsLoaded) { eventsLoaded = true; loadEvents(); }
-      });
+      let _eventsLoaded = false;
+      window.showAdminSection = function(section) {
+        ['users','events'].forEach(s => {
+          document.getElementById(s + 'Pane').classList.toggle('d-none', s !== section);
+          const nav = document.getElementById('nav-' + s);
+          if (nav) nav.classList.toggle('active', s === section);
+        });
+        if (section === 'events' && !_eventsLoaded) { _eventsLoaded = true; loadEvents(); }
+      };
 
       // ── Payments ────────────────────────────────────────────────────────────
 

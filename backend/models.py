@@ -56,7 +56,8 @@ class Event(Base):
     title = Column(String, nullable=False)
     description = Column(String, nullable=True)
     event_date = Column(DateTime(timezone=True), nullable=False)
-    location = Column(String, nullable=True)
+    venue_name = Column(String, nullable=True)  # e.g. "King of Prussia Convention Center"
+    location   = Column(String, nullable=True)  # street address / city
     event_type = Column(String, nullable=True)  # "convention" or "competition"
     early_price = Column(Numeric(10, 2), nullable=True)
     regular_price = Column(Numeric(10, 2), nullable=True)

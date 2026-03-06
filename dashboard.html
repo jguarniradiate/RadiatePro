@@ -631,7 +631,41 @@
       document.getElementById('fieldEmail').textContent     = u.email;
       document.getElementById('fieldVerified').innerHTML    = u.email_verified
         ? '<span class="badge" style="background:#198754;font-size:.7rem;font-weight:600;">&#10003; Verified</span>'
-        : '<span class="badge" style="background:#777;font-size:.7rem;font-weight:600;">Unverified</span>';
+        : `<span class="badge" style="background:#777;font-size:.7rem;font-weight:600;">Unverified</span>
+           <button class="btn btn-sm py-0 px-2 ms-2" style="background:#a16207;color:#fff;border:none;font-size:.72rem;" onclick="resendVerificationEmailDash()">Resend Email</button>`;
+
+      // Show top-level verification banner on dashboard too
+      if (!u.email_verified && !document.getElementById('dashVerifyBanner')) {
+        const banner = document.createElement('div');
+        banner.id = 'dashVerifyBanner';
+        banner.style.cssText = 'background:#1a1200;border:1px solid #a16207;color:#fbbf24;padding:.75rem 1.25rem;border-radius:8px;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;';
+        banner.innerHTML = `<span>&#9888; Your email is not verified. Please check your inbox or click Resend to get a new link.</span>
+          <button id="dashResendBtn" class="btn btn-sm py-1 px-3" style="background:#a16207;color:#fff;border:none;font-size:.82rem;" onclick="resendVerificationEmailDash()">Resend Verification Email</button>`;
+        document.querySelector('.content').prepend(banner);
+      }
+    }
+
+    async function resendVerificationEmailDash() {
+      const token = localStorage.getItem('token');
+      const btn = document.getElementById('dashResendBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+      try {
+        const res = await fetch(`${API}/auth/resend-verification`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          if (btn) { btn.textContent = '✓ Email Sent'; btn.style.background = '#166534'; }
+          const banner = document.getElementById('dashVerifyBanner');
+          if (banner) banner.style.borderColor = '#166534';
+        } else {
+          if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }
+          alert(data.detail || 'Failed to send email.');
+        }
+      } catch {
+        if (btn) { btn.disabled = false; btn.textContent = 'Resend Verification Email'; }
+        alert('Something went wrong.');
+      }
     }
 
     function toggleEdit() {
