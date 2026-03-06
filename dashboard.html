@@ -336,7 +336,7 @@
         <div class="table-responsive d-none" id="studentsTableWrap">
           <table class="table tbl align-middle mb-0">
             <thead>
-              <tr><th>Name</th><th>Date of Birth</th><th>Gender</th><th></th></tr>
+              <tr><th>Name</th><th>Date of Birth</th><th>Age</th><th>Gender</th><th></th></tr>
             </thead>
             <tbody id="studentsBody"></tbody>
           </table>
@@ -686,6 +686,16 @@
       return `${m}/${d}/${y}`;
     }
 
+    function calcAge(iso) {
+      if (!iso) return '—';
+      const today = new Date();
+      const birth = new Date(iso + 'T00:00:00'); // force local date parse
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+      return age;
+    }
+
     async function loadStudents() {
       const token = localStorage.getItem('token');
       try {
@@ -705,6 +715,7 @@
           <tr id="srow-${s.id}">
             <td class="fw-semibold">${esc(s.name)}</td>
             <td>${fmtDob(s.date_of_birth)}</td>
+            <td>${calcAge(s.date_of_birth)}</td>
             <td>${esc(s.gender || '—')}</td>
             <td class="text-nowrap">
               <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
@@ -887,6 +898,11 @@
       document.getElementById('observersError').classList.add('d-none');
       document.getElementById('observersTableWrap').classList.add('d-none');
       try {
+        // Ensure students are loaded — needed to display linked dancer names
+        if (myStudents.length === 0) {
+          const studRes = await fetch(`${API}/students`, { headers: { Authorization: `Bearer ${token}` } });
+          if (studRes.ok) myStudents = await studRes.json();
+        }
         const res = await fetch(`${API}/observers`, { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) throw new Error();
         myObservers = await res.json();

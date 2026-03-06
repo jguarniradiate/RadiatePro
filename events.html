@@ -1096,11 +1096,12 @@
           alertEl.classList.remove('d-none');
           return;
         }
-        // Merge new IDs into the local registration state
+        // Merge new IDs into the local registration state (use server response for pending_student_ids)
         myRegistrations[String(eventId)] = {
           ...myRegistrations[String(eventId)],
-          student_ids:  [...lockedIds,    ...newIds],
-          observer_ids: [...lockedObsIds, ...newObsIds],
+          student_ids:         data.student_ids  || [...lockedIds,    ...newIds],
+          observer_ids:        data.observer_ids || [...lockedObsIds, ...newObsIds],
+          pending_student_ids: data.pending_student_ids || [],
         };
         updateEventCard(eventId, true);
         regModal.hide();

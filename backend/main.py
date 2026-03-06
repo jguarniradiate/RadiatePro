@@ -1244,7 +1244,10 @@ def add_students_save(
         db.add(reg)
         db.flush()
 
+    from decimal import Decimal as D
+
     existing_ids = {ers.student_id for ers in reg.attending_students}
+    new_student_ids_added = []
     for sid in body.student_ids:
         if sid in existing_ids:
             continue
@@ -1253,8 +1256,10 @@ def add_students_save(
         ).first()
         if s:
             db.add(models.EventRegistrationStudent(registration_id=reg.id, student_id=sid))
+            new_student_ids_added.append(sid)
 
     existing_obs_ids = {ero.observer_id for ero in reg.attending_observers}
+    new_obs_ids_added = []
     for oid in body.observer_ids:
         if oid in existing_obs_ids:
             continue
@@ -1263,6 +1268,26 @@ def add_students_save(
         ).first()
         if o:
             db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
+            new_obs_ids_added.append(oid)
+
+    # If the registration is already finalized and the event has pricing,
+    # mark the newly added dancers/observers as pending (unpaid) so the user
+    # sees an "⚡ Unpaid" badge and a "Pay Outstanding Balance" prompt.
+    if reg.is_finalized:
+        price_per_student, _ = _effective_price(event)
+        observer_price = D(str(event.observer_price)) if event.observer_price else D("0")
+        pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+        if price_per_student > D("0"):
+            for sid in new_student_ids_added:
+                sid_str = str(sid)
+                if sid_str not in pending:
+                    pending.append(sid_str)
+        if observer_price > D("0"):
+            for oid in new_obs_ids_added:
+                oid_str = f"o{oid}"
+                if oid_str not in pending:
+                    pending.append(oid_str)
+        reg.pending_student_ids = ",".join(pending) if pending else None
 
     db.commit()
     db.refresh(reg)

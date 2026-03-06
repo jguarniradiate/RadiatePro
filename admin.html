@@ -364,6 +364,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-accent btn-sm" id="addRegStudentSaveBtn" disabled onclick="adminAddRegStudentSave()">Save</button>
         </div>
       </div>
     </div>
@@ -464,6 +465,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-sm" id="addRegObserverSaveBtn" disabled style="background:#a78bfa;color:#000;font-weight:700;" onclick="adminAddRegObserverSave()">Save</button>
         </div>
       </div>
     </div>
@@ -1131,9 +1133,40 @@
     // ── Admin Add Observer to Registration ────────────────────────────────────
     let _obsRegCtx = {};
     let addRegObserverModal;
+    let _selectedObserverId   = null;
+    let _selectedObserverName = null;
+
+    function selectAddRegObserver(observerId, observerName) {
+      // Deselect all items first
+      document.querySelectorAll('.aro-select-btn').forEach(b => {
+        b.style.background  = 'rgba(167,139,250,.12)';
+        b.style.borderColor = '#6d5fa6';
+        b.style.color       = '#a78bfa';
+        b.style.fontWeight  = '';
+      });
+      // Highlight selected
+      const btn = document.getElementById(`aro-${observerId}`);
+      if (btn) {
+        btn.style.background  = '#a78bfa';
+        btn.style.borderColor = '#a78bfa';
+        btn.style.color       = '#000';
+        btn.style.fontWeight  = '700';
+      }
+      _selectedObserverId   = observerId;
+      _selectedObserverName = observerName;
+      document.getElementById('addRegObserverSaveBtn').disabled = false;
+    }
+
+    async function adminAddRegObserverSave() {
+      if (!_selectedObserverId) return;
+      await adminAddRegObserver(_selectedObserverId, _selectedObserverName);
+    }
 
     function openAddRegObserver(eventId, regId, userId, userName, existingObsIds, regStudentIds) {
       _obsRegCtx = { eventId, regId, userId };
+      _selectedObserverId   = null;
+      _selectedObserverName = null;
+      document.getElementById('addRegObserverSaveBtn').disabled = true;
       document.getElementById('addRegObsForUser').textContent = `For: ${userName}`;
       document.getElementById('addRegObsLoading').classList.remove('d-none');
       document.getElementById('addRegObsEmpty').classList.add('d-none');
@@ -1176,10 +1209,10 @@
           available.forEach(o => {
             const btn = document.createElement('button');
             btn.id = `aro-${o.id}`;
-            btn.className = 'btn btn-sm';
+            btn.className = 'btn btn-sm aro-select-btn';
             btn.style.cssText = 'background:rgba(167,139,250,.12);border:1px solid #6d5fa6;color:#a78bfa;font-size:.82rem;';
             btn.textContent = o.name;
-            btn.onclick = () => adminAddRegObserver(o.id, o.name);
+            btn.onclick = () => selectAddRegObserver(o.id, o.name);
             list.appendChild(btn);
           });
         }).catch(() => {
@@ -1192,13 +1225,14 @@
     async function adminAddRegObserver(observerId, observerName) {
       const { eventId, regId } = _obsRegCtx;
       const token = localStorage.getItem('token');
-      const btn = document.getElementById(`aro-${observerId}`);
-      if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+      const saveBtn = document.getElementById('addRegObserverSaveBtn');
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
       try {
         const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/observers/${observerId}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
-          if (btn) btn.remove();
+          const listBtn = document.getElementById(`aro-${observerId}`);
+          if (listBtn) listBtn.remove();
 
           // Add observer badge
           const obsContainer = document.getElementById(`reg-observers-${regId}`);
@@ -1229,15 +1263,18 @@
 
           // Handle payment status (admin-paid finalization)
           await maybeAdminFinalize(eventId, regId, token, 'addObsPayStatus');
+          // Reset selection state
+          _selectedObserverId = null; _selectedObserverName = null;
+          if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Save'; }
           if (!document.getElementById('addRegObsList').children.length) addRegObserverModal.hide();
         } else {
           const d = await res.json().catch(()=>({}));
           alert(d.detail || 'Failed to add observer.');
-          if (btn) { btn.disabled = false; btn.textContent = observerName; }
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
         }
       } catch {
         alert('Something went wrong.');
-        if (btn) { btn.disabled = false; btn.textContent = observerName; }
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
       }
     }
 
@@ -1407,8 +1444,40 @@
       }
     }
 
+    let _selectedStudentId   = null;
+    let _selectedStudentName = null;
+
+    function selectAddRegStudent(studentId, studentName) {
+      // Deselect all items first
+      document.querySelectorAll('.ars-select-btn').forEach(b => {
+        b.style.background   = '';
+        b.style.borderColor  = '';
+        b.style.color        = '';
+        b.style.fontWeight   = '';
+      });
+      // Highlight selected
+      const btn = document.getElementById(`ars-${studentId}`);
+      if (btn) {
+        btn.style.background  = '#E3FC02';
+        btn.style.borderColor = '#E3FC02';
+        btn.style.color       = '#000';
+        btn.style.fontWeight  = '700';
+      }
+      _selectedStudentId   = studentId;
+      _selectedStudentName = studentName;
+      document.getElementById('addRegStudentSaveBtn').disabled = false;
+    }
+
+    async function adminAddRegStudentSave() {
+      if (!_selectedStudentId) return;
+      await adminAddRegStudent(_selectedStudentId, _selectedStudentName);
+    }
+
     async function openAddRegStudent(eventId, regId, userId, userName, existingIds) {
       _regCtx = { eventId, regId, userId };
+      _selectedStudentId   = null;
+      _selectedStudentName = null;
+      document.getElementById('addRegStudentSaveBtn').disabled = true;
       document.getElementById('addRegForUser').textContent = `Adding students for: ${userName}`;
       document.getElementById('addRegStudentList').innerHTML = '';
       document.getElementById('addRegStudentEmpty').classList.add('d-none');
@@ -1433,7 +1502,7 @@
         const available = allStudents.filter(s => !existingIds.includes(s.id));
         if (!available.length) { document.getElementById('addRegStudentEmpty').classList.remove('d-none'); return; }
         document.getElementById('addRegStudentList').innerHTML = available.map(s =>
-          `<button class="btn btn-outline-secondary btn-sm" id="ars-${s.id}" onclick="adminAddRegStudent(${s.id},'${esc(s.name)}')">${esc(s.name)}</button>`
+          `<button class="btn btn-outline-secondary btn-sm ars-select-btn" id="ars-${s.id}" onclick="selectAddRegStudent(${s.id},'${esc(s.name)}')">${esc(s.name)}</button>`
         ).join('');
       } catch {
         document.getElementById('addRegStudentLoading').classList.add('d-none');
@@ -1467,12 +1536,14 @@
     async function adminAddRegStudent(studentId, studentName) {
       const { eventId, regId } = _regCtx;
       const token = localStorage.getItem('token');
-      const btn = document.getElementById(`ars-${studentId}`);
-      if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+      const saveBtn = document.getElementById('addRegStudentSaveBtn');
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
       try {
         const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/students/${studentId}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) {
-          if (btn) btn.remove();
+          // Remove from selectable list
+          const listBtn = document.getElementById(`ars-${studentId}`);
+          if (listBtn) listBtn.remove();
           // Inject badge into the registration card
           const container = document.getElementById(`reg-students-${regId}`);
           if (container) {
@@ -1487,16 +1558,19 @@
           }
           // Handle payment status (admin-paid finalization)
           await maybeAdminFinalize(eventId, regId, token, 'addStudentPayStatus');
+          // Reset selection state
+          _selectedStudentId = null; _selectedStudentName = null;
+          if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Save'; }
           // Close modal if no more available
           if (!document.getElementById('addRegStudentList').children.length) addRegStudentModal.hide();
         } else {
           const d = await res.json().catch(()=>({}));
           alert(d.detail || 'Failed to add student.');
-          if (btn) { btn.disabled = false; btn.textContent = studentName; }
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
         }
       } catch {
         alert('Something went wrong.');
-        if (btn) { btn.disabled = false; btn.textContent = studentName; }
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
       }
     }
 
