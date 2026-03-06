@@ -1495,6 +1495,7 @@
       document.getElementById('acrStudentsSection').classList.add('d-none');
       document.getElementById('acrStudentsEmpty').classList.add('d-none');
       document.getElementById('adminCreateRegAlert').classList.add('d-none');
+      document.getElementById('acrUserId').value = '';
       document.getElementById('adminCreateRegTitle').textContent = 'Add Registration';
 
       // Populate user dropdown
@@ -1536,15 +1537,42 @@
         loading.classList.add('d-none');
         if (!students.length) { empty.classList.remove('d-none'); return; }
         list.innerHTML = students.map(s => `
-          <div class="form-check d-flex align-items-center gap-2 mb-1" style="background:#0d0d0d;border-radius:6px;padding:.3rem .6rem;">
-            <input class="form-check-input stu-switch" type="checkbox" role="switch" id="acr-s-${s.id}" value="${s.id}"
-              style="margin-top:0;cursor:pointer;">
-            <label class="form-check-label mb-0" for="acr-s-${s.id}" style="color:#ccc;font-size:.88rem;cursor:pointer;">${esc(s.name)}</label>
+          <div class="d-flex align-items-center gap-2 mb-1" style="background:#0d0d0d;border-radius:6px;padding:.3rem .6rem;">
+            <input class="form-check-input stu-switch acr-stu-cb" type="checkbox" role="switch" id="acr-s-${s.id}" value="${s.id}"
+              style="margin-top:0;cursor:pointer;flex-shrink:0;" onchange="toggleAcrPaidWrap(${s.id})">
+            <label class="mb-0 flex-grow-1" for="acr-s-${s.id}" style="color:#ccc;font-size:.88rem;cursor:pointer;">${esc(s.name)}</label>
+            <span id="acr-paid-wrap-${s.id}" class="d-none d-flex align-items-center gap-1" style="flex-shrink:0;">
+              <label for="acr-paid-${s.id}" style="font-size:.72rem;color:#888;cursor:pointer;white-space:nowrap;margin:0;">Paid?</label>
+              <input type="checkbox" id="acr-paid-${s.id}" class="form-check-input acr-paid-cb"
+                style="width:14px;height:14px;margin:0;cursor:pointer;border-color:#555;" onchange="updateAcrPaidStyle(${s.id})">
+            </span>
           </div>`).join('');
       } catch {
         loading.classList.add('d-none');
         list.innerHTML = '<div class="text-danger small">Failed to load students.</div>';
       }
+    }
+
+    function toggleAcrPaidWrap(studentId) {
+      const cb   = document.getElementById(`acr-s-${studentId}`);
+      const wrap = document.getElementById(`acr-paid-wrap-${studentId}`);
+      if (cb.checked) {
+        wrap.classList.remove('d-none');
+        wrap.classList.add('d-flex');
+      } else {
+        wrap.classList.add('d-none');
+        wrap.classList.remove('d-flex');
+        document.getElementById(`acr-paid-${studentId}`).checked = false;
+        // reset label colour
+        cb.closest('.d-flex').style.background = '#0d0d0d';
+      }
+    }
+
+    function updateAcrPaidStyle(studentId) {
+      // visual feedback: tint the row green when marked paid
+      const row    = document.getElementById(`acr-s-${studentId}`).closest('.d-flex');
+      const isPaid = document.getElementById(`acr-paid-${studentId}`).checked;
+      row.style.background = isPaid ? 'rgba(34,197,94,.08)' : '#0d0d0d';
     }
 
     async function saveAdminCreateReg() {
@@ -1554,8 +1582,13 @@
       const saveBtn   = document.getElementById('adminCreateRegSaveBtn');
       if (!userId) { alertEl.textContent = 'Please select a user.'; alertEl.classList.remove('d-none'); return; }
 
-      const studentIds = [...document.querySelectorAll('#acrStudentsList input[type="checkbox"]:checked')]
+      // Use .acr-stu-cb to avoid accidentally picking up the paid sub-checkboxes
+      const studentIds = [...document.querySelectorAll('#acrStudentsList .acr-stu-cb:checked')]
         .map(cb => parseInt(cb.value));
+      const paidStudentIds = studentIds.filter(id => {
+        const paidCb = document.getElementById(`acr-paid-${id}`);
+        return paidCb && paidCb.checked;
+      });
 
       alertEl.classList.add('d-none');
       saveBtn.disabled = true;
@@ -1566,7 +1599,7 @@
         const res = await fetch(`${API}/admin/events/${eventId}/registrations/for-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ user_id: parseInt(userId), student_ids: studentIds }),
+          body: JSON.stringify({ user_id: parseInt(userId), student_ids: studentIds, paid_student_ids: paidStudentIds }),
         });
         let data = {}; try { data = await res.json(); } catch {}
         if (res.ok) {
