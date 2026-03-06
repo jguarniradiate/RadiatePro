@@ -1093,21 +1093,42 @@
     }
 
     function renderRegCard(eventId, reg) {
-      const stuBadges = reg.students.map(s => `
-        <span class="stu-badge" id="rst-${reg.id}-${s.id}">
-          ${esc(s.name)}
-          <button class="stu-badge-remove" title="Remove student"
-            onclick="adminRemoveRegStudent(${eventId},${reg.id},${s.id},'${esc(s.name)}')">×</button>
-        </span>`).join('');
+      // Build a Set of unpaid-pending tokens: "5" for student id 5, "o3" for observer id 3
+      const pendingSet = new Set(reg.pending_student_ids || []);
+
+      const stuBadges = reg.students.map(s => {
+        const isPending = pendingSet.has(String(s.id));
+        const isPaid    = reg.is_finalized && !isPending;
+        const style = isPending
+          ? 'background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.5);'
+          : isPaid
+            ? 'background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.4);'
+            : ''; // non-finalized reg: keep default .stu-badge styling
+        return `
+          <span class="stu-badge" id="rst-${reg.id}-${s.id}"${style ? ` style="${style}"` : ''}>
+            ${esc(s.name)}
+            <button class="stu-badge-remove" title="Remove student"
+              onclick="adminRemoveRegStudent(${eventId},${reg.id},${s.id},'${esc(s.name)}')">×</button>
+          </span>`;
+      }).join('');
 
       const observers = reg.observers || [];
-      const obsBadges = observers.map(o =>
-        `<span class="stu-badge" id="robs-${reg.id}-${o.id}" style="background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid #6d5fa6;">
+      const obsBadges = observers.map(o => {
+        const obsKey   = `o${o.id}`;
+        const isPending = pendingSet.has(obsKey);
+        const isPaid    = reg.is_finalized && !isPending;
+        const style = isPending
+          ? 'background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.5);'
+          : isPaid
+            ? 'background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.4);'
+            : 'background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid #6d5fa6;'; // default purple
+        const removeBtnColor = isPending ? '#f87171' : isPaid ? '#4ade80' : '#9d7ee0';
+        return `<span class="stu-badge" id="robs-${reg.id}-${o.id}" style="${style}">
           &#128065; ${esc(o.name)}
-          <button class="stu-badge-remove" title="Remove observer" style="color:#9d7ee0;"
+          <button class="stu-badge-remove" title="Remove observer" style="color:${removeBtnColor};"
             onclick="adminRemoveRegObserver(${eventId},${reg.id},${o.id},'${esc(o.name)}')">×</button>
-        </span>`
-      ).join('');
+        </span>`;
+      }).join('');
 
       const paidOnHtml = reg.finalized_at
         ? `<span style="font-size:.72rem;color:#666;margin-left:.5rem;">on ${new Date(reg.finalized_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>`

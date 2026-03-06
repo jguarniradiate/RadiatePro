@@ -1162,13 +1162,20 @@ def verify_payment(
                             new_oids_added.append(oid)
                 except ValueError:
                     pass
-            # Update amount_paid to include new payment
+            # Update amount_paid to include new payment — but only if the webhook
+            # hasn't already credited it (dedup via existing Transaction row).
             add_amount = D(str(session.amount_total)) / 100
-            reg.amount_paid = (reg.amount_paid or D("0")) + add_amount
-            reg.finalized_at = datetime.now(timezone.utc)
-            # If pending items were also being paid in this session, clear them
-            if meta.get("is_pending_payment") == "true":
+            already_charged = bool(db.query(models.Transaction).filter(
+                models.Transaction.stripe_session_id == body.session_id
+            ).first())
+            if not already_charged:
+                reg.amount_paid = (reg.amount_paid or D("0")) + add_amount
+                if meta.get("is_pending_payment") == "true":
+                    reg.pending_student_ids = None
+            elif meta.get("is_pending_payment") == "true":
+                # Webhook cleared pending; ensure it's reflected
                 reg.pending_student_ids = None
+            reg.finalized_at = datetime.now(timezone.utc)
             # Record immutable transaction line for this add-students payment
             _sc = int(meta.get("student_count", "0") or "0") or len(new_sids_added)
             _oc = int(meta.get("observer_count", "0") or "0") or len(new_oids_added)
@@ -1185,13 +1192,19 @@ def verify_payment(
             # Initial registration flow or pending-payment flow (admin added unpaid dancers):
             # finalize and accumulate amount_paid so prior partial payments are preserved.
             is_pending_mode = meta.get("is_pending_payment") == "true"
+            amount = D(str(session.amount_total)) / 100
+            # Guard against double-counting if the webhook already ran for this session.
+            already_charged = bool(db.query(models.Transaction).filter(
+                models.Transaction.stripe_session_id == body.session_id
+            ).first())
             reg.is_finalized = True
             reg.payment_status = "paid"
-            amount = D(str(session.amount_total)) / 100
-            reg.amount_paid = (reg.amount_paid or D("0")) + amount
-            reg.finalized_at = datetime.now(timezone.utc)
-            if is_pending_mode:
-                reg.pending_student_ids = None   # payment received — clear pending
+            if not already_charged:
+                reg.amount_paid = (reg.amount_paid or D("0")) + amount
+                if is_pending_mode:
+                    reg.pending_student_ids = None   # payment received — clear pending
+            if not reg.finalized_at:
+                reg.finalized_at = datetime.now(timezone.utc)
             # Record immutable transaction line
             _sc = int(meta.get("student_count", "0") or "0")
             _oc = int(meta.get("observer_count", "0") or "0")
@@ -1517,16 +1530,24 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                         pass
             amount_total = session.get("amount_total") or 0
             paid_amount = D(str(amount_total)) / 100
-            prev_paid = reg.amount_paid or D("0")
-            new_amount = prev_paid + paid_amount
             meta_wh = session.get("metadata", {})
             is_pending_mode = meta_wh.get("is_pending_payment") == "true"
+            # Guard against double-counting amount_paid when verify-payment and
+            # the webhook both fire for the same Stripe session. The Transaction
+            # table deduplicates via stripe_session_id; mirror that logic here.
+            session_id_str = session.get("id")
+            already_charged = bool(session_id_str and db.query(models.Transaction).filter(
+                models.Transaction.stripe_session_id == session_id_str
+            ).first())
             reg.is_finalized = True
             reg.payment_status = "paid"
-            reg.amount_paid = new_amount
-            reg.finalized_at = datetime.now(timezone.utc)
-            if is_pending_mode:
-                reg.pending_student_ids = None   # payment received — clear pending
+            if not already_charged:
+                prev_paid = reg.amount_paid or D("0")
+                reg.amount_paid = prev_paid + paid_amount
+                if is_pending_mode:
+                    reg.pending_student_ids = None   # payment received — clear pending
+            if not reg.finalized_at:
+                reg.finalized_at = datetime.now(timezone.utc)
             # Record immutable transaction — _record_transaction deduplicates if
             # verify-payment already created a row for this session.
             _wh_sc = int(meta_wh.get("student_count", "0") or "0")
