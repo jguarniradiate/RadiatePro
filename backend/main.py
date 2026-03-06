@@ -113,6 +113,8 @@ def run_migrations(eng):
         "ALTER TABLE observers ADD COLUMN IF NOT EXISTS linked_student_id INTEGER REFERENCES students(id) ON DELETE SET NULL",
         # Pending payment tracking for admin-added unpaid dancers
         "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS pending_student_ids TEXT",
+        # Cash/offline payment tracking for individually admin-paid dancers
+        "ALTER TABLE event_registrations ADD COLUMN IF NOT EXISTS cash_student_ids TEXT",
         # Back-fill: ensure every paid registration is also marked finalized
         "UPDATE event_registrations SET is_finalized = TRUE WHERE payment_status IN ('paid', 'free', 'admin-paid') AND is_finalized = FALSE",
         # Immutable transaction ledger — one row per payment event
@@ -1749,6 +1751,7 @@ def admin_list_registrations(
         observers = [{"id": ero.observer_id, "name": ero.observer.name} for ero in reg.attending_observers]
         name = f"{reg.user.first_name or ''} {reg.user.last_name or ''}".strip() or reg.user.email
         pending_raw = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+        cash_raw    = [x for x in (reg.cash_student_ids   or "").split(",") if x.strip()]
         pending_stu_cnt = len([x for x in pending_raw if not x.startswith("o")])
         pending_obs_cnt = len([x for x in pending_raw if x.startswith("o")])
         pending_amount = float(price_per_student * pending_stu_cnt + observer_price * pending_obs_cnt)
@@ -1765,6 +1768,7 @@ def admin_list_registrations(
             "amount_paid": float(reg.amount_paid) if reg.amount_paid is not None else None,
             "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
             "pending_student_ids": pending_raw,
+            "cash_student_ids": cash_raw,
             "pending_amount": pending_amount,
             # Event-level fields needed for the registration report PDF
             "event_title": event.title if event else None,
@@ -1990,6 +1994,7 @@ def admin_finalize_registration(
     reg_id: int,
     student_id: Optional[int] = Query(None, description="Mark only this student as admin-paid"),
     observer_id: Optional[int] = Query(None, description="Mark only this observer as admin-paid"),
+    payment_type: str = Query("complimentary", description="'complimentary' ($0) or 'paid' (full price cash/offline)"),
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
@@ -2056,8 +2061,23 @@ def admin_finalize_registration(
 
         _sc   = 1 if student_id  is not None else 0
         _oc   = 1 if observer_id is not None else 0
-        _desc = "1 dancer (admin paid)" if student_id is not None else "1 observer (admin paid)"
-        _record_transaction(db, reg, D("0"), "admin-paid",
+        is_cash = payment_type == "paid"
+        if is_cash:
+            # Record the actual event price and track token in cash_student_ids
+            event = db.query(models.Event).filter(models.Event.id == event_id).first()
+            price_per_student, _ = _effective_price(event) if event else (D("0"), None)
+            observer_price = D(str(event.observer_price)) if event and event.observer_price else D("0")
+            _amount = price_per_student if student_id is not None else observer_price
+            token = str(student_id) if student_id is not None else f"o{observer_id}"
+            cash_tokens = [x for x in (reg.cash_student_ids or "").split(",") if x.strip()]
+            if token not in cash_tokens:
+                cash_tokens.append(token)
+            reg.cash_student_ids = ",".join(cash_tokens)
+            _desc = f"1 {'dancer' if student_id is not None else 'observer'} (cash / offline)"
+        else:
+            _amount = D("0")
+            _desc = f"1 {'dancer' if student_id is not None else 'observer'} (complimentary)"
+        _record_transaction(db, reg, _amount, "admin-paid",
                             description=_desc, student_count=_sc, observer_count=_oc)
     else:
         # Whole-registration finalize (no specific dancer ID supplied).

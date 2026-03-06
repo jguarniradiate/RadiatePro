@@ -91,6 +91,9 @@ class EventRegistration(Base):
     # Set when admin adds an unpaid dancer to a finalized registration.
     # Cleared when the user completes payment or admin marks as paid.
     pending_student_ids  = Column(Text, nullable=True)
+    # Comma-separated IDs of dancers individually paid cash/offline by admin.
+    # Same token format as pending_student_ids ("5" for student, "o3" for observer).
+    cash_student_ids     = Column(Text, nullable=True)
 
     event = relationship("Event", back_populates="registrations")
     user = relationship("User", back_populates="event_registrations")

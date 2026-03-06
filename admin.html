@@ -308,12 +308,16 @@
             <p class="fw-semibold mb-2" style="font-size:.8rem;color:#aaa;text-transform:uppercase;letter-spacing:.05em;">Payment Status</p>
             <div class="d-flex gap-3 flex-wrap">
               <div class="form-check mb-0">
-                <input class="form-check-input" type="radio" name="addStudentPayStatus" id="addStuPayNo" value="no" checked>
-                <label class="form-check-label" for="addStuPayNo" style="font-size:.85rem;">Not Paid <span class="text-muted">(pending)</span></label>
+                <input class="form-check-input" type="radio" name="addStudentPayStatus" id="addStuPayUnpaid" value="unpaid" checked>
+                <label class="form-check-label" for="addStuPayUnpaid" style="font-size:.85rem;">&#9889; Unpaid <span class="text-muted">(balance due)</span></label>
               </div>
               <div class="form-check mb-0">
-                <input class="form-check-input" type="radio" name="addStudentPayStatus" id="addStuPayYes" value="yes">
-                <label class="form-check-label" for="addStuPayYes" style="font-size:.85rem;color:#818cf8;">&#10003; Paid (cash / offline)</label>
+                <input class="form-check-input" type="radio" name="addStudentPayStatus" id="addStuPayComp" value="complimentary">
+                <label class="form-check-label" for="addStuPayComp" style="font-size:.85rem;color:#a78bfa;">&#10003; Complimentary</label>
+              </div>
+              <div class="form-check mb-0">
+                <input class="form-check-input" type="radio" name="addStudentPayStatus" id="addStuPayPaid" value="paid">
+                <label class="form-check-label" for="addStuPayPaid" style="font-size:.85rem;color:#22c55e;">&#10003; Paid (cash / offline)</label>
               </div>
             </div>
           </div>
@@ -418,12 +422,16 @@
             <p class="fw-semibold mb-2" style="font-size:.8rem;color:#aaa;text-transform:uppercase;letter-spacing:.05em;">Payment Status</p>
             <div class="d-flex gap-3 flex-wrap">
               <div class="form-check mb-0">
-                <input class="form-check-input" type="radio" name="addObsPayStatus" id="addObsPayNo" value="no" checked>
-                <label class="form-check-label" for="addObsPayNo" style="font-size:.85rem;">Not Paid <span class="text-muted">(pending)</span></label>
+                <input class="form-check-input" type="radio" name="addObsPayStatus" id="addObsPayUnpaid" value="unpaid" checked>
+                <label class="form-check-label" for="addObsPayUnpaid" style="font-size:.85rem;">&#9889; Unpaid <span class="text-muted">(balance due)</span></label>
               </div>
               <div class="form-check mb-0">
-                <input class="form-check-input" type="radio" name="addObsPayStatus" id="addObsPayYes" value="yes">
-                <label class="form-check-label" for="addObsPayYes" style="font-size:.85rem;color:#818cf8;">&#10003; Paid (cash / offline)</label>
+                <input class="form-check-input" type="radio" name="addObsPayStatus" id="addObsPayComp" value="complimentary">
+                <label class="form-check-label" for="addObsPayComp" style="font-size:.85rem;color:#a78bfa;">&#10003; Complimentary</label>
+              </div>
+              <div class="form-check mb-0">
+                <input class="form-check-input" type="radio" name="addObsPayStatus" id="addObsPayPaid" value="paid">
+                <label class="form-check-label" for="addObsPayPaid" style="font-size:.85rem;color:#22c55e;">&#10003; Paid (cash / offline)</label>
               </div>
             </div>
           </div>
@@ -1047,20 +1055,26 @@
         const totalPending   = balanceDueRegs.reduce((s, r) => s + (r.pending_amount || 0), 0);
 
         // Count individual paid / complimentary attendees (students + observers separately)
-        let paidAttendeeCount = 0, compStudentCount = 0, compObserverCount = 0, balanceDueCount = 0;
+        let paidStudentCount = 0, paidObserverCount = 0, compStudentCount = 0, compObserverCount = 0, balanceDueCount = 0;
         for (const reg of regs) {
-          const ps = new Set(reg.pending_student_ids || []);
+          const ps   = new Set(reg.pending_student_ids || []);
+          const cash = new Set(reg.cash_student_ids    || []);
           for (const s of (reg.students || [])) {
-            if (ps.has(String(s.id)))                    balanceDueCount++;
-            else if (reg.payment_status === 'paid')       paidAttendeeCount++;
-            else if (reg.payment_status === 'admin-paid') compStudentCount++;
+            const tok = String(s.id);
+            if (ps.has(tok))                              balanceDueCount++;
+            else if (cash.has(tok))                       paidStudentCount++;  // individually cash-paid
+            else if (reg.payment_status === 'paid')       paidStudentCount++;  // Stripe-paid
+            else if (reg.payment_status === 'admin-paid') compStudentCount++;  // complimentary
           }
           for (const o of (reg.observers || [])) {
-            if (ps.has(`o${o.id}`))                      balanceDueCount++;
-            else if (reg.payment_status === 'paid')       paidAttendeeCount++;
-            else if (reg.payment_status === 'admin-paid') compObserverCount++;
+            const tok = `o${o.id}`;
+            if (ps.has(tok))                              balanceDueCount++;
+            else if (cash.has(tok))                       paidObserverCount++; // individually cash-paid
+            else if (reg.payment_status === 'paid')       paidObserverCount++; // Stripe-paid
+            else if (reg.payment_status === 'admin-paid') compObserverCount++; // complimentary
           }
         }
+        const paidAttendeeCount = paidStudentCount + paidObserverCount;
 
         // Cache reg data so the PDF report button can access it by ID
         for (const reg of regs) _regData[reg.id] = reg;
@@ -1120,17 +1134,22 @@
     }
 
     function renderRegCard(eventId, reg) {
-      // Build a Set of unpaid-pending tokens: "5" for student id 5, "o3" for observer id 3
+      // Build sets for pending and cash-paid tokens: "5" for student, "o3" for observer
       const pendingSet = new Set(reg.pending_student_ids || []);
+      const cashSet    = new Set(reg.cash_student_ids    || []);
 
       const stuBadges = reg.students.map(s => {
-        const isPending = pendingSet.has(String(s.id));
-        const isPaid    = reg.is_finalized && !isPending;
+        const tok       = String(s.id);
+        const isPending = pendingSet.has(tok);
+        const isCash    = cashSet.has(tok);
+        const isStripePaid = reg.payment_status === 'paid' && !isPending;
         const style = isPending
           ? 'background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.5);'
-          : isPaid
+          : (isCash || isStripePaid)
             ? 'background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.4);'
-            : ''; // non-finalized reg: keep default .stu-badge styling
+            : reg.is_finalized
+              ? 'background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid rgba(167,139,250,.4);' // complimentary
+              : ''; // non-finalized reg: keep default .stu-badge styling
         return `
           <span class="stu-badge" id="rst-${reg.id}-${s.id}"${style ? ` style="${style}"` : ''}>
             ${esc(s.name)}
@@ -1141,15 +1160,16 @@
 
       const observers = reg.observers || [];
       const obsBadges = observers.map(o => {
-        const obsKey   = `o${o.id}`;
-        const isPending = pendingSet.has(obsKey);
-        const isPaid    = reg.is_finalized && !isPending;
+        const tok       = `o${o.id}`;
+        const isPending = pendingSet.has(tok);
+        const isCash    = cashSet.has(tok);
+        const isStripePaid = reg.payment_status === 'paid' && !isPending;
         const style = isPending
           ? 'background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.5);'
-          : isPaid
+          : (isCash || isStripePaid)
             ? 'background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.4);'
-            : 'background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid #6d5fa6;'; // default purple
-        const removeBtnColor = isPending ? '#f87171' : isPaid ? '#4ade80' : '#9d7ee0';
+            : 'background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid #6d5fa6;'; // complimentary purple
+        const removeBtnColor = isPending ? '#f87171' : (isCash || isStripePaid) ? '#4ade80' : '#9d7ee0';
         return `<span class="stu-badge" id="robs-${reg.id}-${o.id}" style="${style}">
           &#128065; ${esc(o.name)}
           <button class="stu-badge-remove" title="Remove observer" style="color:${removeBtnColor};"
@@ -1207,17 +1227,19 @@
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
       const pendingSet   = new Set(reg.pending_student_ids || []);
+      const cashSet      = new Set(reg.cash_student_ids    || []);
       const pricePerStu  = reg.price_per_student || 0;
       const obsvPrice    = reg.observer_price    || 0;
 
-      // Determine label + amount for each attendee slot
-      function attendeeLabel(isPending, unitPrice) {
-        if (isPending) return ['Balance Due', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'];
+      // Determine label + amount for each attendee token
+      function attendeeLabel(token, unitPrice) {
+        if (pendingSet.has(token)) return ['Balance Due', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'];
+        if (cashSet.has(token))    return ['Paid', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
+        if (reg.payment_status === 'paid')       return ['Paid', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
         if (reg.payment_status === 'admin-paid') return ['Complimentary', '$0.00'];
-        if (reg.payment_status === 'paid')  return ['Paid', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
-        if (reg.payment_status === 'free')  return ['Free', '$0.00'];
-        if (reg.is_finalized) return ['Complimentary', '$0.00'];
-        return ['Pending', '—'];
+        if (reg.payment_status === 'free')       return ['Free', '$0.00'];
+        if (reg.is_finalized)                    return ['Complimentary', '$0.00'];
+        return ['Unpaid', '—'];
       }
 
       // ── Header bar ─────────────────────────────────────────
@@ -1268,7 +1290,7 @@
           startY: y,
           head: [['Name', 'Status', 'Amount']],
           body: reg.students.map(s => {
-            const [status, amount] = attendeeLabel(pendingSet.has(String(s.id)), pricePerStu);
+            const [status, amount] = attendeeLabel(String(s.id), pricePerStu);
             return [s.name, status, amount];
           }),
           headStyles: { ...tblHead, textColor: [34, 197, 94] },
@@ -1287,7 +1309,7 @@
           startY: y,
           head: [['Name', 'Status', 'Amount']],
           body: observers.map(o => {
-            const [status, amount] = attendeeLabel(pendingSet.has(`o${o.id}`), obsvPrice);
+            const [status, amount] = attendeeLabel(`o${o.id}`, obsvPrice);
             return [o.name, status, amount];
           }),
           headStyles: { ...tblHead, textColor: [167, 139, 250] },
@@ -1806,27 +1828,17 @@
     // Pass { studentId } or { observerId } to target a single pending dancer;
     // omit both to finalize the whole registration (for non-finalized regs).
     async function maybeAdminFinalize(eventId, regId, token, payStatusRadioName, { studentId = null, observerId = null } = {}) {
-      const isPaid = document.querySelector(`input[name="${payStatusRadioName}"]:checked`)?.value === 'yes';
-      if (!isPaid) return false;
+      const payType = document.querySelector(`input[name="${payStatusRadioName}"]:checked`)?.value;
+      // 'unpaid' = do nothing; 'complimentary' or 'paid' = call finalize
+      if (!payType || payType === 'unpaid') return false;
       try {
         const qs = new URLSearchParams();
         if (studentId  != null) qs.set('student_id',  studentId);
         if (observerId != null) qs.set('observer_id', observerId);
-        const url = `${API}/admin/events/${eventId}/registrations/${regId}/admin-finalize${qs.toString() ? '?' + qs : ''}`;
-        const fRes = await fetch(url, {
-          method: 'POST', headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (fRes.ok) {
-          // Update the payment badge in the DOM
-          const badgeDiv = document.getElementById(`pay-status-${regId}`);
-          if (badgeDiv) {
-            const existingBadge = badgeDiv.querySelector('span:not(.fw-semibold)');
-            const newBadge = '<span style="background:rgba(99,102,241,.15);color:#818cf8;border:1px solid #818cf8;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Admin Paid</span>';
-            if (existingBadge) existingBadge.outerHTML = newBadge;
-            else badgeDiv.insertAdjacentHTML('beforeend', newBadge);
-          }
-          return true;
-        }
+        qs.set('payment_type', payType); // 'complimentary' or 'paid'
+        const url = `${API}/admin/events/${eventId}/registrations/${regId}/admin-finalize?${qs}`;
+        const fRes = await fetch(url, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+        return fRes.ok;
       } catch {}
       return false;
     }
