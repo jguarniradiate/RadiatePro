@@ -2367,6 +2367,21 @@ def admin_create_observer(user_id: int, body: schemas.ObserverCreate, authorizat
     return obs
 
 
+@app.patch("/admin/users/{user_id}/observers/{observer_id}", response_model=schemas.ObserverOut)
+def admin_update_observer(user_id: int, observer_id: int, body: schemas.ObserverCreate, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    obs = db.query(models.Observer).filter(models.Observer.id == observer_id, models.Observer.user_id == user_id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observer not found.")
+    obs.name = body.name.strip()
+    obs.linked_student_id = body.linked_student_id
+    db.commit()
+    db.refresh(obs)
+    return obs
+
+
 @app.delete("/admin/users/{user_id}/observers/{observer_id}", response_model=schemas.MessageOut)
 def admin_delete_observer(user_id: int, observer_id: int, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
     current = get_current_user(authorization, db)

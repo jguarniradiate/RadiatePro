@@ -340,6 +340,33 @@
     </div>
   </div>
 
+  <!-- Admin Add/Edit Observer Modal -->
+  <div class="modal fade" id="adminObserverModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="adminObserverModalTitle">Add Observer</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="adminObserverAlert" class="alert alert-danger d-none mb-3"></div>
+          <input type="hidden" id="aoUserId">
+          <input type="hidden" id="aoObserverId">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="aoName" placeholder="Observer's full name">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-sm px-3" id="adminObserverSaveBtn"
+            style="background:#a78bfa;color:#000;font-weight:700;"
+            onclick="saveAdminObserver()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Add Student to Registration Modal -->
   <div class="modal fade" id="addRegStudentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -781,20 +808,16 @@
       const content = document.getElementById(`students-content-${userId}`);
       content.innerHTML = '<div class="text-muted small text-center py-2">Loading…</div>';
       try {
-        const res = await fetch(`${API}/admin/users/${userId}/students`, { headers: { 'Authorization': `Bearer ${token}` } });
-        const students = await res.json();
-        if (!students.length) {
-          content.innerHTML = `
-            <p class="text-muted small mb-2">No students for <strong>${esc(name||studio)}</strong>.</p>
-            <button class="btn btn-accent btn-sm" onclick="openAdminAddStudent(${userId},'${esc(name||studio)}')">+ Add Student</button>`;
-          return;
-        }
-        content.innerHTML = `
-          <div class="d-flex align-items-center justify-content-between mb-2">
-            <p class="small fw-semibold mb-0" style="color:#E3FC02;">Students — ${esc(studio||name)}</p>
-            <button class="btn btn-accent btn-sm py-0 px-2" style="font-size:.78rem;"
-              onclick="openAdminAddStudent(${userId},'${esc(name||studio)}')">+ Add Student</button>
-          </div>
+        const [stuRes, obsRes] = await Promise.all([
+          fetch(`${API}/admin/users/${userId}/students`,  { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(`${API}/admin/users/${userId}/observers`, { headers: { 'Authorization': `Bearer ${token}` } }),
+        ]);
+        const students  = stuRes.ok  ? await stuRes.json()  : [];
+        const observers = obsRes.ok  ? await obsRes.json()  : [];
+
+        const label = esc(studio || name);
+
+        const stuSection = students.length ? `
           <table class="table table-sm mb-0" style="--bs-table-bg:transparent;--bs-table-color:#ccc;--bs-table-border-color:#2a2a2a;font-size:.85rem;">
             <thead><tr style="color:#888;"><th>Name</th><th>Date of Birth</th><th>Gender</th><th></th></tr></thead>
             <tbody id="admin-students-${userId}">
@@ -811,8 +834,39 @@
                   </td>
                 </tr>`).join('')}
             </tbody>
-          </table>`;
-      } catch { content.innerHTML = '<div class="text-danger small">Failed to load students.</div>'; }
+          </table>` : `<p class="text-muted small mb-0">No students yet.</p>`;
+
+        const obsSection = observers.length ? `
+          <table class="table table-sm mb-0" style="--bs-table-bg:transparent;--bs-table-color:#ccc;--bs-table-border-color:#2a2a2a;font-size:.85rem;">
+            <thead><tr style="color:#888;"><th>Name</th><th></th></tr></thead>
+            <tbody id="admin-observers-${userId}">
+              ${observers.map(o => `
+                <tr id="aobr-${o.id}">
+                  <td>${esc(o.name)}</td>
+                  <td class="text-nowrap">
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
+                      onclick="openAdminEditObserver(${userId},${o.id},'${esc(o.name)}')">Edit</button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                      onclick="adminDeleteObserver(${userId},${o.id},'${esc(o.name)}')">Remove</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>` : `<p class="text-muted small mb-0">No observers yet.</p>`;
+
+        content.innerHTML = `
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <p class="small fw-semibold mb-0" style="color:#E3FC02;">Students — ${label}</p>
+            <button class="btn btn-accent btn-sm py-0 px-2" style="font-size:.78rem;"
+              onclick="openAdminAddStudent(${userId},'${esc(studio||name)}')">+ Add Student</button>
+          </div>
+          ${stuSection}
+          <div class="d-flex align-items-center justify-content-between mt-3 mb-2">
+            <p class="small fw-semibold mb-0" style="color:#a78bfa;">Observers — ${label}</p>
+            <button class="btn btn-sm py-0 px-2" style="font-size:.78rem;background:#a78bfa;color:#000;font-weight:700;"
+              onclick="openAdminAddObserver(${userId},'${esc(studio||name)}')">+ Add Observer</button>
+          </div>
+          ${obsSection}`;
+      } catch (e) { content.innerHTML = '<div class="text-danger small">Failed to load students/observers.</div>'; }
     }
 
     function openAdminEditStudent(userId, studentId, name, dob, gender) {
@@ -925,6 +979,95 @@
         } else { alertEl.textContent = data.detail || `Error ${res.status}`; alertEl.classList.remove('d-none'); }
       } catch { alertEl.textContent = 'Something went wrong.'; alertEl.classList.remove('d-none'); }
       finally { saveBtn.disabled = false; saveBtn.textContent = 'Add Student'; }
+    }
+
+    // ── Admin Observer CRUD (user expansion panel) ───────────────────────────
+    let adminObserverModal;
+
+    function openAdminAddObserver(userId, userName) {
+      if (!adminObserverModal) adminObserverModal = new bootstrap.Modal(document.getElementById('adminObserverModal'));
+      document.getElementById('aoUserId').value     = userId;
+      document.getElementById('aoObserverId').value = '';
+      document.getElementById('aoName').value       = '';
+      document.getElementById('adminObserverModalTitle').textContent = `Add Observer — ${userName}`;
+      document.getElementById('adminObserverAlert').classList.add('d-none');
+      adminObserverModal.show();
+    }
+
+    function openAdminEditObserver(userId, observerId, name) {
+      if (!adminObserverModal) adminObserverModal = new bootstrap.Modal(document.getElementById('adminObserverModal'));
+      document.getElementById('aoUserId').value     = userId;
+      document.getElementById('aoObserverId').value = observerId;
+      document.getElementById('aoName').value       = name;
+      document.getElementById('adminObserverModalTitle').textContent = 'Edit Observer';
+      document.getElementById('adminObserverAlert').classList.add('d-none');
+      adminObserverModal.show();
+    }
+
+    async function saveAdminObserver() {
+      const token      = localStorage.getItem('token');
+      const userId     = document.getElementById('aoUserId').value;
+      const observerId = document.getElementById('aoObserverId').value;
+      const name       = document.getElementById('aoName').value.trim();
+      const alertEl    = document.getElementById('adminObserverAlert');
+      const saveBtn    = document.getElementById('adminObserverSaveBtn');
+      if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      alertEl.classList.add('d-none');
+      saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+      try {
+        const url    = observerId
+          ? `${API}/admin/users/${userId}/observers/${observerId}`
+          : `${API}/admin/users/${userId}/observers`;
+        const method = observerId ? 'PATCH' : 'POST';
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ name }),
+        });
+        let data = {}; try { data = await res.json(); } catch {}
+        if (res.ok) {
+          adminObserverModal.hide();
+          const tbody = document.getElementById(`admin-observers-${userId}`);
+          if (tbody) {
+            if (observerId) {
+              // Update existing row
+              const row = document.getElementById(`aobr-${observerId}`);
+              if (row) row.cells[0].textContent = data.name;
+            } else {
+              // Append new row
+              const tr = document.createElement('tr');
+              tr.id = `aobr-${data.id}`;
+              tr.innerHTML = `
+                <td>${esc(data.name)}</td>
+                <td class="text-nowrap">
+                  <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
+                    onclick="openAdminEditObserver(${userId},${data.id},'${esc(data.name)}')">Edit</button>
+                  <button class="btn btn-sm btn-outline-danger py-0 px-2"
+                    onclick="adminDeleteObserver(${userId},${data.id},'${esc(data.name)}')">Remove</button>
+                </td>`;
+              tbody.appendChild(tr);
+            }
+          } else {
+            // Section wasn't rendered yet — force a reload of the expanded row
+            toggleStudents(userId, '', ''); toggleStudents(userId, '', '');
+          }
+        } else { alertEl.textContent = data.detail || `Error ${res.status}`; alertEl.classList.remove('d-none'); }
+      } catch { alertEl.textContent = 'Something went wrong.'; alertEl.classList.remove('d-none'); }
+      finally { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    }
+
+    async function adminDeleteObserver(userId, observerId, observerName) {
+      if (!confirm(`Remove observer "${observerName}" from this user?`)) return;
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API}/admin/users/${userId}/observers/${observerId}`, {
+        method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const row = document.getElementById(`aobr-${observerId}`);
+        if (row) row.remove();
+      } else {
+        alert('Failed to remove observer.');
+      }
     }
 
     function openEdit(id, firstName, lastName, studio, phone, email) {
@@ -1422,6 +1565,78 @@
           return `<span style="color:#22c55e;font-weight:600;">$${tx.amount.toFixed(2)}</span>`;
         };
 
+        // Expand any combined (whole-reg) transaction into student + observer sub-rows
+        const expandedRows = [];
+        for (const tx of txns) {
+          const date = tx.created_at
+            ? new Date(tx.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : '—';
+
+          if (tx.attendee_name) {
+            // Per-dancer/observer transaction — single row as before
+            const attendee = `${tx.attendee_type === 'observer' ? '&#128065; ' : '&#128100; '}${tx.attendee_name.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`;
+            const desc = (tx.description || (tx.attendee_type === 'observer' ? '1 observer' : '1 dancer')).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            expandedRows.push({ desc, attendee, amt: txAmt(tx), date });
+          } else {
+            // Whole-registration transaction — split into Students row + Observers row
+            const cachedReg = _regData[regId];
+            const stuCount  = tx.student_count  || 0;
+            const obsCount  = tx.observer_count || 0;
+            const stuPrice  = cachedReg?.price_per_student || 0;
+            const obsPrice  = cachedReg?.observer_price    || 0;
+
+            const stuNames = (cachedReg?.students  || []).map(s => s.name.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+            const obsNames = (cachedReg?.observers || []).map(o => o.name.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+
+            // Compute split amounts — fall back to proportional share of tx.amount
+            let stuAmt = stuCount * stuPrice;
+            let obsAmt = obsCount * obsPrice;
+            if (stuAmt + obsAmt === 0 && tx.amount > 0) {
+              // No unit prices stored — show total on students row, zero on observers
+              stuAmt = tx.amount;
+              obsAmt = 0;
+            }
+
+            const fmtAmt = (amount, status) => {
+              if (status === 'free')           return '<span style="color:#4ade80;font-weight:600;">Free</span>';
+              if (status === 'removed')        return '<span style="color:#6b7280;font-style:italic;">Removed</span>';
+              if (status === 'credit')         return `<span style="color:#fbbf24;font-weight:600;">💳 &#8722;$${amount.toFixed(2)}</span>`;
+              if (status === 'credit-applied') return `<span style="color:#fbbf24;font-weight:600;">💳 $${amount.toFixed(2)}</span>`;
+              if (status === 'admin-paid' && amount > 0) return `<span style="color:#22c55e;font-weight:600;">$${amount.toFixed(2)}</span>`;
+              if (status === 'admin-paid')     return '<span style="color:#a78bfa;">Comp.</span>';
+              return amount > 0 ? `<span style="color:#22c55e;font-weight:600;">$${amount.toFixed(2)}</span>`
+                                : '<span style="color:#4ade80;font-weight:600;">Free</span>';
+            };
+
+            if (stuCount > 0) {
+              const stuAttendee = stuNames.length
+                ? `<span style="color:#ccc;">&#128100; ${stuNames.join(', ')}</span>`
+                : `<span style="color:#666;">${stuCount} dancer${stuCount !== 1 ? 's' : ''}</span>`;
+              expandedRows.push({
+                desc: `${stuCount} dancer${stuCount !== 1 ? 's' : ''}`,
+                attendee: stuAttendee,
+                amt: fmtAmt(stuAmt, tx.payment_status),
+                date,
+              });
+            }
+            if (obsCount > 0) {
+              const obsAttendee = obsNames.length
+                ? `<span style="color:#ccc;">&#128065; ${obsNames.join(', ')}</span>`
+                : `<span style="color:#666;">${obsCount} observer${obsCount !== 1 ? 's' : ''}</span>`;
+              expandedRows.push({
+                desc: `${obsCount} observer${obsCount !== 1 ? 's' : ''}`,
+                attendee: obsAttendee,
+                amt: fmtAmt(obsAmt, tx.payment_status),
+                date,
+              });
+            }
+            if (stuCount === 0 && obsCount === 0) {
+              // Fallback — show as one row
+              expandedRows.push({ desc: tx.description || '—', attendee: '—', amt: txAmt(tx), date });
+            }
+          }
+        }
+
         content.innerHTML = `
           <table style="width:100%;font-size:.78rem;border-collapse:collapse;">
             <thead>
@@ -1433,36 +1648,13 @@
               </tr>
             </thead>
             <tbody>
-              ${txns.map(tx => {
-                const date = tx.created_at
-                  ? new Date(tx.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  : '—';
-                const desc = (tx.description || `${tx.student_count} dancer(s)${tx.observer_count ? `, ${tx.observer_count} observer(s)` : ''}`).replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                let attendee;
-                if (tx.attendee_name) {
-                  attendee = `${tx.attendee_type === 'observer' ? '👁 ' : ''}${tx.attendee_name.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`;
-                } else {
-                  // Whole-registration transaction (e.g. Stripe) — derive names from cached reg,
-                  // split into separate lines for students vs observers.
-                  const cachedReg = _regData[regId];
-                  const lines = [];
-                  if (cachedReg) {
-                    const showStu = !tx.student_count  || tx.student_count  > 0;
-                    const showObs = !tx.observer_count || tx.observer_count > 0;
-                    const stuNames = (cachedReg.students  || []).map(s => s.name.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
-                    const obsNames = (cachedReg.observers || []).map(o => o.name.replace(/</g,'&lt;').replace(/>/g,'&gt;'));
-                    if (showStu && stuNames.length) lines.push(`<span style="color:#ccc;">&#128100; ${stuNames.join(', ')}</span>`);
-                    if (showObs && obsNames.length) lines.push(`<span style="color:#ccc;">&#128065; ${obsNames.join(', ')}</span>`);
-                  }
-                  attendee = lines.length ? lines.join('<br>') : '<span style="color:#444;">—</span>';
-                }
-                return `<tr style="border-bottom:1px solid #111;">
-                  <td style="padding:.3rem .4rem;color:#bbb;">${desc}</td>
-                  <td style="padding:.3rem .4rem;color:#ccc;">${attendee}</td>
-                  <td style="padding:.3rem .4rem;text-align:right;">${txAmt(tx)}</td>
-                  <td style="padding:.3rem .4rem;text-align:right;color:#666;white-space:nowrap;">${date}</td>
-                </tr>`;
-              }).join('')}
+              ${expandedRows.map(r => `
+                <tr style="border-bottom:1px solid #111;">
+                  <td style="padding:.3rem .4rem;color:#bbb;">${r.desc}</td>
+                  <td style="padding:.3rem .4rem;color:#ccc;">${r.attendee}</td>
+                  <td style="padding:.3rem .4rem;text-align:right;">${r.amt}</td>
+                  <td style="padding:.3rem .4rem;text-align:right;color:#666;white-space:nowrap;">${r.date}</td>
+                </tr>`).join('')}
             </tbody>
           </table>`;
       } catch {
