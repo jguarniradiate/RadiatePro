@@ -380,30 +380,11 @@
         <div class="modal-body">
           <p class="text-muted small mb-1" id="addRegObsForUser"></p>
 
-          <!-- Payment status selection -->
-          <div class="mb-3 p-2 rounded" style="background:#111;border:1px solid #2a2a2a;">
-            <p class="fw-semibold mb-2" style="font-size:.8rem;color:#aaa;text-transform:uppercase;letter-spacing:.05em;">Payment Status</p>
-            <div class="d-flex gap-3 flex-wrap">
-              <div class="form-check mb-0">
-                <input class="form-check-input" type="radio" name="addObsPayStatus" id="addObsPayUnpaid" value="unpaid" checked>
-                <label class="form-check-label" for="addObsPayUnpaid" style="font-size:.85rem;">&#9889; Unpaid <span class="text-muted">(balance due)</span></label>
-              </div>
-              <div class="form-check mb-0">
-                <input class="form-check-input" type="radio" name="addObsPayStatus" id="addObsPayComp" value="complimentary">
-                <label class="form-check-label" for="addObsPayComp" style="font-size:.85rem;color:#a78bfa;">&#10003; Complimentary</label>
-              </div>
-              <div class="form-check mb-0">
-                <input class="form-check-input" type="radio" name="addObsPayStatus" id="addObsPayPaid" value="paid">
-                <label class="form-check-label" for="addObsPayPaid" style="font-size:.85rem;color:#22c55e;">&#10003; Paid (cash / offline)</label>
-              </div>
-            </div>
-          </div>
-
           <!-- Existing observers list -->
           <p class="fw-semibold mb-2" style="font-size:.82rem;color:#a78bfa;">User's Observers</p>
           <div id="addRegObsLoading" class="text-center py-2"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div></div>
           <div id="addRegObsEmpty" class="text-muted small text-center d-none">All of this user's observers are already in the registration.</div>
-          <div id="addRegObsList" class="d-flex flex-wrap gap-2 mb-3"></div>
+          <div id="addRegObsList" class="d-flex flex-column gap-1 mb-3"></div>
 
           <!-- Divider -->
           <hr style="border-color:#2a2a2a;margin:12px 0;">
@@ -425,6 +406,20 @@
                 <select class="form-select form-select-sm" id="newObserverLinkedStudent">
                   <option value="">— None —</option>
                 </select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label fw-semibold" style="font-size:.82rem;">Payment Status</label>
+                <div class="d-flex gap-3 flex-wrap">
+                  <label class="d-flex align-items-center gap-1 mb-0" style="cursor:pointer;font-size:.78rem;color:#aaa;">
+                    <input type="radio" name="newObsPayType" value="unpaid" checked style="width:12px;height:12px;margin:0;"> ⚡ Unpaid
+                  </label>
+                  <label class="d-flex align-items-center gap-1 mb-0" style="cursor:pointer;font-size:.78rem;color:#a78bfa;">
+                    <input type="radio" name="newObsPayType" value="complimentary" style="width:12px;height:12px;margin:0;"> ✓ Comp.
+                  </label>
+                  <label class="d-flex align-items-center gap-1 mb-0" style="cursor:pointer;font-size:.78rem;color:#22c55e;">
+                    <input type="radio" name="newObsPayType" value="paid" style="width:12px;height:12px;margin:0;"> ✓ Paid
+                  </label>
+                </div>
               </div>
               <button class="btn btn-sm w-100 mt-1" id="createNewObserverBtn"
                 style="background:#a78bfa;color:#000;font-weight:700;"
@@ -1573,49 +1568,59 @@
     }
 
     // ── Admin Add Observer to Registration ────────────────────────────────────
-    let _obsRegCtx = {};
-    let addRegObserverModal;
-    let _selectedObserverId   = null;
-    let _selectedObserverName = null;
+    let _obsRegCtx = {}, addRegObserverModal;
 
-    function selectAddRegObserver(observerId, observerName) {
-      // Deselect all items first
-      document.querySelectorAll('.aro-select-btn').forEach(b => {
-        b.style.background  = 'rgba(167,139,250,.12)';
-        b.style.borderColor = '#6d5fa6';
-        b.style.color       = '#a78bfa';
-        b.style.fontWeight  = '';
-      });
-      // Highlight selected
-      const btn = document.getElementById(`aro-${observerId}`);
-      if (btn) {
-        btn.style.background  = '#a78bfa';
-        btn.style.borderColor = '#a78bfa';
-        btn.style.color       = '#000';
-        btn.style.fontWeight  = '700';
+    function toggleAroPayWrap(obsId) {
+      const cb   = document.getElementById(`aro-cb-${obsId}`);
+      const wrap = document.getElementById(`aro-pay-wrap-${obsId}`);
+      if (cb.checked) {
+        wrap.style.opacity = '1';
+        wrap.style.pointerEvents = 'auto';
+      } else {
+        wrap.style.opacity = '.35';
+        wrap.style.pointerEvents = 'none';
+        const unpaid = wrap.querySelector('input[value="unpaid"]');
+        if (unpaid) unpaid.checked = true;
+        const row = document.getElementById(`aro-row-${obsId}`);
+        if (row) row.style.background = '#0d0d0d';
       }
-      _selectedObserverId   = observerId;
-      _selectedObserverName = observerName;
-      document.getElementById('addRegObserverSaveBtn').disabled = false;
+      updateAroPayStyle(obsId);
+      const saveBtn = document.getElementById('addRegObserverSaveBtn');
+      if (saveBtn) saveBtn.disabled = !document.querySelector('.aro-cb:checked');
+    }
+
+    function updateAroPayStyle(obsId) {
+      const cb  = document.getElementById(`aro-cb-${obsId}`);
+      const row = document.getElementById(`aro-row-${obsId}`);
+      if (!cb || !row) return;
+      const val = document.querySelector(`input[name="aroPay-${obsId}"]:checked`)?.value;
+      if (!cb.checked) { row.style.background = '#0d0d0d'; return; }
+      if (val === 'paid')          row.style.background = 'rgba(34,197,94,.08)';
+      else if (val === 'complimentary') row.style.background = 'rgba(167,139,250,.08)';
+      else                         row.style.background = '#0d0d0d';
     }
 
     async function adminAddRegObserverSave() {
-      if (!_selectedObserverId) return;
-      await adminAddRegObserver(_selectedObserverId, _selectedObserverName);
+      const checked = [...document.querySelectorAll('.aro-cb:checked')];
+      if (!checked.length) return;
+      for (const cb of checked) {
+        const obsId   = parseInt(cb.value);
+        const obsName = document.querySelector(`label[for="aro-cb-${obsId}"]`)?.textContent?.trim() || '';
+        const payType = document.querySelector(`input[name="aroPay-${obsId}"]:checked`)?.value || 'unpaid';
+        await adminAddRegObserver(obsId, obsName, payType);
+      }
     }
 
     function openAddRegObserver(eventId, regId, userId, userName, existingObsIds, regStudentIds) {
       _obsRegCtx = { eventId, regId, userId };
-      _selectedObserverId   = null;
-      _selectedObserverName = null;
       document.getElementById('addRegObserverSaveBtn').disabled = true;
       document.getElementById('addRegObsForUser').textContent = `For: ${userName}`;
       document.getElementById('addRegObsLoading').classList.remove('d-none');
       document.getElementById('addRegObsEmpty').classList.add('d-none');
       document.getElementById('addRegObsList').innerHTML = '';
-      // Always reset payment radio to "Not Paid" so a previous "Paid" selection
-      // doesn't accidentally finalize the next add.
-      document.getElementById('addObsPayUnpaid').checked = true;
+      // Reset new-observer create form pay radio
+      const newObsUnpaid = document.querySelector('input[name="newObsPayType"][value="unpaid"]');
+      if (newObsUnpaid) newObsUnpaid.checked = true;
       document.getElementById('newObserverForm').classList.add('d-none');
       document.getElementById('newObserverToggleIcon').textContent = '+';
       document.getElementById('newObserverName').value = '';
@@ -1649,13 +1654,31 @@
           const list = document.getElementById('addRegObsList');
           list.innerHTML = '';
           available.forEach(o => {
-            const btn = document.createElement('button');
-            btn.id = `aro-${o.id}`;
-            btn.className = 'btn btn-sm aro-select-btn';
-            btn.style.cssText = 'background:rgba(167,139,250,.12);border:1px solid #6d5fa6;color:#a78bfa;font-size:.82rem;';
-            btn.textContent = o.name;
-            btn.onclick = () => selectAddRegObserver(o.id, o.name);
-            list.appendChild(btn);
+            const row = document.createElement('div');
+            row.id = `aro-row-${o.id}`;
+            row.className = 'd-flex flex-column gap-1';
+            row.style.cssText = 'background:#0d0d0d;border-radius:6px;padding:.4rem .6rem;';
+            row.innerHTML = `
+              <div class="d-flex align-items-center gap-2">
+                <input class="form-check-input aro-cb" type="checkbox" role="switch" id="aro-cb-${o.id}" value="${o.id}"
+                  style="margin-top:0;cursor:pointer;flex-shrink:0;" onchange="toggleAroPayWrap(${o.id})">
+                <label class="mb-0 flex-grow-1" for="aro-cb-${o.id}" style="color:#ccc;font-size:.88rem;cursor:pointer;">${esc(o.name)}</label>
+              </div>
+              <div id="aro-pay-wrap-${o.id}" class="d-flex align-items-center gap-3 ps-4" style="opacity:.35;pointer-events:none;">
+                <label class="d-flex align-items-center gap-1 mb-0" style="cursor:pointer;font-size:.75rem;color:#aaa;">
+                  <input type="radio" name="aroPay-${o.id}" value="unpaid" checked style="width:12px;height:12px;margin:0;" onchange="updateAroPayStyle(${o.id})">
+                  ⚡ Unpaid
+                </label>
+                <label class="d-flex align-items-center gap-1 mb-0" style="cursor:pointer;font-size:.75rem;color:#aaa;">
+                  <input type="radio" name="aroPay-${o.id}" value="complimentary" style="width:12px;height:12px;margin:0;" onchange="updateAroPayStyle(${o.id})">
+                  ✓ Comp.
+                </label>
+                <label class="d-flex align-items-center gap-1 mb-0" style="cursor:pointer;font-size:.75rem;color:#aaa;">
+                  <input type="radio" name="aroPay-${o.id}" value="paid" style="width:12px;height:12px;margin:0;" onchange="updateAroPayStyle(${o.id})">
+                  ✓ Paid
+                </label>
+              </div>`;
+            list.appendChild(row);
           });
         }).catch(() => {
           document.getElementById('addRegObsLoading').classList.add('d-none');
@@ -1664,7 +1687,7 @@
         });
     }
 
-    async function adminAddRegObserver(observerId, observerName) {
+    async function adminAddRegObserver(observerId, observerName, payType = 'unpaid') {
       const { eventId, regId } = _obsRegCtx;
       const token = localStorage.getItem('token');
       const saveBtn = document.getElementById('addRegObserverSaveBtn');
@@ -1705,13 +1728,16 @@
 
           // Handle payment status — only mark THIS observer as admin-paid so
           // other pending dancers still pay via the user portal.
-          await maybeAdminFinalize(eventId, regId, token, 'addObsPayStatus', { observerId });
+          if (payType && payType !== 'unpaid') {
+            const qs = new URLSearchParams({ payment_type: payType, observer_id: observerId });
+            await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/admin-finalize?${qs}`, {
+              method: 'POST', headers: { 'Authorization': `Bearer ${token}` },
+            });
+          }
           // Refresh the registration panel so badges and totals update
           await refreshEventRegistrations(eventId);
-          // Reset selection state
-          _selectedObserverId = null; _selectedObserverName = null;
-          if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Save'; }
-          if (!document.getElementById('addRegObsList').children.length) addRegObserverModal.hide();
+          if (saveBtn) { saveBtn.disabled = !document.querySelector('.aro-cb:checked'); saveBtn.textContent = 'Save'; }
+          if (!document.querySelector('.aro-cb')) addRegObserverModal.hide();
         } else {
           const d = await res.json().catch(()=>({}));
           alert(d.detail || 'Failed to add observer.');
@@ -1753,7 +1779,8 @@
         if (!createRes.ok) { const d = await createRes.json().catch(()=>({})); alertEl.textContent = d.detail || 'Failed to create observer.'; alertEl.classList.remove('d-none'); return; }
         const obs = await createRes.json();
         // 2. Add to registration (payment finalization is handled inside adminAddRegObserver)
-        await adminAddRegObserver(obs.id, obs.name);
+        const newObsPayType = document.querySelector('input[name="newObsPayType"]:checked')?.value || 'unpaid';
+        await adminAddRegObserver(obs.id, obs.name, newObsPayType);
         document.getElementById('newObserverName').value = '';
         document.getElementById('newObserverLinkedStudent').value = '';
       } catch {
