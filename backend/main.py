@@ -139,6 +139,17 @@ def run_migrations(eng):
             observer_count INTEGER DEFAULT 0,
             created_at TIMESTAMPTZ DEFAULT now()
         )""",
+        # Login audit log — one row per successful login
+        """CREATE TABLE IF NOT EXISTS user_login_logs (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            email VARCHAR NOT NULL,
+            ip_address VARCHAR,
+            user_agent VARCHAR,
+            logged_in_at TIMESTAMPTZ DEFAULT now()
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_login_logs_user_id ON user_login_logs(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_login_logs_logged_in_at ON user_login_logs(logged_in_at DESC)",
     ]
     try:
         with eng.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
@@ -263,11 +274,32 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/login", response_model=schemas.Token)
-def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
+def login(user: schemas.UserLogin, request: Request, db: Session = Depends(get_db)):
     """Authenticate and return a JWT access token."""
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if not db_user or not auth.verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    # Resolve real client IP — honour X-Forwarded-For when behind a proxy/CDN.
+    forwarded_for = request.headers.get("x-forwarded-for")
+    ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else (
+        request.client.host if request.client else None
+    )
+    user_agent = request.headers.get("user-agent")
+
+    # Record the login event (best-effort — never block the login if this fails).
+    try:
+        db.execute(
+            text(
+                "INSERT INTO user_login_logs (user_id, email, ip_address, user_agent) "
+                "VALUES (:uid, :email, :ip, :ua)"
+            ),
+            {"uid": db_user.id, "email": db_user.email, "ip": ip_address, "ua": user_agent},
+        )
+        db.commit()
+    except Exception as exc:
+        logger.warning("Failed to record login log for user %s: %s", db_user.id, exc)
+        db.rollback()
 
     # Email verification is soft-enforced in the frontend; users can log in but
     # are prompted to verify before registering for events.
@@ -2675,3 +2707,62 @@ def admin_apply_credit(
 
     db.commit()
     return {"message": f"Credit applied to {applied} attendee(s).", "credit_remaining": float(credit)}
+
+
+# ── Admin login log ────────────────────────────────────────────────────────────
+
+@app.get("/admin/login-logs")
+def admin_login_logs(
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Return the most recent user login events for the admin audit log."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                l.id,
+                l.user_id,
+                l.email,
+                u.first_name,
+                u.last_name,
+                u.is_admin,
+                u.email_verified,
+                l.ip_address,
+                l.user_agent,
+                l.logged_in_at
+            FROM user_login_logs l
+            LEFT JOIN users u ON u.id = l.user_id
+            ORDER BY l.logged_in_at DESC
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        {"limit": limit, "offset": offset},
+    ).fetchall()
+
+    total = db.execute(text("SELECT COUNT(*) FROM user_login_logs")).scalar() or 0
+
+    return {
+        "total": total,
+        "logs": [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "email": r.email,
+                "first_name": r.first_name,
+                "last_name": r.last_name,
+                "is_admin": bool(r.is_admin),
+                "email_verified": bool(r.email_verified) if r.email_verified is not None else False,
+                "ip_address": r.ip_address,
+                "user_agent": r.user_agent,
+                "logged_in_at": r.logged_in_at.isoformat() if r.logged_in_at else None,
+            }
+            for r in rows
+        ],
+    }

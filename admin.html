@@ -94,6 +94,9 @@
       <div class="admin-nav-item" id="nav-events" onclick="showAdminSection('events')">
         <span>&#128197;</span> Events
       </div>
+      <div class="admin-nav-item" id="nav-logins" onclick="showAdminSection('logins')">
+        <span>&#128274;</span> Logins
+      </div>
     </div>
 
     <!-- ── Content ── -->
@@ -163,6 +166,57 @@
         <div id="eventsEmpty" class="text-muted text-center py-3 d-none">No events yet.</div>
         <div id="eventsError" class="alert alert-danger d-none"></div>
         <div id="eventsList"></div>
+      </div>
+
+      <!-- ── Logins Section ── -->
+      <div id="loginsPane" class="d-none">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h4 class="fw-bold page-title mb-0">Login Activity</h4>
+          <button class="btn btn-accent btn-sm" onclick="loadLoginLogs()">&#8635; Refresh</button>
+        </div>
+
+        <!-- Summary bar -->
+        <div id="loginsSummary" class="d-none mb-3" style="font-size:.82rem;color:#888;"></div>
+
+        <!-- Filters -->
+        <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+          <input type="text" id="loginSearch" class="form-control form-control-sm"
+            style="max-width:260px;background:#111;border-color:#2a2a2a;color:#f0f0f0;"
+            placeholder="&#128269; Search user, email, IP…"
+            oninput="renderLoginLogs()">
+          <select id="loginFilter" class="form-select form-select-sm"
+            style="max-width:160px;background:#111;border-color:#2a2a2a;color:#f0f0f0;"
+            onchange="renderLoginLogs()">
+            <option value="all">All users</option>
+            <option value="admins">Admins only</option>
+            <option value="unverified">Unverified only</option>
+          </select>
+        </div>
+
+        <div id="loginsLoading" class="text-center py-4">
+          <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+        </div>
+        <div id="loginsEmpty" class="text-muted text-center py-4 d-none">No login records yet.</div>
+        <div id="loginsError" class="alert alert-danger d-none"></div>
+
+        <div id="loginsTableWrap" class="d-none" style="overflow-x:auto;">
+          <table class="table tbl align-middle mb-0" style="font-size:.84rem;">
+            <thead>
+              <tr>
+                <th style="min-width:180px;">User</th>
+                <th style="min-width:140px;">Time</th>
+                <th style="min-width:120px;">IP Address</th>
+                <th>Device / Browser</th>
+              </tr>
+            </thead>
+            <tbody id="loginsBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Load more -->
+        <div id="loginsLoadMore" class="text-center mt-3 d-none">
+          <button class="btn btn-outline-secondary btn-sm" onclick="loadMoreLoginLogs()">Load more</button>
+        </div>
       </div>
 
     </div><!-- /admin-content -->
@@ -2382,14 +2436,148 @@
       studioTransactionsModal  = new bootstrap.Modal(document.getElementById('studioTransactionsModal'));
 
       let _eventsLoaded = false;
+      let _loginsLoaded = false;
       window.showAdminSection = function(section) {
-        ['users','events'].forEach(s => {
+        ['users','events','logins'].forEach(s => {
           document.getElementById(s + 'Pane').classList.toggle('d-none', s !== section);
           const nav = document.getElementById('nav-' + s);
           if (nav) nav.classList.toggle('active', s === section);
         });
         if (section === 'events' && !_eventsLoaded) { _eventsLoaded = true; loadEvents(); }
+        if (section === 'logins' && !_loginsLoaded) { _loginsLoaded = true; loadLoginLogs(); }
       };
+
+      // ── Login Logs ──────────────────────────────────────────────────────────
+      let _loginLogs = [];      // full dataset from server
+      let _loginLogsTotal = 0;  // server-side total count
+      const LOGIN_PAGE = 200;   // rows per fetch
+
+      function parseUA(ua) {
+        if (!ua) return '—';
+        // Browser detection (order matters — more specific first)
+        let browser = 'Unknown';
+        if (/Edg\//.test(ua))                        browser = 'Edge';
+        else if (/OPR\/|Opera/.test(ua))             browser = 'Opera';
+        else if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) browser = 'Chrome';
+        else if (/Firefox\//.test(ua))               browser = 'Firefox';
+        else if (/Safari\//.test(ua) && !/Chrome/.test(ua))   browser = 'Safari';
+        else if (/MSIE|Trident/.test(ua))            browser = 'IE';
+
+        // OS detection
+        let os = 'Unknown OS';
+        if (/iPhone|iPad|iPod/.test(ua))             os = /iPad/.test(ua) ? 'iPadOS' : 'iOS';
+        else if (/Android/.test(ua))                 os = 'Android';
+        else if (/Windows/.test(ua))                 os = 'Windows';
+        else if (/Macintosh|Mac OS X/.test(ua))      os = 'macOS';
+        else if (/Linux/.test(ua))                   os = 'Linux';
+        else if (/CrOS/.test(ua))                    os = 'ChromeOS';
+
+        return `${browser} on ${os}`;
+      }
+
+      function relativeTime(isoStr) {
+        if (!isoStr) return '—';
+        const diff = Date.now() - new Date(isoStr).getTime();
+        const s = Math.floor(diff / 1000);
+        if (s < 60)    return 'just now';
+        if (s < 3600)  return `${Math.floor(s / 60)}m ago`;
+        if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+        if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
+        return new Date(isoStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+
+      function absoluteTime(isoStr) {
+        if (!isoStr) return '';
+        return new Date(isoStr).toLocaleString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric',
+          hour: 'numeric', minute: '2-digit', hour12: true
+        });
+      }
+
+      function renderLoginLogs() {
+        const search = (document.getElementById('loginSearch')?.value || '').toLowerCase();
+        const filter = document.getElementById('loginFilter')?.value || 'all';
+
+        let rows = _loginLogs.filter(l => {
+          if (filter === 'admins'     && !l.is_admin)    return false;
+          if (filter === 'unverified' && l.email_verified) return false;
+          if (search) {
+            const hay = [l.email, l.first_name, l.last_name, l.ip_address, l.user_agent].join(' ').toLowerCase();
+            if (!hay.includes(search)) return false;
+          }
+          return true;
+        });
+
+        const wrap   = document.getElementById('loginsTableWrap');
+        const emptyEl = document.getElementById('loginsEmpty');
+        const body   = document.getElementById('loginsBody');
+
+        if (!rows.length) { wrap.classList.add('d-none'); emptyEl.classList.remove('d-none'); return; }
+        emptyEl.classList.add('d-none'); wrap.classList.remove('d-none');
+
+        body.innerHTML = rows.map(l => {
+          const name = [l.first_name, l.last_name].filter(Boolean).join(' ') || '—';
+          const adminBadge = l.is_admin ? ' <span style="background:rgba(227,252,2,.15);color:#E3FC02;border:1px solid #E3FC02;font-size:.65rem;font-weight:700;padding:.05rem .35rem;border-radius:20px;letter-spacing:.04em;">ADMIN</span>' : '';
+          const verifiedIcon = l.email_verified
+            ? '<span title="Verified" style="color:#22c55e;font-size:.8rem;">&#10003;</span>'
+            : '<span title="Unverified" style="color:#f87171;font-size:.8rem;">&#9888;</span>';
+          const device = parseUA(l.user_agent);
+          const uaTitle = l.user_agent ? ` title="${l.user_agent.replace(/"/g,'&quot;')}"` : '';
+          return `<tr style="border-top:1px solid #1e1e1e;">
+            <td style="padding:.6rem 1rem;">
+              <div style="font-weight:600;color:#f0f0f0;">${esc(name)}${adminBadge}</div>
+              <div style="color:#666;font-size:.77rem;">${verifiedIcon} ${esc(l.email)}</div>
+            </td>
+            <td style="padding:.6rem .75rem;white-space:nowrap;">
+              <div style="color:#ccc;">${relativeTime(l.logged_in_at)}</div>
+              <div style="color:#555;font-size:.76rem;">${absoluteTime(l.logged_in_at)}</div>
+            </td>
+            <td style="padding:.6rem .75rem;color:#aaa;font-family:monospace;font-size:.82rem;">${esc(l.ip_address || '—')}</td>
+            <td style="padding:.6rem 1rem;color:#aaa;font-size:.82rem;"${uaTitle}>${esc(device)}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      async function loadLoginLogs(offsetArg = 0) {
+        const token = localStorage.getItem('token');
+        const loadingEl = document.getElementById('loginsLoading');
+        const errorEl   = document.getElementById('loginsError');
+        const summaryEl = document.getElementById('loginsSummary');
+        const moreEl    = document.getElementById('loginsLoadMore');
+
+        loadingEl.classList.remove('d-none');
+        errorEl.classList.add('d-none');
+
+        try {
+          const res  = await fetch(`${API}/admin/login-logs?limit=${LOGIN_PAGE}&offset=${offsetArg}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json();
+
+          if (offsetArg === 0) _loginLogs = data.logs;
+          else _loginLogs = _loginLogs.concat(data.logs);
+          _loginLogsTotal = data.total;
+
+          summaryEl.textContent = `${_loginLogsTotal.toLocaleString()} total login${_loginLogsTotal !== 1 ? 's' : ''} recorded`;
+          summaryEl.classList.remove('d-none');
+
+          // Show "load more" if there are more rows on the server
+          if (_loginLogs.length < _loginLogsTotal) moreEl.classList.remove('d-none');
+          else moreEl.classList.add('d-none');
+
+          renderLoginLogs();
+        } catch (e) {
+          errorEl.textContent = 'Failed to load login logs.';
+          errorEl.classList.remove('d-none');
+        } finally {
+          loadingEl.classList.add('d-none');
+        }
+      }
+
+      function loadMoreLoginLogs() {
+        loadLoginLogs(_loginLogs.length);
+      }
 
       // ── Payments ────────────────────────────────────────────────────────────
 
