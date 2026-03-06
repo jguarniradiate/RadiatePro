@@ -780,6 +780,35 @@ def delete_observer(observer_id: int, authorization: Optional[str] = Header(None
     obs = db.query(models.Observer).filter(models.Observer.id == observer_id, models.Observer.user_id == user.id).first()
     if not obs:
         raise HTTPException(status_code=404, detail="Observer not found.")
+
+    # Block deletion if observer is in a finalized upcoming event registration
+    upcoming_finalized = (
+        db.query(models.EventRegistrationObserver)
+        .join(models.EventRegistration,
+              models.EventRegistrationObserver.registration_id == models.EventRegistration.id)
+        .join(models.Event,
+              models.EventRegistration.event_id == models.Event.id)
+        .filter(
+            models.EventRegistrationObserver.observer_id == observer_id,
+            models.EventRegistration.is_finalized.is_(True),
+            models.Event.event_date >= datetime.now(timezone.utc),
+        )
+        .first()
+    )
+    if upcoming_finalized:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'"{obs.name}" cannot be removed — they are registered '
+                f"for an upcoming event. Contact the event organizer if changes are needed."
+            ),
+        )
+
+    # Remove observer from any registration rows (past events, non-finalized) before deleting
+    db.query(models.EventRegistrationObserver).filter(
+        models.EventRegistrationObserver.observer_id == observer_id
+    ).delete()
+
     db.delete(obs)
     db.commit()
     return {"message": "Observer deleted."}
@@ -2349,6 +2378,33 @@ def admin_delete_student(
     ).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found.")
+
+    # Block deletion if student is in a finalized upcoming event registration
+    upcoming_finalized_s = (
+        db.query(models.EventRegistrationStudent)
+        .join(models.EventRegistration,
+              models.EventRegistrationStudent.registration_id == models.EventRegistration.id)
+        .join(models.Event,
+              models.EventRegistration.event_id == models.Event.id)
+        .filter(
+            models.EventRegistrationStudent.student_id == student_id,
+            models.EventRegistration.is_finalized.is_(True),
+            models.Event.event_date >= datetime.now(timezone.utc),
+        )
+        .first()
+    )
+    if upcoming_finalized_s:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'"{student.name}" cannot be removed — they are registered '
+                f"for an upcoming event."
+            ),
+        )
+
+    db.query(models.EventRegistrationStudent).filter(
+        models.EventRegistrationStudent.student_id == student_id
+    ).delete()
     db.delete(student)
     db.commit()
     return {"message": "Student deleted."}
@@ -2402,6 +2458,33 @@ def admin_delete_observer(user_id: int, observer_id: int, authorization: Optiona
     obs = db.query(models.Observer).filter(models.Observer.id == observer_id, models.Observer.user_id == user_id).first()
     if not obs:
         raise HTTPException(status_code=404, detail="Observer not found.")
+
+    # Block deletion if observer is in a finalized upcoming event registration
+    upcoming_finalized = (
+        db.query(models.EventRegistrationObserver)
+        .join(models.EventRegistration,
+              models.EventRegistrationObserver.registration_id == models.EventRegistration.id)
+        .join(models.Event,
+              models.EventRegistration.event_id == models.Event.id)
+        .filter(
+            models.EventRegistrationObserver.observer_id == observer_id,
+            models.EventRegistration.is_finalized.is_(True),
+            models.Event.event_date >= datetime.now(timezone.utc),
+        )
+        .first()
+    )
+    if upcoming_finalized:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'"{obs.name}" cannot be removed — they are registered '
+                f"for an upcoming event."
+            ),
+        )
+
+    db.query(models.EventRegistrationObserver).filter(
+        models.EventRegistrationObserver.observer_id == observer_id
+    ).delete()
     db.delete(obs)
     db.commit()
     return {"message": "Observer deleted."}
