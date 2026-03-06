@@ -356,6 +356,12 @@
             <label class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
             <input type="text" class="form-control" id="aoName" placeholder="Observer's full name">
           </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Linked Dancer <span class="text-muted fw-normal" style="font-size:.8rem;">(optional)</span></label>
+            <select class="form-select" id="aoLinkedStudent">
+              <option value="">— None —</option>
+            </select>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -836,11 +842,13 @@
             </tbody>
           </table>` : `<p class="text-muted small mb-0">No students yet.</p>`;
 
+        // Cache students for this user so the observer modal can populate the dropdown
+        _adminUserStudents[userId] = students;
         const stuMap = Object.fromEntries(students.map(s => [s.id, s.name]));
 
         const obsSection = observers.length ? `
           <table class="table table-sm mb-0" style="--bs-table-bg:transparent;--bs-table-color:#ccc;--bs-table-border-color:#2a2a2a;font-size:.85rem;">
-            <thead><tr style="color:#888;"><th>Name</th><th>Linked Student</th><th></th></tr></thead>
+            <thead><tr style="color:#888;"><th>Name</th><th>Linked Dancer</th><th></th></tr></thead>
             <tbody id="admin-observers-${userId}">
               ${observers.map(o => {
                 const linkedName = o.linked_student_id && stuMap[o.linked_student_id]
@@ -852,7 +860,7 @@
                   <td>${linkedName}</td>
                   <td class="text-nowrap">
                     <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
-                      onclick="openAdminEditObserver(${userId},${o.id},'${esc(o.name)}')">Edit</button>
+                      onclick="openAdminEditObserver(${userId},${o.id},'${esc(o.name)}',${o.linked_student_id||'null'})">Edit</button>
                     <button class="btn btn-sm btn-outline-danger py-0 px-2"
                       onclick="adminDeleteObserver(${userId},${o.id},'${esc(o.name)}')">Remove</button>
                   </td>
@@ -991,6 +999,16 @@
 
     // ── Admin Observer CRUD (user expansion panel) ───────────────────────────
     let adminObserverModal;
+    const _adminUserStudents = {}; // userId → students[] cache for observer modal
+
+    function _populateObserverStudentSelect(linkedStudentId) {
+      // Re-render the linked dancer select from the cached student list
+      const sel = document.getElementById('aoLinkedStudent');
+      const userId = document.getElementById('aoUserId').value;
+      const students = _adminUserStudents[userId] || [];
+      sel.innerHTML = '<option value="">— None —</option>' +
+        students.map(s => `<option value="${s.id}" ${s.id == linkedStudentId ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
+    }
 
     function openAdminAddObserver(userId, userName) {
       if (!adminObserverModal) adminObserverModal = new bootstrap.Modal(document.getElementById('adminObserverModal'));
@@ -999,26 +1017,29 @@
       document.getElementById('aoName').value       = '';
       document.getElementById('adminObserverModalTitle').textContent = `Add Observer — ${userName}`;
       document.getElementById('adminObserverAlert').classList.add('d-none');
+      _populateObserverStudentSelect(null);
       adminObserverModal.show();
     }
 
-    function openAdminEditObserver(userId, observerId, name) {
+    function openAdminEditObserver(userId, observerId, name, linkedStudentId) {
       if (!adminObserverModal) adminObserverModal = new bootstrap.Modal(document.getElementById('adminObserverModal'));
       document.getElementById('aoUserId').value     = userId;
       document.getElementById('aoObserverId').value = observerId;
       document.getElementById('aoName').value       = name;
       document.getElementById('adminObserverModalTitle').textContent = 'Edit Observer';
       document.getElementById('adminObserverAlert').classList.add('d-none');
+      _populateObserverStudentSelect(linkedStudentId);
       adminObserverModal.show();
     }
 
     async function saveAdminObserver() {
-      const token      = localStorage.getItem('token');
-      const userId     = document.getElementById('aoUserId').value;
-      const observerId = document.getElementById('aoObserverId').value;
-      const name       = document.getElementById('aoName').value.trim();
-      const alertEl    = document.getElementById('adminObserverAlert');
-      const saveBtn    = document.getElementById('adminObserverSaveBtn');
+      const token           = localStorage.getItem('token');
+      const userId          = document.getElementById('aoUserId').value;
+      const observerId      = document.getElementById('aoObserverId').value;
+      const name            = document.getElementById('aoName').value.trim();
+      const linkedStudentId = document.getElementById('aoLinkedStudent').value || null;
+      const alertEl         = document.getElementById('adminObserverAlert');
+      const saveBtn         = document.getElementById('adminObserverSaveBtn');
       if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
       alertEl.classList.add('d-none');
       saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
@@ -1030,33 +1051,41 @@
         const res = await fetch(url, {
           method,
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, linked_student_id: linkedStudentId ? parseInt(linkedStudentId) : null }),
         });
         let data = {}; try { data = await res.json(); } catch {}
         if (res.ok) {
           adminObserverModal.hide();
+          // Resolve linked student name for inline update
+          const stuMap = Object.fromEntries((_adminUserStudents[userId] || []).map(s => [s.id, s.name]));
+          const linkedName = data.linked_student_id && stuMap[data.linked_student_id]
+            ? `<span style="color:#a78bfa;">&#128100; ${esc(stuMap[data.linked_student_id])}</span>`
+            : `<span style="color:#444;">—</span>`;
           const tbody = document.getElementById(`admin-observers-${userId}`);
           if (tbody) {
             if (observerId) {
-              // Update existing row
+              // Update existing row in-place
               const row = document.getElementById(`aobr-${observerId}`);
-              if (row) row.cells[0].textContent = data.name;
+              if (row) {
+                row.cells[0].textContent = data.name;
+                row.cells[1].innerHTML   = linkedName;
+              }
             } else {
               // Append new row
               const tr = document.createElement('tr');
               tr.id = `aobr-${data.id}`;
               tr.innerHTML = `
                 <td>${esc(data.name)}</td>
+                <td>${linkedName}</td>
                 <td class="text-nowrap">
                   <button class="btn btn-sm btn-outline-secondary py-0 px-2 me-1"
-                    onclick="openAdminEditObserver(${userId},${data.id},'${esc(data.name)}')">Edit</button>
+                    onclick="openAdminEditObserver(${userId},${data.id},'${esc(data.name)}',${data.linked_student_id||'null'})">Edit</button>
                   <button class="btn btn-sm btn-outline-danger py-0 px-2"
                     onclick="adminDeleteObserver(${userId},${data.id},'${esc(data.name)}')">Remove</button>
                 </td>`;
               tbody.appendChild(tr);
             }
           } else {
-            // Section wasn't rendered yet — force a reload of the expanded row
             toggleStudents(userId, '', ''); toggleStudents(userId, '', '');
           }
         } else { alertEl.textContent = data.detail || `Error ${res.status}`; alertEl.classList.remove('d-none'); }
