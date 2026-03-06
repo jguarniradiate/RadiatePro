@@ -107,10 +107,11 @@ class EventRegistrationStudent(Base):
 
 class Observer(Base):
     __tablename__ = "observers"
-    id         = Column(Integer, primary_key=True, index=True)
-    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
-    name       = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    id                = Column(Integer, primary_key=True, index=True)
+    user_id           = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name              = Column(String, nullable=False)
+    linked_student_id = Column(Integer, ForeignKey("students.id", ondelete="SET NULL"), nullable=True)
+    created_at        = Column(DateTime(timezone=True), server_default=func.now())
     user         = relationship("User", back_populates="observers")
     registrations = relationship("EventRegistrationObserver", back_populates="observer", cascade="all, delete-orphan")
 

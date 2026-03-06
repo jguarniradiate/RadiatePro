@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Events — Radiate Portal</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body { background-color: #0a0a0a; color: #f0f0f0; margin: 0; font-family: system-ui, sans-serif; }
@@ -171,19 +172,25 @@
 
     <div class="sidebar-nav">
       <a class="nav-item" href="dashboard.html">
-        <span class="nav-icon">&#127968;</span> Home
+        <span class="nav-icon"><i class="bi bi-house-fill"></i></span> Home
       </a>
       <a class="nav-item" href="dashboard.html#profile">
-        <span class="nav-icon">&#128100;</span> My Profile
+        <span class="nav-icon"><i class="bi bi-person-square"></i></span> My Profile
       </a>
       <a class="nav-item" href="dashboard.html#students">
-        <span class="nav-icon">&#127891;</span> My Students
+        <span class="nav-icon"><i class="bi bi-people-fill"></i></span> My Dancers
+      </a>
+      <a class="nav-item" href="dashboard.html#observers">
+        <span class="nav-icon"><i class="bi bi-eye-fill"></i></span> My Observers
       </a>
       <a class="nav-item active" href="events.html">
-        <span class="nav-icon">&#128197;</span> Events
+        <span class="nav-icon"><i class="bi bi-calendar-event-fill"></i></span> Events
+      </a>
+      <a class="nav-item" href="dashboard.html#transactions">
+        <span class="nav-icon"><i class="bi bi-receipt-cutoff"></i></span> Transactions
       </a>
       <a class="nav-item" href="admin.html" id="adminLink" style="display:none;">
-        <span class="nav-icon">&#9881;</span> Admin Portal
+        <span class="nav-icon"><i class="bi bi-shield-lock-fill"></i></span> Admin Portal
       </a>
     </div>
 
@@ -219,8 +226,11 @@
   <div class="modal fade" id="regModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="regModalTitle">Register for Event</h5>
+        <div class="modal-header" style="flex-wrap:wrap;gap:.4rem;">
+          <div style="flex:1;min-width:0;">
+            <h5 class="modal-title" id="regModalTitle">Register for Event</h5>
+            <span id="regModalBadge" class="d-none" style="display:inline-block;font-size:.7rem;font-weight:700;padding:.2rem .55rem;border-radius:20px;margin-top:.25rem;letter-spacing:.03em;text-transform:uppercase;"></span>
+          </div>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body" style="padding-bottom:.5rem;">
@@ -300,6 +310,19 @@
             </p>
           </div>
         </div>
+        <!-- Cost summary (shown when event has pricing) -->
+        <div id="regCostSummary" class="d-none" style="padding:.75rem 1rem .25rem;border-top:1px solid #2a2a2a;">
+          <table style="width:100%;font-size:.82rem;border-collapse:collapse;" id="regCostTable">
+            <tbody id="regCostBody"></tbody>
+            <tfoot>
+              <tr style="border-top:1px solid #2a2a2a;">
+                <td colspan="2" style="padding-top:.4rem;color:#888;">Total</td>
+                <td style="padding-top:.4rem;text-align:right;font-size:1rem;font-weight:800;color:#E3FC02;" id="regCostTotal">$0.00</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
         <div class="modal-footer flex-column align-items-stretch gap-2" style="padding:.75rem 1rem;">
           <div class="d-flex gap-2 flex-wrap">
             <button class="btn btn-outline-danger btn-sm me-auto" id="unregBtn" onclick="unregisterFromEvent()" style="display:none;">
@@ -393,7 +416,8 @@
                       ${isFull && !reg ? 'disabled' : `onclick="openRegModal(eventsCache[${e.id}])"`}>
                       ${isFinalized ? '+ Add Dancers' : reg ? 'Edit Registration' : isFull ? '&#9940; Event Full' : 'Register'}
                     </button>
-                    ${(reg && !isFinalized && hasPricing) ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="finalize-btn-${e.id}" onclick="resumeCheckout(${e.id})">&#10003; Finalize Registration</button>` : ''}
+                    ${isFinalized ? `<button class="btn btn-sm btn-outline-secondary py-1 px-3" id="obs-btn-${e.id}" onclick="openRegModal(eventsCache[${e.id}], true)">+ Add Observers</button>` : ''}
+                    ${(reg && !isFinalized && hasPricing) ? `<button class="btn btn-sm btn-finalize py-1 px-3" id="finalize-btn-${e.id}" onclick="resumeCheckout(${e.id})">Complete Registration</button>` : ''}
                   </div>` : `<div class="text-muted small mt-1" style="font-size:.78rem;">This event has passed.</div>`}
                 </div>
               </div>`;
@@ -516,6 +540,67 @@
       return [...document.querySelectorAll('.obs-switch:checked')].map(i => parseInt(i.dataset.observerId));
     }
 
+    function updateCostSummary() {
+      const event = currentRegEvent;
+      const summaryDiv = document.getElementById('regCostSummary');
+      if (!event || !summaryDiv) return;
+
+      const hasPricing = !!(event.early_price || event.regular_price);
+      const hasObsPrice = !!(event.observer_price);
+      if (!hasPricing && !hasObsPrice) { summaryDiv.classList.add('d-none'); return; }
+
+      // Determine effective dancer price
+      const now = new Date();
+      let dancerPrice = 0;
+      if (event.early_price && event.early_price_deadline && new Date(event.early_price_deadline) > now) {
+        dancerPrice = parseFloat(event.early_price);
+      } else if (event.regular_price) {
+        dancerPrice = parseFloat(event.regular_price);
+      }
+      const obsPrice = event.observer_price ? parseFloat(event.observer_price) : 0;
+
+      // Locked IDs (already paid) don't count towards new total
+      const reg = myRegistrations[String(event.id)];
+      const isFinalized = reg && reg.is_finalized;
+      const lockedDancerIds = isFinalized ? (reg.student_ids  || []) : [];
+      const lockedObsIds    = isFinalized ? (reg.observer_ids || []) : [];
+      const newDancers = getSelectedStudentIds().filter(id => !lockedDancerIds.includes(id));
+      const newObs     = getSelectedObserverIds().filter(id => !lockedObsIds.includes(id));
+
+      const dancerTotal = newDancers.length * dancerPrice;
+      const obsTotal    = newObs.length * obsPrice;
+      const grandTotal  = dancerTotal + obsTotal;
+
+      const tbody = document.getElementById('regCostBody');
+      let rows = '';
+      if (newDancers.length > 0 && hasPricing) {
+        rows += `<tr>
+          <td style="padding:.3rem 0;color:#888;">Dancers</td>
+          <td style="padding:.3rem 0;color:#555;text-align:center;">${newDancers.length} × $${dancerPrice.toFixed(2)}</td>
+          <td style="padding:.3rem 0;text-align:right;font-weight:600;color:#f0f0f0;">$${dancerTotal.toFixed(2)}</td>
+        </tr>`;
+      }
+      if (newObs.length > 0 && hasObsPrice) {
+        rows += `<tr>
+          <td style="padding:.3rem 0;color:#888;">Observers</td>
+          <td style="padding:.3rem 0;color:#555;text-align:center;">${newObs.length} × $${obsPrice.toFixed(2)}</td>
+          <td style="padding:.3rem 0;text-align:right;font-weight:600;color:#a78bfa;">$${obsTotal.toFixed(2)}</td>
+        </tr>`;
+      }
+      tbody.innerHTML = rows;
+
+      const totalEl = document.getElementById('regCostTotal');
+      if (grandTotal === 0) {
+        totalEl.textContent = rows ? 'Free' : '';
+        totalEl.style.color = '#22c55e';
+      } else {
+        totalEl.textContent = `$${grandTotal.toFixed(2)}`;
+        totalEl.style.color = '#E3FC02';
+      }
+
+      summaryDiv.classList.toggle('d-none', !rows && grandTotal === 0);
+    }
+
     function renderObserverTable(selectedIds, lockedIds = [], paymentStatus = null) {
       const tbody   = document.getElementById('observerTableBody');
       const wrap    = document.getElementById('observerTableWrap');
@@ -613,7 +698,7 @@
 
     // ── Registration modal ─────────────────────────────────────────────────────
 
-    function openRegModal(event) {
+    function openRegModal(event, observersOnly = false) {
       currentRegEvent = event;
       document.getElementById('regEventId').value = event.id;
       document.getElementById('regAlert').classList.add('d-none');
@@ -627,12 +712,20 @@
       const lockedObserverIds = isFinalized ? [...observerIds] : [];
       const paymentStatus    = reg ? reg.payment_status : null;
 
-      document.getElementById('regModalTitle').textContent = isFinalized
-        ? `Add Dancers — ${event.title}`
-        : event.title;
+      // Title is always just the event name; use badge to show action state
+      document.getElementById('regModalTitle').textContent = event.title;
+      const regBadge = document.getElementById('regModalBadge');
+      if (isFinalized) {
+        regBadge.textContent = observersOnly ? 'Add Observers' : 'Update Registration';
+        regBadge.style.cssText = 'display:inline-block;background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.4);font-size:.7rem;font-weight:700;padding:.2rem .55rem;border-radius:20px;margin-top:.25rem;letter-spacing:.03em;text-transform:uppercase;';
+        regBadge.classList.remove('d-none');
+      } else {
+        regBadge.classList.add('d-none');
+      }
 
       renderStudentTable(selectedIds, lockedIds, paymentStatus);
       renderObserverTable(observerIds, lockedObserverIds, paymentStatus);
+      updateCostSummary();
 
       const unregBtn  = document.getElementById('unregBtn');
       const saveBtn   = document.getElementById('regSaveBtn');
@@ -640,19 +733,23 @@
       unregBtn.style.display = (reg && !isFinalized) ? 'inline-block' : 'none';
 
       const hasPricing = !!(event.early_price || event.regular_price);
+      const hasObserverPricing = !!(event.observer_price);
 
       if (isFinalized) {
-        // Adding dancers to a locked registration — payment always required for priced events
+        // Adding dancers/observers to a locked registration
+        const needsPayment = hasPricing || hasObserverPricing;
         saveBtn.className = 'btn btn-finalize';
-        saveBtn.textContent = hasPricing ? 'Add Dancers & Pay' : 'Add Dancers';
+        saveBtn.textContent = needsPayment ? 'Complete Registration' : (observersOnly ? 'Add Observers' : 'Add Dancers');
         saveBtn.onclick = () => checkoutRegistration(true);
-        draftBtn.style.display = 'none';
+        draftBtn.style.display = 'inline-block';
+        draftBtn.onclick = () => saveDancersDraft();
       } else if (hasPricing) {
         // Paid event — must go through Stripe to register
         saveBtn.className = 'btn btn-finalize';
-        saveBtn.textContent = '✓ Finalize Registration';
+        saveBtn.textContent = 'Complete Registration';
         saveBtn.onclick = () => checkoutRegistration(false);
-        draftBtn.style.display = 'none';
+        draftBtn.style.display = 'inline-block';
+        draftBtn.onclick = () => saveDraftRegistration();
       } else {
         // Free event — single Register/Update button, auto-finalizes
         saveBtn.className = 'btn btn-finalize';
@@ -773,20 +870,23 @@
     }
 
     async function saveDancersDraft() {
-      // Save new dancers to a finalized registration without requiring immediate payment
+      // Save new dancers/observers to a finalized registration without requiring immediate payment
       const token    = localStorage.getItem('token');
       const eventId  = parseInt(document.getElementById('regEventId').value);
       const alertEl  = document.getElementById('regAlert');
       const draftBtn = document.getElementById('regSaveDraftBtn');
-      const studentIds = getSelectedStudentIds();
+      const studentIds  = getSelectedStudentIds();
+      const observerIds = getSelectedObserverIds();
 
       // Only submit IDs that aren't already locked (i.e. newly selected ones)
       const reg = myRegistrations[String(eventId)];
-      const lockedIds = reg ? reg.student_ids : [];
-      const newIds = studentIds.filter(id => !lockedIds.includes(id));
+      const lockedIds    = reg ? (reg.student_ids  || []) : [];
+      const lockedObsIds = reg ? (reg.observer_ids || []) : [];
+      const newIds    = studentIds.filter(id  => !lockedIds.includes(id));
+      const newObsIds = observerIds.filter(id => !lockedObsIds.includes(id));
 
-      if (!newIds.length) {
-        alertEl.textContent = 'Please select at least one new dancer to add.';
+      if (!newIds.length && !newObsIds.length) {
+        alertEl.textContent = 'Please select at least one new dancer or observer to add.';
         alertEl.classList.remove('d-none');
         return;
       }
@@ -799,7 +899,7 @@
         const res = await fetch(`${API}/events/${eventId}/register/add-students-save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ student_ids: newIds }),
+          body: JSON.stringify({ student_ids: newIds, observer_ids: newObsIds }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -807,10 +907,11 @@
           alertEl.classList.remove('d-none');
           return;
         }
-        // Merge new student IDs into the local registration state
+        // Merge new IDs into the local registration state
         myRegistrations[String(eventId)] = {
           ...myRegistrations[String(eventId)],
-          student_ids: [...lockedIds, ...newIds],
+          student_ids:  [...lockedIds,    ...newIds],
+          observer_ids: [...lockedObsIds, ...newObsIds],
         };
         updateEventCard(eventId, true);
         regModal.hide();
@@ -855,6 +956,15 @@
           badge.className = 'badge-finalized';
           badge.innerHTML = '&#10003; Finalized';
           parent.insertBefore(badge, btn);
+          // Add "Add Observers" button if not already there
+          if (!parent.querySelector(`#obs-btn-${eventId}`)) {
+            const obsBtn = document.createElement('button');
+            obsBtn.id = `obs-btn-${eventId}`;
+            obsBtn.className = 'btn btn-sm btn-outline-secondary py-1 px-3';
+            obsBtn.textContent = '+ Add Observers';
+            obsBtn.onclick = () => openRegModal(eventsCache[eventId], true);
+            parent.appendChild(obsBtn);
+          }
         } else if (isRegistered) {
           btn.className = 'btn btn-sm btn-outline-secondary py-1 px-3';
           btn.textContent = 'Edit Registration';
@@ -875,7 +985,7 @@
             const finBtn = document.createElement('button');
             finBtn.id = `finalize-btn-${eventId}`;
             finBtn.className = 'btn btn-sm btn-finalize py-1 px-3';
-            finBtn.innerHTML = '&#10003; Finalize Registration';
+            finBtn.innerHTML = 'Complete Registration';
             finBtn.onclick = () => resumeCheckout(eventId);
             parent.appendChild(finBtn);
           }
@@ -892,6 +1002,13 @@
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html'; return; }
       regModal = new bootstrap.Modal(document.getElementById('regModal'));
+
+      // Live cost summary update when student/observer checkboxes change
+      document.getElementById('regModal').addEventListener('change', function(e) {
+        if (e.target.classList.contains('stu-switch') || e.target.classList.contains('obs-switch')) {
+          updateCostSummary();
+        }
+      });
 
       // Handle return from Stripe Checkout
       const urlParams  = new URLSearchParams(window.location.search);

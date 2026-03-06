@@ -92,12 +92,14 @@ class StudentOut(BaseModel):
 class ObserverOut(BaseModel):
     id: int
     name: str
+    linked_student_id: int | None = None
     created_at: datetime | None = None
     model_config = {"from_attributes": True}
 
 
 class ObserverCreate(BaseModel):
     name: str
+    linked_student_id: int | None = None
 
 
 # ── Event schemas ─────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — Radiate Portal</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body { background-color: #0a0a0a; color: #f0f0f0; margin: 0; font-family: system-ui, sans-serif; }
@@ -134,22 +135,22 @@
 
     <div class="sidebar-nav">
       <button class="nav-item active" id="nav-home"     onclick="showSection('home')">
-        <span class="nav-icon">&#127968;</span> Home
+        <span class="nav-icon"><i class="bi bi-house-fill"></i></span> Home
       </button>
       <button class="nav-item" id="nav-profile"  onclick="showSection('profile')">
-        <span class="nav-icon">&#128100;</span> My Profile
+        <span class="nav-icon"><i class="bi bi-person-square"></i></span> My Profile
       </button>
       <button class="nav-item" id="nav-students" onclick="showSection('students')">
-        <span class="nav-icon">&#127891;</span> My Dancers
+        <span class="nav-icon"><i class="bi bi-people-fill"></i></span> My Dancers
       </button>
       <button class="nav-item" id="nav-observers" onclick="showSection('observers')">
-        <span class="nav-icon">&#128065;</span> My Observers
+        <span class="nav-icon"><i class="bi bi-eye-fill"></i></span> My Observers
       </button>
       <a class="nav-item" href="events.html">
-        <span class="nav-icon">&#128197;</span> Events
+        <span class="nav-icon"><i class="bi bi-calendar-event-fill"></i></span> Events
       </a>
       <button class="nav-item" id="nav-transactions" onclick="showSection('transactions')">
-        <span class="nav-icon">&#128179;</span> Transactions
+        <span class="nav-icon"><i class="bi bi-receipt-cutoff"></i></span> Transactions
       </button>
     </div>
 
@@ -203,13 +204,38 @@
             <div style="flex:1;height:1px;background:#2a2a2a;"></div>
           </div>
 
-          <!-- Step 2: Register for Events -->
+          <!-- Step 2: Add Observers -->
           <div class="card-dark p-3 d-flex align-items-center gap-3" id="homeStep2" style="border-left:3px solid #2a2a2a;">
             <div id="homeStep2Num" style="width:36px;height:36px;border-radius:50%;background:#2a2a2a;color:#666;font-weight:800;
                         font-size:1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
             <div style="flex:1;min-width:0;">
-              <div class="fw-semibold mb-1" id="homeStep2Title" style="color:#888;">Register for Events</div>
-              <div style="color:#888;font-size:.82rem;" id="homeStep2Sub">Add dancers first, then browse and register for upcoming events.</div>
+              <div class="fw-semibold mb-1" id="homeStep2Title" style="color:#888;">Add Observers</div>
+              <div style="color:#888;font-size:.82rem;" id="homeStep2Sub">You currently have <strong style="color:#a78bfa;" id="homeObserverCount">—</strong> observer(s) added.</div>
+            </div>
+            <div class="d-flex gap-2 flex-shrink-0">
+              <button class="btn btn-sm flex-shrink-0" id="homeAddObserverBtn"
+                style="background:#1a1a1a;border:1px solid #333;color:#666;pointer-events:none;"
+                onclick="showSection('observers');openAddObserver();">+ Add</button>
+              <button class="btn btn-sm flex-shrink-0" id="homeManageObserverBtn"
+                style="background:#1a1a1a;border:1px solid #333;color:#666;pointer-events:none;"
+                onclick="showSection('observers')">Manage</button>
+            </div>
+          </div>
+
+          <!-- Connector arrow -->
+          <div style="display:flex;align-items:center;gap:.5rem;padding:0 1rem;">
+            <div style="flex:1;height:1px;background:#2a2a2a;"></div>
+            <span style="color:#555;font-size:.8rem;">&#9660;</span>
+            <div style="flex:1;height:1px;background:#2a2a2a;"></div>
+          </div>
+
+          <!-- Step 3: Register for Events -->
+          <div class="card-dark p-3 d-flex align-items-center gap-3" id="homeStep3" style="border-left:3px solid #2a2a2a;">
+            <div id="homeStep3Num" style="width:36px;height:36px;border-radius:50%;background:#2a2a2a;color:#666;font-weight:800;
+                        font-size:1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
+            <div style="flex:1;min-width:0;">
+              <div class="fw-semibold mb-1" id="homeStep3Title" style="color:#888;">Register for Events</div>
+              <div style="color:#888;font-size:.82rem;" id="homeStep3Sub">Add dancers first, then browse and register for upcoming events.</div>
             </div>
             <a href="events.html" class="btn btn-sm flex-shrink-0" id="homeEventsBtn"
                style="background:#1a1a1a;border:1px solid #333;color:#666;pointer-events:none;">View Events</a>
@@ -326,7 +352,7 @@
         <div class="table-responsive d-none" id="observersTableWrap">
           <table class="table tbl align-middle mb-0">
             <thead>
-              <tr><th>Name</th><th></th></tr>
+              <tr><th>Name</th><th>Linked Dancer</th><th></th></tr>
             </thead>
             <tbody id="observersBody"></tbody>
           </table>
@@ -423,6 +449,13 @@
             <label class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
             <input type="text" class="form-control" id="observerName" placeholder="Observer's full name">
           </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Linked Dancer <span class="text-muted fw-normal" style="font-size:.82rem;">(optional)</span></label>
+            <select class="form-select" id="observerLinkedStudent">
+              <option value="">— None —</option>
+            </select>
+            <div class="form-text" style="color:#666;font-size:.78rem;">Associate this observer with one of your registered dancers.</div>
+          </div>
         </div>
         <div class="modal-footer" style="border-top-color:#2a2a2a;">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -444,6 +477,7 @@
     let observerModal;
     let observersLoaded = false;
     let myObservers = [];
+    let myStudents  = [];
 
     // ── Sidebar & mobile ──────────────────────────────────────────────────────
 
@@ -489,23 +523,42 @@
         currentUser = await userRes.json();
         const students = studRes.ok  ? await studRes.json() : [];
         const events   = evtRes.ok   ? await evtRes.json()  : [];
+        myStudents = students;
 
         renderUser(currentUser);
 
         // Home stats
         const now = new Date();
         document.getElementById('homeStudentCount').textContent = students.length;
-        // Unlock step 2 when students exist
+        // Unlock step 2 (observers) and step 3 (events) when dancers exist
         if (students.length > 0) {
-          const upcomingCount = events.filter(e => new Date(e.event_date) >= now).length;
-          document.getElementById('homeStep2').style.borderLeftColor = '#E3FC02';
-          document.getElementById('homeStep2Num').style.background = '#E3FC02';
+          // Step 2: Add Observers — unlock with purple accent
+          document.getElementById('homeStep2').style.borderLeftColor = '#a78bfa';
+          document.getElementById('homeStep2Num').style.background = '#a78bfa';
           document.getElementById('homeStep2Num').style.color = '#000';
           document.getElementById('homeStep2Title').style.color = '#f0f0f0';
-          document.getElementById('homeStep2Sub').textContent = `${upcomingCount} upcoming event${upcomingCount !== 1 ? 's' : ''} available. Browse and register your dancers.`;
+          const addObsBtn = document.getElementById('homeAddObserverBtn');
+          addObsBtn.style.background = ''; addObsBtn.style.border = '';
+          addObsBtn.style.color = ''; addObsBtn.style.pointerEvents = '';
+          addObsBtn.classList.add('btn-outline-secondary');
+          const manageObsBtn = document.getElementById('homeManageObserverBtn');
+          manageObsBtn.style.background = ''; manageObsBtn.style.border = '';
+          manageObsBtn.style.color = ''; manageObsBtn.style.pointerEvents = '';
+          manageObsBtn.classList.add('btn-outline-secondary');
+          // Step 3: Register for Events
+          const upcomingCount = events.filter(e => new Date(e.event_date) >= now).length;
+          document.getElementById('homeStep3').style.borderLeftColor = '#E3FC02';
+          document.getElementById('homeStep3Num').style.background = '#E3FC02';
+          document.getElementById('homeStep3Num').style.color = '#000';
+          document.getElementById('homeStep3Title').style.color = '#f0f0f0';
+          document.getElementById('homeStep3Sub').textContent = `${upcomingCount} upcoming event${upcomingCount !== 1 ? 's' : ''} available. Browse and register your dancers.`;
           const btn = document.getElementById('homeEventsBtn');
           btn.style.background = ''; btn.style.border = ''; btn.style.color = '';
           btn.classList.add('btn-accent'); btn.style.pointerEvents = '';
+        }
+        // Observer count is populated after observers load
+        if (typeof myObservers !== 'undefined') {
+          document.getElementById('homeObserverCount').textContent = myObservers.length;
         }
 
         if (currentUser.is_admin) { window.location.href = 'admin.html'; return; }
@@ -631,6 +684,7 @@
       try {
         const res      = await fetch(`${API}/students`, { headers: { Authorization: `Bearer ${token}` } });
         const students = await res.json();
+        myStudents = students;
 
         document.getElementById('studentsLoading').classList.add('d-none');
 
@@ -820,6 +874,8 @@
         if (!res.ok) throw new Error();
         myObservers = await res.json();
         document.getElementById('observersLoading').classList.add('d-none');
+        const countEl = document.getElementById('homeObserverCount');
+        if (countEl) countEl.textContent = myObservers.length;
         if (myObservers.length === 0) {
           document.getElementById('observersEmpty').classList.remove('d-none');
         } else {
@@ -835,14 +891,24 @@
 
     function renderObserversTable() {
       const tbody = document.getElementById('observersBody');
-      tbody.innerHTML = myObservers.map(o => `
+      tbody.innerHTML = myObservers.map(o => {
+        const linked = o.linked_student_id ? myStudents.find(s => s.id === o.linked_student_id) : null;
+        return `
         <tr>
           <td class="fw-semibold">${esc(o.name)}</td>
+          <td style="color:#a78bfa;font-size:.82rem;">${linked ? esc(linked.name) : '<span class="text-muted">—</span>'}</td>
           <td class="text-end" style="white-space:nowrap;">
             <button class="btn btn-outline-secondary btn-sm me-1" onclick="openEditObserver(${o.id})">Edit</button>
             <button class="btn btn-outline-danger btn-sm" onclick="deleteObserver(${o.id}, '${esc(o.name)}')">Delete</button>
           </td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
+    }
+
+    function _populateObserverStudentDropdown(selectedId = null) {
+      const sel = document.getElementById('observerLinkedStudent');
+      sel.innerHTML = '<option value="">— None —</option>' +
+        myStudents.map(s => `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
     }
 
     function openAddObserver() {
@@ -850,6 +916,7 @@
       document.getElementById('observerId').value = '';
       document.getElementById('observerName').value = '';
       document.getElementById('observerAlert').classList.add('d-none');
+      _populateObserverStudentDropdown();
       observerModal.show();
     }
 
@@ -860,6 +927,7 @@
       document.getElementById('observerId').value = id;
       document.getElementById('observerName').value = o.name;
       document.getElementById('observerAlert').classList.add('d-none');
+      _populateObserverStudentDropdown(o.linked_student_id || null);
       observerModal.show();
     }
 
@@ -869,6 +937,8 @@
       const name    = document.getElementById('observerName').value.trim();
       const alertEl = document.getElementById('observerAlert');
       const saveBtn = document.getElementById('observerSaveBtn');
+      const linkedStudentRaw = document.getElementById('observerLinkedStudent').value;
+      const linked_student_id = linkedStudentRaw ? parseInt(linkedStudentRaw) : null;
 
       if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
       alertEl.classList.add('d-none');
@@ -882,7 +952,7 @@
         const res = await fetch(url, {
           method,
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, linked_student_id }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { alertEl.textContent = data.detail || `Error ${res.status}`; alertEl.classList.remove('d-none'); return; }
@@ -894,6 +964,8 @@
         renderObserversTable();
         document.getElementById('observersEmpty').classList.toggle('d-none', myObservers.length > 0);
         document.getElementById('observersTableWrap').classList.toggle('d-none', myObservers.length === 0);
+        const cntEl = document.getElementById('homeObserverCount');
+        if (cntEl) cntEl.textContent = myObservers.length;
         observerModal.hide();
       } catch {
         alertEl.textContent = 'Something went wrong. Please try again.';
@@ -922,6 +994,8 @@
         renderObserversTable();
         document.getElementById('observersEmpty').classList.toggle('d-none', myObservers.length > 0);
         document.getElementById('observersTableWrap').classList.toggle('d-none', myObservers.length === 0);
+        const cntEl2 = document.getElementById('homeObserverCount');
+        if (cntEl2) cntEl2.textContent = myObservers.length;
       } catch {
         errEl.textContent = 'Something went wrong. Please try again.';
         errEl.classList.remove('d-none');

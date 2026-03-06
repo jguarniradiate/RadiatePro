@@ -109,6 +109,7 @@ def run_migrations(eng):
             registration_id INTEGER NOT NULL REFERENCES event_registrations(id) ON DELETE CASCADE,
             observer_id INTEGER NOT NULL REFERENCES observers(id) ON DELETE CASCADE
         )""",
+        "ALTER TABLE observers ADD COLUMN IF NOT EXISTS linked_student_id INTEGER REFERENCES students(id) ON DELETE SET NULL",
     ]
     try:
         with eng.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
@@ -570,7 +571,7 @@ def list_observers(authorization: Optional[str] = Header(None), db: Session = De
 @app.post("/observers", response_model=schemas.ObserverOut, status_code=201)
 def create_observer(body: schemas.ObserverCreate, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
     user = get_current_user(authorization, db)
-    obs = models.Observer(user_id=user.id, name=body.name.strip())
+    obs = models.Observer(user_id=user.id, name=body.name.strip(), linked_student_id=body.linked_student_id)
     db.add(obs)
     db.commit()
     db.refresh(obs)
@@ -584,6 +585,7 @@ def update_observer(observer_id: int, body: schemas.ObserverCreate, authorizatio
     if not obs:
         raise HTTPException(status_code=404, detail="Observer not found.")
     obs.name = body.name.strip()
+    obs.linked_student_id = body.linked_student_id
     db.commit()
     db.refresh(obs)
     return obs
@@ -1612,3 +1614,59 @@ def admin_delete_observer(user_id: int, observer_id: int, authorization: Optiona
     db.delete(obs)
     db.commit()
     return {"message": "Observer deleted."}
+
+
+@app.post("/admin/events/{event_id}/registrations/{reg_id}/observers/{observer_id}", response_model=schemas.MessageOut)
+def admin_add_reg_observer(
+    event_id: int,
+    reg_id: int,
+    observer_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.id == reg_id,
+        models.EventRegistration.event_id == event_id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found.")
+    obs = db.query(models.Observer).filter(
+        models.Observer.id == observer_id,
+        models.Observer.user_id == reg.user_id,
+    ).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observer not found for this user.")
+    existing = db.query(models.EventRegistrationObserver).filter(
+        models.EventRegistrationObserver.registration_id == reg_id,
+        models.EventRegistrationObserver.observer_id == observer_id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Observer already in registration.")
+    db.add(models.EventRegistrationObserver(registration_id=reg_id, observer_id=observer_id))
+    db.commit()
+    return {"message": "Observer added to registration."}
+
+
+@app.delete("/admin/events/{event_id}/registrations/{reg_id}/observers/{observer_id}", response_model=schemas.MessageOut)
+def admin_remove_reg_observer(
+    event_id: int,
+    reg_id: int,
+    observer_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    ero = db.query(models.EventRegistrationObserver).filter(
+        models.EventRegistrationObserver.registration_id == reg_id,
+        models.EventRegistrationObserver.observer_id == observer_id,
+    ).first()
+    if not ero:
+        raise HTTPException(status_code=404, detail="Observer not in registration.")
+    db.delete(ero)
+    db.commit()
+    return {"message": "Observer removed from registration."}

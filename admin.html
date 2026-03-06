@@ -386,6 +386,59 @@
     </div>
   </div>
 
+  <!-- Add Observer to Registration Modal -->
+  <div class="modal fade" id="addRegObserverModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Add Observer to Registration</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-1" id="addRegObsForUser"></p>
+
+          <!-- Existing observers list -->
+          <p class="fw-semibold mb-2" style="font-size:.82rem;color:#a78bfa;">User's Observers</p>
+          <div id="addRegObsLoading" class="text-center py-2"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div></div>
+          <div id="addRegObsEmpty" class="text-muted small text-center d-none">All of this user's observers are already in the registration.</div>
+          <div id="addRegObsList" class="d-flex flex-wrap gap-2 mb-3"></div>
+
+          <!-- Divider -->
+          <hr style="border-color:#2a2a2a;margin:12px 0;">
+
+          <!-- Create new observer -->
+          <div>
+            <button class="btn btn-link p-0 text-decoration-none mb-2" style="color:#a78bfa;font-size:.85rem;font-weight:600;"
+              onclick="toggleNewObserverForm()">
+              <span id="newObserverToggleIcon">&#43;</span> Create New Observer &amp; Add
+            </button>
+            <div id="newObserverForm" class="d-none">
+              <div id="newObserverAlert" class="alert alert-danger d-none mb-2 py-2" style="font-size:.85rem;"></div>
+              <div class="mb-2">
+                <label class="form-label fw-semibold" style="font-size:.82rem;">Full Name <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-sm" id="newObserverName" placeholder="Observer's full name">
+              </div>
+              <div class="mb-2">
+                <label class="form-label fw-semibold" style="font-size:.82rem;">Linked Dancer <span class="text-muted fw-normal">(optional)</span></label>
+                <select class="form-select form-select-sm" id="newObserverLinkedStudent">
+                  <option value="">— None —</option>
+                </select>
+              </div>
+              <button class="btn btn-sm w-100 mt-1" id="createNewObserverBtn"
+                style="background:#a78bfa;color:#000;font-weight:700;"
+                onclick="createAndAddObserver()">
+                Create &amp; Add to Registration
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Event Modal -->
   <div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -941,8 +994,10 @@
 
       const observers = reg.observers || [];
       const obsBadges = observers.map(o =>
-        `<span class="stu-badge" style="background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid #6d5fa6;">
+        `<span class="stu-badge" id="robs-${reg.id}-${o.id}" style="background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid #6d5fa6;">
           &#128065; ${esc(o.name)}
+          <button class="stu-badge-remove" title="Remove observer" style="color:#9d7ee0;"
+            onclick="adminRemoveRegObserver(${eventId},${reg.id},${o.id},'${esc(o.name)}')">×</button>
         </span>`
       ).join('');
 
@@ -971,11 +1026,14 @@
               + Add Student
             </button>
           </div>
-          ${observers.length ? `
-          <div class="d-flex flex-wrap gap-1 align-items-center mt-2">
+          <div class="d-flex flex-wrap gap-1 align-items-center mt-2" id="reg-observers-${reg.id}">
             <span class="text-muted" style="font-size:.76rem;margin-right:.25rem;">Observers:</span>
-            ${obsBadges}
-          </div>` : ''}
+            ${observers.length ? obsBadges : '<span class="text-muted" style="font-size:.78rem;">None</span>'}
+            <button class="btn py-0 px-2" style="font-size:.74rem;border:1px dashed #6d5fa6;color:#a78bfa;border-radius:4px;"
+              onclick="openAddRegObserver(${eventId},${reg.id},${reg.user_id},'${esc(reg.user_name)}',[${observers.map(o=>o.id).join(',')}],[${reg.students.map(s=>s.id).join(',')}])">
+              + Add Observer
+            </button>
+          </div>
         </div>`;
     }
 
@@ -1006,6 +1064,145 @@
         if (res.ok) document.getElementById(`rst-${regId}-${studentId}`).remove();
         else alert('Failed to remove student.');
       } catch { alert('Something went wrong.'); }
+    }
+
+    async function adminRemoveRegObserver(eventId, regId, observerId, observerName) {
+      if (!confirm(`Remove "${observerName}" from this registration?`)) return;
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/observers/${observerId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) document.getElementById(`robs-${regId}-${observerId}`).remove();
+        else alert('Failed to remove observer.');
+      } catch { alert('Something went wrong.'); }
+    }
+
+    // ── Admin Add Observer to Registration ────────────────────────────────────
+    let _obsRegCtx = {};
+    let addRegObserverModal;
+
+    function openAddRegObserver(eventId, regId, userId, userName, existingObsIds, regStudentIds) {
+      _obsRegCtx = { eventId, regId, userId };
+      document.getElementById('addRegObsForUser').textContent = `For: ${userName}`;
+      document.getElementById('addRegObsLoading').classList.remove('d-none');
+      document.getElementById('addRegObsEmpty').classList.add('d-none');
+      document.getElementById('addRegObsList').innerHTML = '';
+      document.getElementById('newObserverForm').classList.add('d-none');
+      document.getElementById('newObserverToggleIcon').textContent = '+';
+      document.getElementById('newObserverName').value = '';
+      document.getElementById('newObserverAlert').classList.add('d-none');
+
+      // Populate linked student dropdown with students already in reg
+      const stuSel = document.getElementById('newObserverLinkedStudent');
+      stuSel.innerHTML = '<option value="">— None —</option>';
+      if (regStudentIds && regStudentIds.length) {
+        // Fetch user's students to get names
+        fetch(`${API}/admin/users/${userId}/students`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
+          .then(r => r.json()).then(studs => {
+            stuSel.innerHTML = '<option value="">— None —</option>' +
+              studs.filter(s => regStudentIds.includes(s.id))
+                   .map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+          }).catch(() => {});
+      }
+
+      if (!addRegObserverModal) addRegObserverModal = new bootstrap.Modal(document.getElementById('addRegObserverModal'));
+      addRegObserverModal.show();
+
+      // Load user's observers
+      fetch(`${API}/admin/users/${userId}/observers`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
+        .then(r => r.json()).then(observers => {
+          document.getElementById('addRegObsLoading').classList.add('d-none');
+          const available = observers.filter(o => !existingObsIds.includes(o.id));
+          if (!available.length) {
+            document.getElementById('addRegObsEmpty').classList.remove('d-none');
+            return;
+          }
+          const list = document.getElementById('addRegObsList');
+          list.innerHTML = '';
+          available.forEach(o => {
+            const btn = document.createElement('button');
+            btn.id = `aro-${o.id}`;
+            btn.className = 'btn btn-sm';
+            btn.style.cssText = 'background:rgba(167,139,250,.12);border:1px solid #6d5fa6;color:#a78bfa;font-size:.82rem;';
+            btn.textContent = o.name;
+            btn.onclick = () => adminAddRegObserver(o.id, o.name);
+            list.appendChild(btn);
+          });
+        }).catch(() => {
+          document.getElementById('addRegObsLoading').classList.add('d-none');
+          document.getElementById('addRegObsEmpty').textContent = 'Failed to load observers.';
+          document.getElementById('addRegObsEmpty').classList.remove('d-none');
+        });
+    }
+
+    async function adminAddRegObserver(observerId, observerName) {
+      const { eventId, regId } = _obsRegCtx;
+      const token = localStorage.getItem('token');
+      const btn = document.getElementById(`aro-${observerId}`);
+      if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>'; }
+      try {
+        const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/observers/${observerId}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+          if (btn) btn.remove();
+          const container = document.getElementById(`reg-observers-${regId}`);
+          if (container) {
+            container.querySelectorAll('span.text-muted').forEach(el => { if(el.textContent.trim()==='None') el.remove(); });
+            const addBtn = container.querySelector('button:last-child');
+            const badge = document.createElement('span');
+            badge.id = `robs-${regId}-${observerId}`;
+            badge.className = 'stu-badge';
+            badge.style.cssText = 'background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid #6d5fa6;';
+            badge.innerHTML = `&#128065; ${esc(observerName)} <button class="stu-badge-remove" style="color:#9d7ee0;" title="Remove observer" onclick="adminRemoveRegObserver(${eventId},${regId},${observerId},'${esc(observerName)}')">×</button>`;
+            container.insertBefore(badge, addBtn);
+          }
+          if (!document.getElementById('addRegObsList').children.length) addRegObserverModal.hide();
+        } else {
+          const d = await res.json().catch(()=>({}));
+          alert(d.detail || 'Failed to add observer.');
+          if (btn) { btn.disabled = false; btn.textContent = observerName; }
+        }
+      } catch {
+        alert('Something went wrong.');
+        if (btn) { btn.disabled = false; btn.textContent = observerName; }
+      }
+    }
+
+    function toggleNewObserverForm() {
+      const form = document.getElementById('newObserverForm');
+      const icon = document.getElementById('newObserverToggleIcon');
+      const hidden = form.classList.contains('d-none');
+      form.classList.toggle('d-none', !hidden);
+      icon.textContent = hidden ? '−' : '+';
+    }
+
+    async function createAndAddObserver() {
+      const { eventId, regId, userId } = _obsRegCtx;
+      const token = localStorage.getItem('token');
+      const name = document.getElementById('newObserverName').value.trim();
+      const linkedRaw = document.getElementById('newObserverLinkedStudent').value;
+      const linked_student_id = linkedRaw ? parseInt(linkedRaw) : null;
+      const alertEl = document.getElementById('newObserverAlert');
+      const btn = document.getElementById('createNewObserverBtn');
+      if (!name) { alertEl.textContent = 'Name is required.'; alertEl.classList.remove('d-none'); return; }
+      alertEl.classList.add('d-none');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Creating…';
+      try {
+        // 1. Create observer for the user
+        const createRes = await fetch(`${API}/admin/users/${userId}/observers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ name, linked_student_id }),
+        });
+        if (!createRes.ok) { const d = await createRes.json().catch(()=>({})); alertEl.textContent = d.detail || 'Failed to create observer.'; alertEl.classList.remove('d-none'); return; }
+        const obs = await createRes.json();
+        // 2. Add to registration
+        await adminAddRegObserver(obs.id, obs.name);
+        document.getElementById('newObserverName').value = '';
+        document.getElementById('newObserverLinkedStudent').value = '';
+      } catch {
+        alertEl.textContent = 'Something went wrong.'; alertEl.classList.remove('d-none');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Create & Add to Registration';
+      }
     }
 
     let adminCreateRegModal;
