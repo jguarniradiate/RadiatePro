@@ -345,6 +345,11 @@
           </table>
         </div>
 
+        <!-- Pending-changes notice -->
+        <div id="regPendingChanges" class="d-none" style="padding:.3rem 1rem .1rem;border-top:1px solid #2a2a2a;">
+          <span style="font-size:.78rem;color:#f59e0b;">&#9679; Unsaved changes — click Save or Complete Registration to apply.</span>
+        </div>
+
         <div class="modal-footer flex-column align-items-stretch gap-2" style="padding:.75rem 1rem;">
           <!-- Step 1 footer: selection buttons -->
           <div class="d-flex gap-2 flex-wrap" id="regFooterStep1">
@@ -377,6 +382,9 @@
     let currentRegEvent = null; // full event object for the open modal
     let stripeInstance = null;
     let stripeCheckoutInstance = null;
+    // Track the selection state when the modal was opened so we can show a "pending changes" notice
+    let _regInitialStuIds = [];
+    let _regInitialObsIds = [];
 
     function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
 
@@ -578,6 +586,20 @@
       return [...document.querySelectorAll('.obs-switch:checked')].map(i => parseInt(i.dataset.observerId));
     }
 
+    function checkPendingChanges() {
+      updateCostSummary();
+      const stuIds = getSelectedStudentIds();
+      const obsIds = getSelectedObserverIds();
+      const changed =
+        stuIds.length !== _regInitialStuIds.length ||
+        obsIds.length !== _regInitialObsIds.length ||
+        stuIds.some(id => !_regInitialStuIds.includes(id)) ||
+        _regInitialStuIds.some(id => !stuIds.includes(id)) ||
+        obsIds.some(id => !_regInitialObsIds.includes(id)) ||
+        _regInitialObsIds.some(id => !obsIds.includes(id));
+      document.getElementById('regPendingChanges').classList.toggle('d-none', !changed);
+    }
+
     function updateCostSummary() {
       const event = currentRegEvent;
       const summaryDiv = document.getElementById('regCostSummary');
@@ -687,7 +709,7 @@
                   id="osw-${o.id}" data-observer-id="${o.id}"
                   ${selectedIds.includes(o.id) || locked ? 'checked' : ''}
                   ${locked ? 'disabled' : ''}
-                  onclick="event.stopPropagation()">
+                  onclick="event.stopPropagation()" onchange="checkPendingChanges()">
               </div>
             </td>
             <td class="fw-semibold" style="color:${locked ? '#888' : '#f0f0f0'};">
@@ -740,7 +762,7 @@
                 id="sw-${s.id}" data-student-id="${s.id}"
                 ${selectedIds.includes(s.id) || locked ? 'checked' : ''}
                 ${locked ? 'disabled' : ''}
-                onclick="event.stopPropagation()">
+                onclick="event.stopPropagation()" onchange="checkPendingChanges()">
             </div>
           </td>
           <td class="fw-semibold" style="color:${locked ? '#888' : '#f0f0f0'};">
@@ -759,6 +781,7 @@
       currentRegEvent = event;
       document.getElementById('regEventId').value = event.id;
       document.getElementById('regAlert').classList.add('d-none');
+      document.getElementById('regPendingChanges').classList.add('d-none');
       document.getElementById('quickAddStudentForm').classList.add('d-none');
 
       const reg              = myRegistrations[String(event.id)];
@@ -773,6 +796,10 @@
       const pendingRaw         = reg ? (reg.pending_student_ids || []) : [];
       const pendingStudentIds  = pendingRaw.filter(x => !String(x).startsWith('o')).map(x => parseInt(x));
       const pendingObserverIds = pendingRaw.filter(x => String(x).startsWith('o')).map(x => parseInt(String(x).slice(1)));
+
+      // Capture initial selection state for the "pending changes" indicator
+      _regInitialStuIds = [...selectedIds];
+      _regInitialObsIds = [...observerIds];
 
       // Title is always just the event name; use badge to show action state
       document.getElementById('regModalTitle').textContent = event.title;
@@ -956,6 +983,7 @@
           // Switch modal to Step 2 (payment UI)
           document.getElementById('regSelectionStep').classList.add('d-none');
           document.getElementById('regCostSummary').classList.add('d-none');
+          document.getElementById('regPendingChanges').classList.add('d-none');
           document.getElementById('regPaymentStep').classList.remove('d-none');
           document.getElementById('regFooterStep1').classList.add('d-none');
           document.getElementById('regFooterStep2').classList.remove('d-none');
@@ -1058,7 +1086,14 @@
       const newIds    = studentIds.filter(id  => !lockedIds.includes(id));
       const newObsIds = observerIds.filter(id => !lockedObsIds.includes(id));
 
-      if (!newIds.length && !newObsIds.length) {
+      // Detect pending students/observers the user has deselected (to remove them)
+      const pendingRaw    = reg ? (reg.pending_student_ids || []) : [];
+      const pendingStuIds = pendingRaw.filter(x => !String(x).startsWith('o')).map(x => parseInt(x));
+      const pendingObsIds = pendingRaw.filter(x =>  String(x).startsWith('o')).map(x => parseInt(String(x).slice(1)));
+      const removeStuIds  = pendingStuIds.filter(id => !studentIds.includes(id));
+      const removeObsIds  = pendingObsIds.filter(id => !observerIds.includes(id));
+
+      if (!newIds.length && !newObsIds.length && !removeStuIds.length && !removeObsIds.length) {
         alertEl.textContent = 'Please select at least one new dancer or observer to add.';
         alertEl.classList.remove('d-none');
         return;
@@ -1088,7 +1123,7 @@
         const res = await fetch(`${API}/events/${eventId}/register/add-students-save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ student_ids: newIds, observer_ids: newObsIds }),
+          body: JSON.stringify({ student_ids: newIds, observer_ids: newObsIds, remove_student_ids: removeStuIds, remove_observer_ids: removeObsIds }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -1267,12 +1302,7 @@
         document.getElementById('regFooterStep1').classList.remove('d-none');
       });
 
-      // Live cost summary update when student/observer checkboxes change
-      document.getElementById('regModal').addEventListener('change', function(e) {
-        if (e.target.classList.contains('stu-switch') || e.target.classList.contains('obs-switch')) {
-          updateCostSummary();
-        }
-      });
+      // checkPendingChanges() already calls updateCostSummary() — no separate listener needed
 
       // Handle return from Stripe Checkout
       const urlParams  = new URLSearchParams(window.location.search);

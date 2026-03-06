@@ -462,6 +462,7 @@ def _record_transaction(
 
 
 def _build_reg_out(reg: models.EventRegistration) -> schemas.EventRegistrationOut:
+    pending_raw = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
     return schemas.EventRegistrationOut(
         id=reg.id,
         event_id=reg.event_id,
@@ -472,6 +473,7 @@ def _build_reg_out(reg: models.EventRegistration) -> schemas.EventRegistrationOu
         is_finalized=reg.is_finalized,
         payment_status=reg.payment_status,
         amount_paid=reg.amount_paid,
+        pending_student_ids=pending_raw,
     )
 
 
@@ -1270,13 +1272,34 @@ def add_students_save(
             db.add(models.EventRegistrationObserver(registration_id=reg.id, observer_id=oid))
             new_obs_ids_added.append(oid)
 
+    pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+
+    # Remove any pending students/observers the user explicitly deselected.
+    # Security: only items currently tracked as pending may be removed this way —
+    # paid/locked students cannot be removed by users.
+    for sid in body.remove_student_ids:
+        sid_str = str(sid)
+        if sid_str in pending:
+            db.query(models.EventRegistrationStudent).filter(
+                models.EventRegistrationStudent.registration_id == reg.id,
+                models.EventRegistrationStudent.student_id == sid,
+            ).delete()
+            pending = [x for x in pending if x != sid_str]
+    for oid in body.remove_observer_ids:
+        oid_str = f"o{oid}"
+        if oid_str in pending:
+            db.query(models.EventRegistrationObserver).filter(
+                models.EventRegistrationObserver.registration_id == reg.id,
+                models.EventRegistrationObserver.observer_id == oid,
+            ).delete()
+            pending = [x for x in pending if x != oid_str]
+
     # If the registration is already finalized and the event has pricing,
     # mark the newly added dancers/observers as pending (unpaid) so the user
     # sees an "⚡ Unpaid" badge and a "Pay Outstanding Balance" prompt.
     if reg.is_finalized:
         price_per_student, _ = _effective_price(event)
         observer_price = D(str(event.observer_price)) if event.observer_price else D("0")
-        pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
         if price_per_student > D("0"):
             for sid in new_student_ids_added:
                 sid_str = str(sid)
@@ -1287,8 +1310,8 @@ def add_students_save(
                 oid_str = f"o{oid}"
                 if oid_str not in pending:
                     pending.append(oid_str)
-        reg.pending_student_ids = ",".join(pending) if pending else None
 
+    reg.pending_student_ids = ",".join(pending) if pending else None
     db.commit()
     db.refresh(reg)
     return _build_reg_out(reg)

@@ -154,6 +154,9 @@ class EventOut(BaseModel):
 class EventRegistrationCreate(BaseModel):
     student_ids: list[int] = []
     observer_ids: list[int] = []
+    # Optional: pending student/observer IDs to remove (deselected by user in finalized reg)
+    remove_student_ids: list[int] = []
+    remove_observer_ids: list[int] = []
 
 
 class EventRegistrationOut(BaseModel):
@@ -166,6 +169,8 @@ class EventRegistrationOut(BaseModel):
     is_finalized: bool = False
     payment_status: str | None = None
     amount_paid: Decimal | None = None
+    # Unpaid tokens: plain int string for dancers, "o{id}" for observers
+    pending_student_ids: list[str] = []
 
     model_config = {"from_attributes": True}
 
