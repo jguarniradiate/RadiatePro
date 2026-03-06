@@ -586,10 +586,13 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script>
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
     let editModal, adminStudentModal, adminAddStudentModal, addRegStudentModal, eventModal, studioTransactionsModal;
     let _regCtx = {}; // { eventId, regId }
+    const _regData = {}; // keyed by reg.id — cached for PDF report generation
 
     function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
 
@@ -1034,23 +1037,40 @@
           return;
         }
 
-        // Payment summary for the header
-        const stripePaidRegs   = regs.filter(r => r.payment_status === 'paid');
-        const complimentaryRegs = regs.filter(r => r.payment_status === 'admin-paid');
-        const freeRegs         = regs.filter(r => r.payment_status === 'free');
+        // Payment summary for the header — count individual attendees, not registrations
         // Treat any registration with a paid payment_status as finalized even if the
         // is_finalized flag was not back-filled (defensive guard for legacy data).
-        const pendingRegs      = regs.filter(r => !r.is_finalized && !['paid', 'free', 'admin-paid'].includes(r.payment_status));
-        const balanceDueRegs   = regs.filter(r => (r.pending_student_ids || []).length > 0);
-        const totalRevenue     = stripePaidRegs.reduce((s, r) => s + (r.amount_paid || 0), 0);
-        const totalPending     = balanceDueRegs.reduce((s, r) => s + (r.pending_amount || 0), 0);
+        const pendingRegs    = regs.filter(r => !r.is_finalized && !['paid', 'free', 'admin-paid'].includes(r.payment_status));
+        const freeRegs       = regs.filter(r => r.payment_status === 'free');
+        const balanceDueRegs = regs.filter(r => (r.pending_student_ids || []).length > 0);
+        const totalRevenue   = regs.filter(r => r.payment_status === 'paid').reduce((s, r) => s + (r.amount_paid || 0), 0);
+        const totalPending   = balanceDueRegs.reduce((s, r) => s + (r.pending_amount || 0), 0);
+
+        // Count individual paid / complimentary attendees (students + observers)
+        let paidAttendeeCount = 0, compAttendeeCount = 0, balanceDueCount = 0;
+        for (const reg of regs) {
+          const ps = new Set(reg.pending_student_ids || []);
+          for (const s of (reg.students || [])) {
+            if (ps.has(String(s.id)))              balanceDueCount++;
+            else if (reg.payment_status === 'paid') paidAttendeeCount++;
+            else if (reg.payment_status === 'admin-paid') compAttendeeCount++;
+          }
+          for (const o of (reg.observers || [])) {
+            if (ps.has(`o${o.id}`))                balanceDueCount++;
+            else if (reg.payment_status === 'paid') paidAttendeeCount++;
+            else if (reg.payment_status === 'admin-paid') compAttendeeCount++;
+          }
+        }
+
+        // Cache reg data so the PDF report button can access it by ID
+        for (const reg of regs) _regData[reg.id] = reg;
 
         const pills = [];
-        if (stripePaidRegs.length)    pills.push(`<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${stripePaidRegs.length} Paid &nbsp;·&nbsp; $${totalRevenue.toFixed(2)}</span>`);
-        if (complimentaryRegs.length) pills.push(`<span style="background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid #a78bfa;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${complimentaryRegs.length} Complimentary</span>`);
-        if (freeRegs.length)          pills.push(`<span style="background:rgba(34,197,94,.08);color:#4ade80;border:1px solid #4ade80;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">${freeRegs.length} Free</span>`);
-        if (pendingRegs.length)       pills.push(`<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9203; ${pendingRegs.length} Pending</span>`);
-        if (balanceDueRegs.length)    pills.push(`<span style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid #f87171;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9889; ${balanceDueRegs.length} Balance Due &nbsp;·&nbsp; $${totalPending.toFixed(2)}</span>`);
+        if (paidAttendeeCount > 0)  pills.push(`<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${paidAttendeeCount} Paid &nbsp;·&nbsp; $${totalRevenue.toFixed(2)}</span>`);
+        if (compAttendeeCount > 0)  pills.push(`<span style="background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid #a78bfa;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${compAttendeeCount} Complimentary</span>`);
+        if (freeRegs.length)        pills.push(`<span style="background:rgba(34,197,94,.08);color:#4ade80;border:1px solid #4ade80;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">${freeRegs.length} Free</span>`);
+        if (pendingRegs.length)     pills.push(`<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9203; ${pendingRegs.length} Pending</span>`);
+        if (balanceDueCount > 0)    pills.push(`<span style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid #f87171;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9889; ${balanceDueCount} Balance Due &nbsp;·&nbsp; $${totalPending.toFixed(2)}</span>`);
         const paymentSummary = pills.length ? `<div class="d-flex flex-wrap gap-1 mt-1">${pills.join('')}</div>` : '';
 
         content.innerHTML = `
@@ -1152,6 +1172,8 @@
             <div class="d-flex gap-1 ms-2 flex-shrink-0">
               <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.78rem;"
                 onclick="openStudioTransactions(${reg.user_id},'${esc(reg.user_name)}','${esc(reg.studio_name || '')}')">Transactions</button>
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.78rem;"
+                onclick="downloadRegReport(${reg.id})">⬇ Report</button>
               <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.78rem;"
                 onclick="adminRemoveRegistration(${eventId},${reg.id},'${esc(reg.user_name)}')">Remove All</button>
             </div>
@@ -1173,6 +1195,120 @@
             </button>
           </div>
         </div>`;
+    }
+
+    function downloadRegReport(regId) {
+      const reg = _regData[regId];
+      if (!reg) { alert('Report data not loaded yet — please refresh the panel.'); return; }
+      if (!window.jspdf) { alert('PDF library not loaded yet, please try again in a moment.'); return; }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const pendingSet   = new Set(reg.pending_student_ids || []);
+      const pricePerStu  = reg.price_per_student || 0;
+      const obsvPrice    = reg.observer_price    || 0;
+
+      // Determine label + amount for each attendee slot
+      function attendeeLabel(isPending, unitPrice) {
+        if (isPending) return ['Balance Due', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '—'];
+        if (reg.payment_status === 'admin-paid') return ['Complimentary', '$0.00'];
+        if (reg.payment_status === 'paid')  return ['Paid', unitPrice > 0 ? `$${unitPrice.toFixed(2)}` : '$0.00'];
+        if (reg.payment_status === 'free')  return ['Free', '$0.00'];
+        if (reg.is_finalized) return ['Complimentary', '$0.00'];
+        return ['Pending', '—'];
+      }
+
+      // ── Header bar ─────────────────────────────────────────
+      doc.setFillColor(20, 20, 20);
+      doc.rect(0, 0, 220, 28, 'F');
+      doc.setTextColor(227, 252, 2);
+      doc.setFontSize(17);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Registration Report', 14, 18);
+      doc.setTextColor(160, 160, 160);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Radiate Pro', 170, 18);
+
+      // ── Event / registrant info ─────────────────────────────
+      let y = 36;
+      doc.setFontSize(9);
+      const eventDateStr = reg.event_date
+        ? new Date(reg.event_date).toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'})
+        : '—';
+      const regDateStr = reg.finalized_at
+        ? new Date(reg.finalized_at).toLocaleDateString('en-US', {year:'numeric', month:'short', day:'numeric'})
+        : '—';
+
+      const infoRows = [
+        ['Event',  reg.event_title   || '—',  'Date',              eventDateStr],
+        ['Registrant', reg.user_name || '—',  'Studio',            reg.studio_name || 'Independent'],
+        ['Location', reg.event_location || '—', 'Registration Date', regDateStr],
+      ];
+      for (const [lA, vA, lB, vB] of infoRows) {
+        doc.setTextColor(130, 130, 130); doc.setFont('helvetica', 'normal');
+        doc.text(lA, 14, y); doc.text(lB, 110, y); y += 5;
+        doc.setTextColor(30, 30, 30);   doc.setFont('helvetica', 'bold');
+        doc.text(String(vA), 14, y); doc.text(String(vB), 110, y); y += 7;
+      }
+      y += 2;
+
+      const tblHead = { fillColor: [30, 30, 30], textColor: [240, 240, 240], fontStyle: 'bold', fontSize: 9 };
+      const tblStyles = { fontSize: 9, cellPadding: 3, textColor: [30, 30, 30] };
+      const tblAlt = { fillColor: [245, 245, 245] };
+      const tblCols = { 1: { cellWidth: 38 }, 2: { halign: 'right', cellWidth: 26 } };
+
+      // ── Students ───────────────────────────────────────────
+      if (reg.students.length) {
+        doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
+        doc.text('Students', 14, y); y += 2;
+        doc.autoTable({
+          startY: y,
+          head: [['Name', 'Status', 'Amount']],
+          body: reg.students.map(s => {
+            const [status, amount] = attendeeLabel(pendingSet.has(String(s.id)), pricePerStu);
+            return [s.name, status, amount];
+          }),
+          headStyles: { ...tblHead, textColor: [34, 197, 94] },
+          styles: tblStyles, alternateRowStyles: tblAlt, columnStyles: tblCols,
+          margin: { left: 14, right: 14 },
+        });
+        y = doc.lastAutoTable.finalY + 10;
+      }
+
+      // ── Observers ──────────────────────────────────────────
+      const observers = reg.observers || [];
+      if (observers.length) {
+        doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30);
+        doc.text('Observers', 14, y); y += 2;
+        doc.autoTable({
+          startY: y,
+          head: [['Name', 'Status', 'Amount']],
+          body: observers.map(o => {
+            const [status, amount] = attendeeLabel(pendingSet.has(`o${o.id}`), obsvPrice);
+            return [o.name, status, amount];
+          }),
+          headStyles: { ...tblHead, textColor: [167, 139, 250] },
+          styles: tblStyles, alternateRowStyles: tblAlt, columnStyles: tblCols,
+          margin: { left: 14, right: 14 },
+        });
+        y = doc.lastAutoTable.finalY + 10;
+      }
+
+      // ── Summary line ───────────────────────────────────────
+      doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+      if (reg.amount_paid) {
+        doc.setTextColor(34, 197, 94);
+        doc.text(`Total Paid: $${Number(reg.amount_paid).toFixed(2)}`, 14, y); y += 7;
+      }
+      if (reg.pending_amount > 0) {
+        doc.setTextColor(239, 68, 68);
+        doc.text(`Balance Due: $${Number(reg.pending_amount).toFixed(2)}`, 14, y);
+      }
+
+      const safeName  = (reg.user_name   || 'registration').replace(/[^a-z0-9]/gi, '_');
+      const safeEvent = (reg.event_title || 'event').replace(/[^a-z0-9]/gi, '_');
+      doc.save(`${safeName}_${safeEvent}_report.pdf`);
     }
 
     async function openStudioTransactions(userId, userName, studioName) {

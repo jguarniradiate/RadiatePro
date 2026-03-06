@@ -1766,6 +1766,12 @@ def admin_list_registrations(
             "finalized_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
             "pending_student_ids": pending_raw,
             "pending_amount": pending_amount,
+            # Event-level fields needed for the registration report PDF
+            "event_title": event.title if event else None,
+            "event_date": event.event_date.isoformat() if event and event.event_date else None,
+            "event_location": event.location if event else None,
+            "price_per_student": float(price_per_student),
+            "observer_price": float(observer_price),
         })
     return result
 
