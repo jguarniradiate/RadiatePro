@@ -2715,7 +2715,8 @@ def admin_apply_credit(
 def admin_login_logs(
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    since_hours: int = Query(24, ge=0),   # 0 = all time; default = last 24 h
+    from_date: Optional[str] = Query(None),   # ISO date string e.g. "2026-01-01"
+    to_date:   Optional[str] = Query(None),   # ISO date string e.g. "2026-03-06"
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
@@ -2724,15 +2725,30 @@ def admin_login_logs(
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
 
-    # Build optional time-window filter
-    time_clause = "WHERE l.logged_in_at >= :since" if since_hours > 0 else ""
-    since_dt = (
-        datetime.now(timezone.utc) - timedelta(hours=since_hours)
-        if since_hours > 0 else None
-    )
+    # Build optional date-range filter
+    conditions = []
     base_params: dict = {}
-    if since_dt:
-        base_params["since"] = since_dt
+    if from_date:
+        try:
+            from_dt = datetime.fromisoformat(from_date).replace(
+                hour=0, minute=0, second=0, microsecond=0,
+                tzinfo=timezone.utc
+            )
+            conditions.append("l.logged_in_at >= :from_dt")
+            base_params["from_dt"] = from_dt
+        except ValueError:
+            pass
+    if to_date:
+        try:
+            to_dt = datetime.fromisoformat(to_date).replace(
+                hour=23, minute=59, second=59, microsecond=999999,
+                tzinfo=timezone.utc
+            )
+            conditions.append("l.logged_in_at <= :to_dt")
+            base_params["to_dt"] = to_dt
+        except ValueError:
+            pass
+    time_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     rows = db.execute(
         text(
