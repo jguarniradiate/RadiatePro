@@ -224,17 +224,18 @@
     </div>
 
     <div class="content">
-      <!-- Workflow step context bar -->
-      <div class="d-flex align-items-center gap-2 mb-3 px-3 py-2" style="background:#111;border:1px solid #2a2a2a;border-left:3px solid #E3FC02;border-radius:9px;">
-        <a href="dashboard.html"
-          style="color:#999;font-size:.8rem;text-decoration:none;display:flex;align-items:center;gap:.35rem;white-space:nowrap;transition:color .15s;"
-          onmouseover="this.style.color='#E3FC02'" onmouseout="this.style.color='#999'">
-          &#8592; Getting Started
-        </a>
-        <span style="color:#2a2a2a;font-size:1.1rem;line-height:1;user-select:none;">&#124;</span>
-        <div style="width:22px;height:22px;border-radius:50%;background:#E3FC02;color:#000;font-weight:800;font-size:.7rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
-        <span style="color:#E3FC02;font-size:.8rem;font-weight:700;">Register for Events</span>
-        <span style="color:#555;font-size:.75rem;">— Step 3 of 3</span>
+      <!-- Workflow step guidance banner -->
+      <div class="mb-4 p-4" style="background:rgba(227,252,2,.06);border:1px solid rgba(227,252,2,.25);border-radius:12px;">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+          <div class="d-flex align-items-center gap-3">
+            <div style="width:44px;height:44px;border-radius:50%;background:#E3FC02;color:#000;font-weight:900;font-size:1.2rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 16px rgba(227,252,2,.3);">3</div>
+            <div>
+              <div style="color:#E3FC02;font-weight:700;font-size:.92rem;letter-spacing:.01em;">Step 3 of 3 — Register for Events</div>
+              <div style="color:#888;font-size:.78rem;margin-top:.2rem;">Browse upcoming events below and register your dancers.</div>
+            </div>
+          </div>
+          <a href="dashboard.html" class="btn btn-sm btn-outline-secondary flex-shrink-0">&#8592; Back to Workflow</a>
+        </div>
       </div>
       <!-- Tab toggle: All Events / My Registrations -->
       <div class="d-flex align-items-center gap-2 mb-4">
