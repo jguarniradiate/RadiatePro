@@ -863,24 +863,46 @@
           saveBtn.disabled = false;
           saveBtn.textContent = origBtnText;
 
+          // Check Stripe.js is available (may be blocked by ad-blockers / Safari settings)
+          if (typeof Stripe === 'undefined') {
+            alertEl.textContent = 'Stripe could not be loaded. Please disable any ad-blockers or try a different browser.';
+            alertEl.classList.remove('d-none');
+            return;
+          }
+
           // Initialise Stripe (lazy — only fetched once)
           if (!stripeInstance) {
-            const cfgRes = await fetch(`${API}/stripe/config`);
-            const cfg    = await cfgRes.json();
-            stripeInstance = Stripe(cfg.publishable_key);
+            try {
+              const cfgRes = await fetch(`${API}/stripe/config`);
+              const cfg    = await cfgRes.json();
+              if (!cfg.publishable_key) throw new Error('Stripe publishable key not configured.');
+              stripeInstance = Stripe(cfg.publishable_key);
+            } catch (stripeInitErr) {
+              console.error('[Stripe init error]', stripeInitErr);
+              alertEl.textContent = 'Payment system unavailable. Please contact the organizer.';
+              alertEl.classList.remove('d-none');
+              return;
+            }
           }
 
           // Destroy any previous embedded checkout
           if (stripeCheckoutInstance) {
-            await stripeCheckoutInstance.destroy();
+            try { await stripeCheckoutInstance.destroy(); } catch {}
             stripeCheckoutInstance = null;
           }
           document.getElementById('stripe-checkout-container').innerHTML = '';
 
-          stripeCheckoutInstance = await stripeInstance.initEmbeddedCheckout({
-            clientSecret: data.client_secret,
-          });
-          stripeCheckoutInstance.mount('#stripe-checkout-container');
+          try {
+            stripeCheckoutInstance = await stripeInstance.initEmbeddedCheckout({
+              clientSecret: data.client_secret,
+            });
+            stripeCheckoutInstance.mount('#stripe-checkout-container');
+          } catch (embedErr) {
+            console.error('[Stripe embedded checkout error]', embedErr);
+            alertEl.textContent = `Payment form error: ${embedErr.message || embedErr}. Please try again or contact the organizer.`;
+            alertEl.classList.remove('d-none');
+            return;
+          }
 
           // Switch modal to Step 2 (payment UI)
           document.getElementById('regSelectionStep').classList.add('d-none');
@@ -898,8 +920,9 @@
           saveBtn.disabled = false;
           saveBtn.textContent = origBtnText;
         }
-      } catch {
-        alertEl.textContent = 'Something went wrong. Please try again.';
+      } catch (err) {
+        console.error('[checkoutRegistration error]', err);
+        alertEl.textContent = `Something went wrong: ${err.message || err}. Please try again.`;
         alertEl.classList.remove('d-none');
         saveBtn.disabled = false;
         saveBtn.textContent = origBtnText;

@@ -914,7 +914,7 @@
               <div style="background:#2a2a2a;border-radius:4px;height:6px;overflow:hidden;">
                 <div id="cap-bar-${e.id}" style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width .3s;"></div>
               </div>
-            </div>` : (cnt > 0 ? `<div id="cap-count-${e.id}" style="font-size:.75rem;color:#aaa;margin-top:.4rem;">${cnt} student${cnt!==1?'s':'' registered (no cap)</div>` : '');
+            </div>` : (cnt > 0 ? `<div id="cap-count-${e.id}" style="font-size:.75rem;color:#aaa;margin-top:.4rem;">${cnt} student${cnt!==1?'s':''} registered (no cap)</div>` : '');
           const revHtml = e.total_revenue != null ? `<span style="font-size:.75rem;color:#6fcf97;font-weight:600;margin-left:.75rem;">&#36;${parseFloat(e.total_revenue).toFixed(2)} revenue</span>` : '';
           return `
           <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;margin-bottom:.5rem;" id="erow-${e.id}" data-max-students="${e.max_students || 0}">
