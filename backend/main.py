@@ -1166,9 +1166,12 @@ def verify_payment(
             add_amount = D(str(session.amount_total)) / 100
             reg.amount_paid = (reg.amount_paid or D("0")) + add_amount
             reg.finalized_at = datetime.now(timezone.utc)
+            # If pending items were also being paid in this session, clear them
+            if meta.get("is_pending_payment") == "true":
+                reg.pending_student_ids = None
             # Record immutable transaction line for this add-students payment
-            _sc = len(new_sids_added)
-            _oc = len(new_oids_added)
+            _sc = int(meta.get("student_count", "0") or "0") or len(new_sids_added)
+            _oc = int(meta.get("observer_count", "0") or "0") or len(new_oids_added)
             _desc = f"Added {_sc} dancer(s)" if _sc else ""
             if _oc:
                 _desc += f"{', ' if _desc else 'Added '}{_oc} observer(s)"
@@ -2055,6 +2058,70 @@ def admin_delete_observer(user_id: int, observer_id: int, authorization: Optiona
     db.delete(obs)
     db.commit()
     return {"message": "Observer deleted."}
+
+
+@app.get("/admin/users/{user_id}/transactions")
+def admin_user_transactions(
+    user_id: int,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """Return all transactions for a specific user (for admin studio transactions view)."""
+    current = get_current_user(authorization, db)
+    if not current.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    result = []
+
+    # Primary: Transaction rows for this user
+    txs = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.user_id == user_id)
+        .order_by(models.Transaction.created_at.desc())
+        .all()
+    )
+    reg_ids_with_txs = {tx.registration_id for tx in txs}
+    for tx in txs:
+        ev = tx.event
+        result.append({
+            "transaction_id": tx.id,
+            "event_title": ev.title if ev else "—",
+            "event_date": ev.event_date.isoformat() if ev and ev.event_date else None,
+            "description": tx.description,
+            "amount": float(tx.amount),
+            "payment_status": tx.payment_status,
+            "student_count": tx.student_count or 0,
+            "observer_count": tx.observer_count or 0,
+            "created_at": tx.created_at.isoformat() if tx.created_at else None,
+        })
+
+    # Fallback: old registrations with no Transaction rows
+    old_regs = (
+        db.query(models.EventRegistration)
+        .filter(
+            models.EventRegistration.user_id == user_id,
+            models.EventRegistration.payment_status.in_(["paid", "free", "admin-paid"]),
+            ~models.EventRegistration.id.in_(reg_ids_with_txs) if reg_ids_with_txs else True,
+        )
+        .order_by(models.EventRegistration.finalized_at.desc())
+        .all()
+    )
+    for reg in old_regs:
+        ev = reg.event
+        result.append({
+            "transaction_id": None,
+            "event_title": ev.title if ev else "—",
+            "event_date": ev.event_date.isoformat() if ev and ev.event_date else None,
+            "description": None,
+            "amount": float(reg.amount_paid) if reg.amount_paid is not None else 0,
+            "payment_status": reg.payment_status,
+            "student_count": len(reg.attending_students),
+            "observer_count": len(reg.attending_observers),
+            "created_at": reg.finalized_at.isoformat() if reg.finalized_at else None,
+        })
+
+    result.sort(key=lambda x: x["created_at"] or "", reverse=True)
+    return result
 
 
 @app.post("/admin/events/{event_id}/registrations/{reg_id}/observers/{observer_id}")

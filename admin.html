@@ -544,10 +544,51 @@
     </div>
   </div>
 
+  <!-- Studio Transactions Modal -->
+  <div class="modal fade" id="studioTransactionsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="studioTransactionsTitle">Transactions</h5>
+            <div id="studioTransactionsSubtitle" style="font-size:.78rem;color:#999;margin-top:.1rem;"></div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" style="padding:1rem;">
+          <div id="studioTransactionsLoading" class="text-center py-4">
+            <span class="spinner-border spinner-border-sm me-2"></span>Loading transactions…
+          </div>
+          <div id="studioTransactionsContent" class="d-none">
+            <div id="studioTransactionsEmpty" class="text-muted text-center small py-3 d-none">No transactions found for this studio.</div>
+            <div class="table-responsive">
+              <table class="table table-dark table-sm mb-0" id="studioTransactionsTable" style="font-size:.85rem;">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Event Date</th>
+                    <th>Details</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Paid On</th>
+                  </tr>
+                </thead>
+                <tbody id="studioTransactionsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const API = 'https://goldfish-app-fuu3t.ondigitalocean.app/radiatepro-backend';
-    let editModal, adminStudentModal, adminAddStudentModal, addRegStudentModal, eventModal;
+    let editModal, adminStudentModal, adminAddStudentModal, addRegStudentModal, eventModal, studioTransactionsModal;
     let _regCtx = {}; // { eventId, regId }
 
     function logout() { localStorage.removeItem('token'); window.location.href = 'login.html'; }
@@ -1050,8 +1091,12 @@
               </div>
               <div style="font-size:.78rem;color:#999;">${reg.studio_name ? esc(reg.studio_name) : '<span class="badge badge-independent" style="font-size:.7rem;">Independent</span>'}</div>
             </div>
-            <button class="btn btn-sm btn-outline-danger py-0 px-2 ms-2 flex-shrink-0" style="font-size:.78rem;"
-              onclick="adminRemoveRegistration(${eventId},${reg.id},'${esc(reg.user_name)}')">Remove All</button>
+            <div class="d-flex gap-1 ms-2 flex-shrink-0">
+              <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:.78rem;"
+                onclick="openStudioTransactions(${reg.user_id},'${esc(reg.user_name)}','${esc(reg.studio_name || '')}')">Transactions</button>
+              <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:.78rem;"
+                onclick="adminRemoveRegistration(${eventId},${reg.id},'${esc(reg.user_name)}')">Remove All</button>
+            </div>
           </div>
           <div class="d-flex flex-wrap gap-1 align-items-center" id="reg-students-${reg.id}">
             <span class="text-muted" style="font-size:.76rem;margin-right:.25rem;">Students:</span>
@@ -1070,6 +1115,69 @@
             </button>
           </div>
         </div>`;
+    }
+
+    async function openStudioTransactions(userId, userName, studioName) {
+      const displayName = studioName || userName;
+      document.getElementById('studioTransactionsTitle').textContent = displayName + ' — Transactions';
+      document.getElementById('studioTransactionsSubtitle').textContent = studioName ? userName : '';
+      document.getElementById('studioTransactionsLoading').classList.remove('d-none');
+      document.getElementById('studioTransactionsContent').classList.add('d-none');
+      studioTransactionsModal.show();
+
+      const token = localStorage.getItem('token');
+      try {
+        const res = await fetch(`${API}/admin/users/${userId}/transactions`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const txs = await res.json();
+
+        document.getElementById('studioTransactionsLoading').classList.add('d-none');
+        document.getElementById('studioTransactionsContent').classList.remove('d-none');
+
+        if (!Array.isArray(txs) || !txs.length) {
+          document.getElementById('studioTransactionsEmpty').classList.remove('d-none');
+          document.getElementById('studioTransactionsTable').classList.add('d-none');
+          return;
+        }
+        document.getElementById('studioTransactionsEmpty').classList.add('d-none');
+        document.getElementById('studioTransactionsTable').classList.remove('d-none');
+
+        document.getElementById('studioTransactionsBody').innerHTML = txs.map(tx => {
+          const statusBadge = tx.payment_status === 'paid'
+            ? `<span style="color:#22c55e;font-size:.75rem;font-weight:600;">&#10003; Paid</span>`
+            : tx.payment_status === 'free'
+              ? `<span style="color:#4ade80;font-size:.75rem;font-weight:600;">Free</span>`
+              : tx.payment_status === 'admin-paid'
+                ? `<span style="color:#818cf8;font-size:.75rem;font-weight:600;">&#10003; Admin Paid</span>`
+                : `<span style="color:#fbbf24;font-size:.75rem;font-weight:600;">Pending</span>`;
+
+          const detail = tx.description
+            || [tx.student_count ? `${tx.student_count} dancer(s)` : '', tx.observer_count ? `${tx.observer_count} observer(s)` : ''].filter(Boolean).join(', ')
+            || '—';
+
+          const eventDate = tx.event_date
+            ? new Date(tx.event_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : '—';
+          const paidOn = tx.created_at
+            ? new Date(tx.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : '—';
+
+          return `<tr>
+            <td class="fw-semibold">${esc(tx.event_title)}</td>
+            <td style="color:#aaa;">${eventDate}</td>
+            <td style="color:#ccc;">${esc(detail)}</td>
+            <td style="color:#E3FC02;font-weight:700;">$${Number(tx.amount).toFixed(2)}</td>
+            <td>${statusBadge}</td>
+            <td style="color:#aaa;">${paidOn}</td>
+          </tr>`;
+        }).join('');
+      } catch {
+        document.getElementById('studioTransactionsLoading').classList.add('d-none');
+        document.getElementById('studioTransactionsContent').classList.remove('d-none');
+        document.getElementById('studioTransactionsBody').innerHTML =
+          '<tr><td colspan="6" class="text-danger text-center py-2">Failed to load transactions.</td></tr>';
+      }
     }
 
     async function adminRemoveRegistration(eventId, regId, userName) {
@@ -1773,12 +1881,13 @@
     (async () => {
       const token = localStorage.getItem('token');
       if (!token) { window.location.href = 'login.html?next=admin.html'; return; }
-      editModal          = new bootstrap.Modal(document.getElementById('editModal'));
-      adminStudentModal  = new bootstrap.Modal(document.getElementById('adminStudentModal'));
-      adminAddStudentModal = new bootstrap.Modal(document.getElementById('adminAddStudentModal'));
-      addRegStudentModal   = new bootstrap.Modal(document.getElementById('addRegStudentModal'));
-      adminCreateRegModal  = new bootstrap.Modal(document.getElementById('adminCreateRegModal'));
-      eventModal           = new bootstrap.Modal(document.getElementById('eventModal'));
+      editModal                = new bootstrap.Modal(document.getElementById('editModal'));
+      adminStudentModal        = new bootstrap.Modal(document.getElementById('adminStudentModal'));
+      adminAddStudentModal     = new bootstrap.Modal(document.getElementById('adminAddStudentModal'));
+      addRegStudentModal       = new bootstrap.Modal(document.getElementById('addRegStudentModal'));
+      adminCreateRegModal      = new bootstrap.Modal(document.getElementById('adminCreateRegModal'));
+      eventModal               = new bootstrap.Modal(document.getElementById('eventModal'));
+      studioTransactionsModal  = new bootstrap.Modal(document.getElementById('studioTransactionsModal'));
 
       let eventsLoaded = false;
       document.getElementById('events-tab').addEventListener('shown.bs.tab', () => {

@@ -1181,16 +1181,15 @@
       openRegModal(eventsCache[eventId]);
     }
 
-    // Called when user clicks "Pay Outstanding Balance" — triggers Stripe hosted checkout
-    // for only the admin-added pending dancers, without opening the registration modal.
+    // Called when user clicks "Pay Outstanding Balance" — opens embedded Stripe checkout
+    // inside the registration modal for the admin-added pending dancers.
     async function payForPendingDancers(eventId) {
       const token = localStorage.getItem('token');
       const btn   = document.getElementById(`pay-pending-btn-${eventId}`);
       const origLabel = btn ? btn.innerHTML : '';
       if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading…'; }
       try {
-        // Use hosted checkout (no embedded=true) so we can redirect directly to Stripe.
-        const res = await fetch(`${API}/events/${eventId}/register/checkout`, {
+        const res = await fetch(`${API}/events/${eventId}/register/checkout?embedded=true`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ student_ids: [], observer_ids: [] }),
@@ -1205,11 +1204,61 @@
           // No charge needed — backend cleared pending and finalized
           myRegistrations[String(eventId)] = { ...myRegistrations[String(eventId)], is_finalized: true, pending_student_ids: [] };
           updateEventCard(eventId, true);
+          if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
           return;
         }
-        if (data.checkout_url) {
-          // Redirect to hosted Stripe checkout page
-          window.location.href = data.checkout_url;
+        if (data.client_secret) {
+          // Set up modal for embedded payment (skip selection step)
+          const ev = eventsCache[eventId];
+          document.getElementById('regModalTitle').textContent = ev ? ev.title : 'Pay Outstanding Balance';
+          document.getElementById('regEventId').value = eventId;
+          document.getElementById('regAlert').classList.add('d-none');
+
+          // Jump straight to Step 2 (payment UI)
+          document.getElementById('regSelectionStep').classList.add('d-none');
+          document.getElementById('regCostSummary').classList.add('d-none');
+          document.getElementById('regPendingChanges').classList.add('d-none');
+          document.getElementById('regPaymentStep').classList.remove('d-none');
+          document.getElementById('regFooterStep1').classList.add('d-none');
+          document.getElementById('regFooterStep2').classList.remove('d-none');
+
+          // Initialise Stripe (lazy)
+          if (typeof Stripe === 'undefined') {
+            alert('Stripe could not be loaded. Please disable any ad-blockers or try a different browser.');
+            if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+            return;
+          }
+          if (!stripeInstance) {
+            try {
+              const cfgRes = await fetch(`${API}/stripe/config`);
+              const cfg    = await cfgRes.json();
+              if (!cfg.publishable_key) throw new Error('Stripe publishable key not configured.');
+              stripeInstance = Stripe(cfg.publishable_key);
+            } catch (stripeInitErr) {
+              alert('Payment system unavailable. Please contact the organizer.');
+              if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+              return;
+            }
+          }
+
+          // Destroy any previous embedded checkout
+          if (stripeCheckoutInstance) {
+            try { await stripeCheckoutInstance.destroy(); } catch {}
+            stripeCheckoutInstance = null;
+          }
+          document.getElementById('stripe-checkout-container').innerHTML = '';
+
+          try {
+            stripeCheckoutInstance = await stripeInstance.initEmbeddedCheckout({ clientSecret: data.client_secret });
+            stripeCheckoutInstance.mount('#stripe-checkout-container');
+          } catch (embedErr) {
+            alert(`Payment form error: ${embedErr.message || embedErr}. Please try again.`);
+            if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+            return;
+          }
+
+          regModal.show();
+          if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
         }
       } catch {
         alert('Something went wrong. Please try again.');
