@@ -1035,20 +1035,22 @@
         }
 
         // Payment summary for the header
-        const paidRegs    = regs.filter(r => r.payment_status === 'paid' || r.payment_status === 'admin-paid');
-        const freeRegs    = regs.filter(r => r.payment_status === 'free');
+        const stripePaidRegs   = regs.filter(r => r.payment_status === 'paid');
+        const complimentaryRegs = regs.filter(r => r.payment_status === 'admin-paid');
+        const freeRegs         = regs.filter(r => r.payment_status === 'free');
         // Treat any registration with a paid payment_status as finalized even if the
         // is_finalized flag was not back-filled (defensive guard for legacy data).
-        const pendingRegs = regs.filter(r => !r.is_finalized && !['paid', 'free', 'admin-paid'].includes(r.payment_status));
-        const balanceDueRegs = regs.filter(r => (r.pending_student_ids || []).length > 0);
-        const totalRevenue   = paidRegs.reduce((s, r) => s + (r.amount_paid || 0), 0);
-        const totalPending   = balanceDueRegs.reduce((s, r) => s + (r.pending_amount || 0), 0);
+        const pendingRegs      = regs.filter(r => !r.is_finalized && !['paid', 'free', 'admin-paid'].includes(r.payment_status));
+        const balanceDueRegs   = regs.filter(r => (r.pending_student_ids || []).length > 0);
+        const totalRevenue     = stripePaidRegs.reduce((s, r) => s + (r.amount_paid || 0), 0);
+        const totalPending     = balanceDueRegs.reduce((s, r) => s + (r.pending_amount || 0), 0);
 
         const pills = [];
-        if (paidRegs.length)    pills.push(`<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${paidRegs.length} Paid &nbsp;·&nbsp; $${totalRevenue.toFixed(2)}</span>`);
-        if (freeRegs.length)    pills.push(`<span style="background:rgba(34,197,94,.08);color:#4ade80;border:1px solid #4ade80;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">${freeRegs.length} Free</span>`);
-        if (pendingRegs.length) pills.push(`<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9203; ${pendingRegs.length} Pending</span>`);
-        if (balanceDueRegs.length) pills.push(`<span style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid #f87171;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9889; ${balanceDueRegs.length} Balance Due &nbsp;·&nbsp; $${totalPending.toFixed(2)}</span>`);
+        if (stripePaidRegs.length)    pills.push(`<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${stripePaidRegs.length} Paid &nbsp;·&nbsp; $${totalRevenue.toFixed(2)}</span>`);
+        if (complimentaryRegs.length) pills.push(`<span style="background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid #a78bfa;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#10003; ${complimentaryRegs.length} Complimentary</span>`);
+        if (freeRegs.length)          pills.push(`<span style="background:rgba(34,197,94,.08);color:#4ade80;border:1px solid #4ade80;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">${freeRegs.length} Free</span>`);
+        if (pendingRegs.length)       pills.push(`<span style="background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid #fbbf24;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9203; ${pendingRegs.length} Pending</span>`);
+        if (balanceDueRegs.length)    pills.push(`<span style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid #f87171;font-size:.68rem;font-weight:600;padding:.1rem .4rem;border-radius:20px;">&#9889; ${balanceDueRegs.length} Balance Due &nbsp;·&nbsp; $${totalPending.toFixed(2)}</span>`);
         const paymentSummary = pills.length ? `<div class="d-flex flex-wrap gap-1 mt-1">${pills.join('')}</div>` : '';
 
         content.innerHTML = `
