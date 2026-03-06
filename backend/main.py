@@ -1991,7 +1991,7 @@ def admin_delete_observer(user_id: int, observer_id: int, authorization: Optiona
     return {"message": "Observer deleted."}
 
 
-@app.post("/admin/events/{event_id}/registrations/{reg_id}/observers/{observer_id}", response_model=schemas.MessageOut)
+@app.post("/admin/events/{event_id}/registrations/{reg_id}/observers/{observer_id}")
 def admin_add_reg_observer(
     event_id: int,
     reg_id: int,
@@ -2021,16 +2021,43 @@ def admin_add_reg_observer(
     if existing:
         raise HTTPException(status_code=400, detail="Observer already in registration.")
     db.add(models.EventRegistrationObserver(registration_id=reg_id, observer_id=observer_id))
+
+    pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
     if reg.is_finalized:
-        # Track the observer in pending_student_ids using a negative ID convention
-        # (negative = observer, positive = dancer) so the frontend can distinguish.
-        existing_pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
         obs_key = f"o{observer_id}"
-        if obs_key not in existing_pending:
-            existing_pending.append(obs_key)
-        reg.pending_student_ids = ",".join(existing_pending)
+        if obs_key not in pending:
+            pending.append(obs_key)
+
+    # Auto-add the observer's linked dancer if not already in the registration.
+    linked_student_id = None
+    linked_student_name = None
+    if obs.linked_student_id:
+        already_in_reg = db.query(models.EventRegistrationStudent).filter(
+            models.EventRegistrationStudent.registration_id == reg_id,
+            models.EventRegistrationStudent.student_id == obs.linked_student_id,
+        ).first()
+        if not already_in_reg:
+            linked = db.query(models.Student).filter(
+                models.Student.id == obs.linked_student_id,
+            ).first()
+            if linked:
+                db.add(models.EventRegistrationStudent(
+                    registration_id=reg_id, student_id=obs.linked_student_id
+                ))
+                if reg.is_finalized:
+                    sid_str = str(obs.linked_student_id)
+                    if sid_str not in pending:
+                        pending.append(sid_str)
+                linked_student_id = linked.id
+                linked_student_name = linked.name
+
+    reg.pending_student_ids = ",".join(pending) if pending else None
     db.commit()
-    return {"message": "Observer added to registration."}
+    return {
+        "message": "Observer added to registration.",
+        "linked_student_id": linked_student_id,
+        "linked_student_name": linked_student_name,
+    }
 
 
 @app.delete("/admin/events/{event_id}/registrations/{reg_id}/observers/{observer_id}", response_model=schemas.MessageOut)

@@ -1197,18 +1197,36 @@
       try {
         const res = await fetch(`${API}/admin/events/${eventId}/registrations/${regId}/observers/${observerId}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) {
+          const data = await res.json().catch(() => ({}));
           if (btn) btn.remove();
-          const container = document.getElementById(`reg-observers-${regId}`);
-          if (container) {
-            container.querySelectorAll('span.text-muted').forEach(el => { if(el.textContent.trim()==='None') el.remove(); });
-            const addBtn = container.querySelector(':scope > button');
+
+          // Add observer badge
+          const obsContainer = document.getElementById(`reg-observers-${regId}`);
+          if (obsContainer) {
+            obsContainer.querySelectorAll('span.text-muted').forEach(el => { if(el.textContent.trim()==='None') el.remove(); });
+            const addBtn = obsContainer.querySelector(':scope > button');
             const badge = document.createElement('span');
             badge.id = `robs-${regId}-${observerId}`;
             badge.className = 'stu-badge';
             badge.style.cssText = 'background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid #6d5fa6;';
             badge.innerHTML = `&#128065; ${esc(observerName)} <button class="stu-badge-remove" style="color:#9d7ee0;" title="Remove observer" onclick="adminRemoveRegObserver(${eventId},${regId},${observerId},'${esc(observerName)}')">×</button>`;
-            container.insertBefore(badge, addBtn);
+            obsContainer.insertBefore(badge, addBtn);
           }
+
+          // If the observer's linked dancer was auto-added, inject their badge too
+          if (data.linked_student_id && data.linked_student_name) {
+            const stuContainer = document.getElementById(`reg-students-${regId}`);
+            if (stuContainer && !document.getElementById(`rst-${regId}-${data.linked_student_id}`)) {
+              stuContainer.querySelectorAll('span.text-muted').forEach(el => { if(el.textContent.trim()==='None selected') el.remove(); });
+              const addStuBtn = stuContainer.querySelector(':scope > button');
+              const stuBadge = document.createElement('span');
+              stuBadge.id = `rst-${regId}-${data.linked_student_id}`;
+              stuBadge.className = 'stu-badge';
+              stuBadge.innerHTML = `${esc(data.linked_student_name)} <button class="stu-badge-remove" title="Remove student" onclick="adminRemoveRegStudent(${eventId},${regId},${data.linked_student_id},'${esc(data.linked_student_name)}')">×</button>`;
+              stuContainer.insertBefore(stuBadge, addStuBtn);
+            }
+          }
+
           // Handle payment status (admin-paid finalization)
           await maybeAdminFinalize(eventId, regId, token, 'addObsPayStatus');
           if (!document.getElementById('addRegObsList').children.length) addRegObserverModal.hide();
