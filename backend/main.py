@@ -1764,6 +1764,12 @@ def admin_remove_reg_student(
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.id == reg_id,
+        models.EventRegistration.event_id == event_id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found.")
     ers = db.query(models.EventRegistrationStudent).filter(
         models.EventRegistrationStudent.registration_id == reg_id,
         models.EventRegistrationStudent.student_id == student_id,
@@ -1771,6 +1777,12 @@ def admin_remove_reg_student(
     if not ers:
         raise HTTPException(status_code=404, detail="Student not in registration.")
     db.delete(ers)
+    # If this dancer was tracked as an unpaid pending item, remove them from the list.
+    # If no pending items remain, clear the field so the 'Pay Outstanding Balance'
+    # button and badge disappear from the user portal.
+    pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+    pending = [x for x in pending if x != str(student_id)]
+    reg.pending_student_ids = ",".join(pending) if pending else None
     db.commit()
     return {"message": "Student removed from registration."}
 
@@ -2032,6 +2044,12 @@ def admin_remove_reg_observer(
     current = get_current_user(authorization, db)
     if not current.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
+    reg = db.query(models.EventRegistration).filter(
+        models.EventRegistration.id == reg_id,
+        models.EventRegistration.event_id == event_id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found.")
     ero = db.query(models.EventRegistrationObserver).filter(
         models.EventRegistrationObserver.registration_id == reg_id,
         models.EventRegistrationObserver.observer_id == observer_id,
@@ -2039,5 +2057,11 @@ def admin_remove_reg_observer(
     if not ero:
         raise HTTPException(status_code=404, detail="Observer not in registration.")
     db.delete(ero)
+    # If this observer was tracked as an unpaid pending item, remove them from the list.
+    # If no pending items remain, clear the field so the 'Pay Outstanding Balance'
+    # button and badge disappear from the user portal.
+    pending = [x for x in (reg.pending_student_ids or "").split(",") if x.strip()]
+    pending = [x for x in pending if x != f"o{observer_id}"]
+    reg.pending_student_ids = ",".join(pending) if pending else None
     db.commit()
     return {"message": "Observer removed from registration."}
