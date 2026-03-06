@@ -1116,11 +1116,14 @@
         : '';
 
       if (reg.payment_status === 'paid') {
+        // Only show ✓ Paid once all balances are settled
+        if (hasPending) return dueBadge;
         const amt = reg.amount_paid != null ? ` &nbsp;$${Number(reg.amount_paid).toFixed(2)}` : '';
-        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid${amt}</span>${dueBadge}`;
+        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid${amt}</span>`;
       }
       if (reg.payment_status === 'admin-paid') {
-        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid</span>${dueBadge}`;
+        if (hasPending) return dueBadge;
+        return `<span style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;white-space:nowrap;">&#10003; Paid</span>`;
       }
       if (reg.payment_status === 'free') {
         return `<span style="background:rgba(34,197,94,.1);color:#4ade80;border:1px solid #4ade80;font-size:.7rem;font-weight:600;padding:.15rem .45rem;border-radius:20px;">Free</span>${dueBadge}`;
